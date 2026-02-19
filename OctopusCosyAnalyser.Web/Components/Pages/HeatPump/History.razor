@@ -18,6 +18,23 @@
 }
 else
 {
+    <!-- Grouping Info Panel -->
+    <div class="card mb-3 border-info">
+        <div class="card-header bg-info bg-opacity-10">
+            <strong>ℹ️ About Grouping (Data Granularity)</strong>
+        </div>
+        <div class="card-body py-2">
+            <p class="mb-1 small">The <strong>Grouping</strong> setting controls how large each time bucket is in the chart — i.e. how finely the data is split up:</p>
+            <ul class="mb-0 small">
+                <li><strong>Live</strong> — Minute-by-minute data. Select at most <strong>1 hour</strong>.</li>
+                <li><strong>Day</strong> — Hour-by-hour data. Select at most <strong>2 days</strong>.</li>
+                <li><strong>Week</strong> — Day-by-day data. Select at most <strong>14 days</strong>.</li>
+                <li><strong>Month</strong> — Day-by-day data. Select at most <strong>60 days</strong>.</li>
+                <li><strong>Year</strong> — Day-by-day data. Select at most <strong>13 months</strong>.</li>
+            </ul>
+        </div>
+    </div>
+
     <!-- Date Range Controls -->
     <div class="card">
         <div class="card-body">
@@ -31,14 +48,14 @@ else
                     <input @bind="toDate" type="datetime-local" class="form-control form-control-sm" />
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label">Interval</label>
+                    <label class="form-label">Grouping</label>
                     <select @bind="grouping" class="form-select form-select-sm">
                         <option value="">Auto</option>
-                        <option value="LIVE">LIVE</option>
-                        <option value="DAY">DAY</option>
-                        <option value="WEEK">WEEK</option>
-                        <option value="MONTH">MONTH</option>
-                        <option value="YEAR">YEAR</option>
+                        <option value="LIVE">Live (min-by-min, max 1 hr)</option>
+                        <option value="DAY">Day (hour-by-hour, max 2 days)</option>
+                        <option value="WEEK">Week (day-by-day, max 14 days)</option>
+                        <option value="MONTH">Month (day-by-day, max 60 days)</option>
+                        <option value="YEAR">Year (day-by-day, max 13 months)</option>
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -57,6 +74,10 @@ else
                     </div>
                 </div>
             </div>
+            @if (!string.IsNullOrEmpty(rangeValidationMessage))
+            {
+                <div class="alert alert-warning mt-2 mb-0 py-1 small">⚠️ @rangeValidationMessage</div>
+            }
         </div>
     </div>
 
@@ -69,6 +90,55 @@ else
 
     @if (timeSeriesData.Count > 0)
     {
+        <!-- Period Summary -->
+        <div class="card mt-3 border-success">
+            <div class="card-header bg-success bg-opacity-10"><strong>📋 Period Summary</strong></div>
+            <div class="card-body py-2">
+                <div class="row g-2 text-center">
+                    <div class="col-6 col-md-2">
+                        <div class="border rounded p-2">
+                            <div class="small text-muted">Data Points</div>
+                            <div class="fw-bold">@timeSeriesData.Count</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="border rounded p-2">
+                            <div class="small text-muted">Avg COP</div>
+                            <div class="fw-bold text-success">@Avg(timeSeriesData.Select(d => d.Cop))</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="border rounded p-2">
+                            <div class="small text-muted">Total Energy In</div>
+                            <div class="fw-bold text-primary">@Sum(timeSeriesData.Select(d => d.EnergyInputVal)) kWh</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="border rounded p-2">
+                            <div class="small text-muted">Total Energy Out</div>
+                            <div class="fw-bold text-danger">@Sum(timeSeriesData.Select(d => d.EnergyOutputVal)) kWh</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="border rounded p-2">
+                            <div class="small text-muted">Avg Outdoor Temp</div>
+                            <div class="fw-bold text-warning">@Avg(timeSeriesData.Select(d => d.OutdoorTempVal)) °C</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="border rounded p-2">
+                            <div class="small text-muted">Grouping</div>
+                            <div class="fw-bold">@(string.IsNullOrEmpty(grouping) ? "Auto" : grouping)</div>
+                            <div class="small text-muted">@GroupingDescription</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-2 small text-muted">
+                    Period: <strong>@fromDate.ToString("g")</strong> → <strong>@toDate.ToString("g")</strong>
+                    &nbsp;·&nbsp; @GroupingGranularityNote
+                </div>
+            </div>
+        </div>
         <!-- COP Trend Chart -->
         <div class="card mt-4">
             <div class="card-header">COP Trend</div>
@@ -176,6 +246,7 @@ else
     private bool isLoading;
     private string? errorMessage;
     private string? statusMessage;
+    private string? rangeValidationMessage;
 
     private DateTime fromDate = DateTime.UtcNow.AddDays(-7);
     private DateTime toDate = DateTime.UtcNow;
@@ -191,6 +262,40 @@ else
         public double EnergyOutputVal { get; set; }
         public double EnergyInputVal { get; set; }
         public double OutdoorTempVal { get; set; }
+    }
+
+    private string GroupingDescription => grouping?.ToUpperInvariant() switch
+    {
+        "LIVE"  => "min-by-min",
+        "DAY"   => "hour-by-hour",
+        "WEEK"  => "day-by-day",
+        "MONTH" => "day-by-day",
+        "YEAR"  => "day-by-day",
+        _       => "auto"
+    };
+
+    private string GroupingGranularityNote => grouping?.ToUpperInvariant() switch
+    {
+        "LIVE"  => "Each data point represents one minute of data for the selected hour.",
+        "DAY"   => "Each data point represents one hour of data.",
+        "WEEK"  => "Each data point represents one day of data.",
+        "MONTH" => "Each data point represents one day of data.",
+        "YEAR"  => "Each data point represents one day of data.",
+        _       => "Grouping is chosen automatically based on the selected date range."
+    };
+
+    private string? ValidateDateRange()
+    {
+        var span = toDate - fromDate;
+        return grouping?.ToUpperInvariant() switch
+        {
+            "LIVE"  when span > TimeSpan.FromHours(1)       => "Live grouping: maximum range is 1 hour (minute-by-minute data).",
+            "DAY"   when span > TimeSpan.FromDays(2)        => "Day grouping: maximum range is 2 days (hour-by-hour data).",
+            "WEEK"  when span > TimeSpan.FromDays(14)       => "Week grouping: maximum range is 14 days (day-by-day data).",
+            "MONTH" when span > TimeSpan.FromDays(60)       => "Month grouping: maximum range is 60 days (day-by-day data).",
+            "YEAR"  when span > TimeSpan.FromDays(13 * 31)  => "Year grouping: maximum range is 13 months (day-by-day data).",
+            _ => null
+        };
     }
 
     protected override async Task OnInitializedAsync()
@@ -215,12 +320,17 @@ else
     {
         toDate = DateTime.UtcNow;
         fromDate = DateTime.UtcNow.AddDays(-days);
+        rangeValidationMessage = ValidateDateRange();
     }
 
     private async Task LoadTimeSeries()
     {
         if (string.IsNullOrEmpty(accountNumber) || string.IsNullOrEmpty(euid))
         { statusMessage = "❌ Account or EUID not set."; return; }
+
+        rangeValidationMessage = ValidateDateRange();
+        if (rangeValidationMessage is not null)
+        { statusMessage = $"❌ {rangeValidationMessage}"; return; }
 
         isLoading = true;
         statusMessage = "Loading...";

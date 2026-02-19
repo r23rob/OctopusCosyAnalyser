@@ -421,6 +421,20 @@ public static class HeatPumpEndpoints
             from ??= DateTime.UtcNow.AddDays(-7);
             to ??= DateTime.UtcNow;
 
+            var span = to.Value - from.Value;
+            var validationError = (grouping?.ToUpperInvariant()) switch
+            {
+                "LIVE"  when span > TimeSpan.FromHours(1)     => "Live grouping requires a time period of at most 1 hour (minute-by-minute data).",
+                "DAY"   when span > TimeSpan.FromDays(2)      => "Day grouping requires a time period of at most 2 days (hour-by-hour data).",
+                "WEEK"  when span > TimeSpan.FromDays(14)     => "Week grouping requires a time period of at most 14 days (day-by-day data).",
+                "MONTH" when span > TimeSpan.FromDays(60)     => "Month grouping requires a time period of at most 60 days (day-by-day data).",
+                "YEAR"  when span > TimeSpan.FromDays(13 * 31) => "Year grouping requires a time period of at most 13 months (day-by-day data).",
+                _ => null
+            };
+
+            if (validationError is not null)
+                return Results.BadRequest(new { error = validationError });
+
             var data = await client.GetHeatPumpTimeSeriesPerformanceAsync(settings!.ApiKey, euid, from.Value, to.Value, grouping);
             var root = data.RootElement.GetProperty("data");
             
