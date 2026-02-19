@@ -1,0 +1,61 @@
+﻿﻿<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">🐙 Cosy Analyser</a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="nav flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill" aria-hidden="true"></span> Home
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3 mt-2">
+            <small class="text-muted ps-1">HEAT PUMP</small>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="heatpump" Match="NavLinkMatch.All">
+                <span class="bi bi-speedometer2" aria-hidden="true"></span> Dashboard
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="heatpump/performance">
+                <span class="bi bi-lightning-charge-fill" aria-hidden="true"></span> Performance
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="heatpump/comfort">
+                <span class="bi bi-thermometer-half" aria-hidden="true"></span> Home Comfort
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="heatpump/system">
+                <span class="bi bi-wrench-adjustable" aria-hidden="true"></span> System Health
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="heatpump/history">
+                <span class="bi bi-graph-up" aria-hidden="true"></span> History
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3 mt-2">
+            <small class="text-muted ps-1">SETTINGS</small>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="settings">
+                <span class="bi bi-gear-fill" aria-hidden="true"></span> Account Settings
+            </NavLink>
+        </div>
+    </nav>
+</div>

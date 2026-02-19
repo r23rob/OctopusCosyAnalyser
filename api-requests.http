@@ -1,0 +1,63 @@
+### Octopus Cosy Analyser API Requests
+### Base URL - adjust port as needed when app is running
+@baseUrl = http://localhost:5000
+@accountNumber = YOUR_ACCOUNT_NUMBER
+@deviceId = YOUR_DEVICE_ID
+
+### Health Check
+GET {{baseUrl}}/health
+
+### Sample Weather Forecast
+GET {{baseUrl}}/weatherforecast
+
+###
+
+### 1. Setup Heat Pump Device
+# Replace YOUR_ACCOUNT_NUMBER with your actual Octopus Energy account number
+POST {{baseUrl}}/api/heatpump/setup?accountNumber={{accountNumber}}
+Content-Type: application/json
+
+###
+
+### 2. Get Live Telemetry
+# Replace YOUR_DEVICE_ID with the deviceId returned from setup
+GET {{baseUrl}}/api/heatpump/telemetry/{{deviceId}}
+
+###
+
+### 3. Sync Historical Data (Last 7 Days - Default)
+POST {{baseUrl}}/api/heatpump/sync/{{deviceId}}
+
+###
+
+### 4. Sync Historical Data (Custom Date Range)
+POST {{baseUrl}}/api/heatpump/sync/{{deviceId}}?from=2024-02-05T00:00:00Z&to=2024-02-12T00:00:00Z
+
+###
+
+### 5. Get Consumption Data (Last 7 Days - Default)
+GET {{baseUrl}}/api/heatpump/consumption/{{deviceId}}
+
+###
+
+### 6. Get Consumption Data (Custom Date Range)
+GET {{baseUrl}}/api/heatpump/consumption/{{deviceId}}?from=2024-02-05T00:00:00Z&to=2024-02-12T00:00:00Z
+
+###
+
+### 7. List All Devices
+GET {{baseUrl}}/api/heatpump/devices
+
+###
+
+### Example Full Workflow:
+### Step 1: Setup device (run once)
+# POST {{baseUrl}}/api/heatpump/setup?accountNumber=A-12345678
+
+### Step 2: Copy deviceId from response, then sync data
+# POST {{baseUrl}}/api/heatpump/sync/abc-123-def-456
+
+### Step 3: View consumption data
+# GET {{baseUrl}}/api/heatpump/consumption/abc-123-def-456
+
+###

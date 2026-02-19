@@ -1,0 +1,218 @@
+@page "/heatpump/system"
+@inject HeatPumpApiClient Api
+@rendermode InteractiveServer
+
+<PageTitle>Heat Pump – System Health</PageTitle>
+
+<h1>🔧 System Health</h1>
+<p class="text-muted">Water tank temps, outdoor air temp, flow temps, weather compensation, and zone configuration.</p>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (isLoading && summary == null)
+{
+    <p><em>Loading system data...</em></p>
+}
+else if (summary != null)
+{
+    <div class="d-flex justify-content-end mb-3">
+        <button class="btn btn-outline-success btn-sm" @onclick="Refresh" disabled="@isLoading">⟳ Refresh</button>
+    </div>
+
+    <!-- Controller Status -->
+    <div class="row g-3">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">Controller</div>
+                <div class="card-body">
+                    <p><strong>Connected:</strong>
+                        @(summary.ControllerConfiguration?.Controller?.Connected == true ? "✅ Yes" : "❌ No")</p>
+                    <p><strong>Timezone:</strong>
+                        @(summary.ControllerConfiguration?.Controller?.HeatPumpTimezone ?? "—")</p>
+                    <p><strong>State:</strong>
+                        @string.Join(", ", summary.ControllerConfiguration?.Controller?.State ?? [])</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">Heat Pump Unit</div>
+                <div class="card-body">
+                    <p><strong>Model:</strong> @(summary.ControllerConfiguration?.HeatPump?.Model ?? "—")</p>
+                    <p><strong>Serial:</strong> @(summary.ControllerConfiguration?.HeatPump?.SerialNumber ?? "—")</p>
+                    <p><strong>Hardware:</strong> @(summary.ControllerConfiguration?.HeatPump?.HardwareVersion ?? "—")</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100 border-warning">
+                <div class="card-header">Outdoor Temperature</div>
+                <div class="card-body text-center">
+                    <h1 class="text-warning">@Fmt(summary.LivePerformance?.OutdoorTemperature)</h1>
+                    <small class="text-muted">Current outside air</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Water Setpoints & Flow Temperature -->
+    <h4 class="mt-4">Water &amp; Flow Temperature</h4>
+    <div class="row g-3">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">Water Setpoint Range</div>
+                <div class="card-body text-center">
+                    <h3>@(summary.ControllerConfiguration?.HeatPump?.MinWaterSetpoint ?? 0) – @(summary.ControllerConfiguration?.HeatPump?.MaxWaterSetpoint ?? 0) °C</h3>
+                    <small class="text-muted">Min – Max water setpoint</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">Heating Flow Temperature</div>
+                <div class="card-body text-center">
+                    <h3>@Fmt(summary.ControllerConfiguration?.HeatPump?.HeatingFlowTemperature?.CurrentTemperature)</h3>
+                    <small class="text-muted">Current flow temp</small>
+                    @if (summary.ControllerConfiguration?.HeatPump?.HeatingFlowTemperature?.AllowableRange != null)
+                    {
+                        var range = summary.ControllerConfiguration!.HeatPump!.HeatingFlowTemperature!.AllowableRange;
+                        <p class="mt-2"><strong>Range:</strong> @Fmt(range.Minimum) – @Fmt(range.Maximum)</p>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">Weather Compensation</div>
+                <div class="card-body text-center">
+                    @{
+                        var wc = summary.ControllerConfiguration?.HeatPump?.WeatherCompensation;
+                    }
+                    <h3>@(wc?.Enabled == true ? "✅ Enabled" : "❌ Disabled")</h3>
+                    @if (wc?.CurrentRange != null)
+                    {
+                        <p class="mt-2"><strong>Range:</strong> @Fmt(wc.CurrentRange.Minimum) – @Fmt(wc.CurrentRange.Maximum)</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADC Sensor Temperatures (water tank sensors) -->
+    <h4 class="mt-4">ADC Sensor Temperatures</h4>
+    <p class="text-muted">ADC sensors typically measure water tank temperatures. Cosy Pods report temperature + humidity.</p>
+    @if (summary.ControllerStatus?.Sensors?.Count > 0)
+    {
+        <div class="row g-3">
+            @foreach (var sensor in summary.ControllerStatus.Sensors)
+            {
+                var isOnline = sensor.Connectivity?.Online == true;
+                <div class="col-md-3">
+                    <div class="card @(isOnline ? "border-info" : "border-secondary") h-100">
+                        <div class="card-header d-flex justify-content-between">
+                            <strong>@(sensor.Code ?? "?")</strong>
+                            <span class="badge @(isOnline ? "bg-success" : "bg-secondary")">@(isOnline ? "Online" : "Offline")</span>
+                        </div>
+                        <div class="card-body text-center">
+                            @if (sensor.Telemetry?.TemperatureInCelsius.HasValue == true)
+                            {
+                                <h2>@sensor.Telemetry.TemperatureInCelsius.Value.ToString("F1") °C</h2>
+                            }
+                            else
+                            {
+                                <h4 class="text-muted">No data</h4>
+                            }
+                            @if (sensor.Telemetry?.HumidityPercentage.HasValue == true)
+                            {
+                                <p>Humidity: @sensor.Telemetry.HumidityPercentage.Value.ToString("F0")%</p>
+                            }
+                        </div>
+                        <div class="card-footer text-muted small">@(sensor.Telemetry?.RetrievedAt ?? "—")</div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Zone Configurations -->
+    <h4 class="mt-4">Zone Configurations</h4>
+    @if (summary.ControllerConfiguration?.Zones?.Count > 0)
+    {
+        @foreach (var zone in summary.ControllerConfiguration.Zones)
+        {
+            var c = zone.Configuration;
+            if (c == null) continue;
+
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between">
+                    <strong>@(c.DisplayName ?? c.Code ?? "Unknown")</strong>
+                    <div>
+                        <span class="badge @(c.Enabled == true ? "bg-success" : "bg-secondary")">@(c.Enabled == true ? "Enabled" : "Disabled")</span>
+                        <span class="badge bg-info ms-1">@(c.ZoneType ?? "?")</span>
+                        @if (c.HeatDemand == true)
+                        {
+                            <span class="badge bg-danger ms-1">🔥 Heat Demand</span>
+                        }
+                        @if (c.Emergency == true)
+                        {
+                            <span class="badge bg-warning ms-1">⚠️ Emergency</span>
+                        }
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <p><strong>Mode:</strong> @(c.CurrentOperation?.Mode ?? "—")</p>
+                            <p><strong>Setpoint:</strong> @(c.CurrentOperation?.SetpointInCelsius?.ToString("F1") ?? "—") °C</p>
+                        </div>
+                        <div class="col-md-3">
+                            <p><strong>Action:</strong> @(c.CurrentOperation?.Action ?? "—")</p>
+                            <p><strong>Ends:</strong> @(c.CurrentOperation?.End ?? "—")</p>
+                        </div>
+                        <div class="col-md-3">
+                            <p><strong>Primary Sensor:</strong> @(c.PrimarySensor ?? "—")</p>
+                            <p><strong>Call for Heat:</strong> @(c.CallForHeat == true ? "Yes" : "No")</p>
+                        </div>
+                        <div class="col-md-3">
+                            <p><strong>Sensors:</strong> @(c.Sensors?.Count ?? 0)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+}
+
+@code {
+    private string? deviceId;
+    private bool isLoading;
+    private string? errorMessage;
+    private HeatPumpSummaryDto? summary;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var devices = await Api.GetDevicesAsync();
+            if (devices.Length > 0) { deviceId = devices[0].DeviceId; await Refresh(); }
+            else errorMessage = "No device set up. Go to the Dashboard to run setup.";
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+
+    private async Task Refresh()
+    {
+        if (deviceId == null) return;
+        isLoading = true;
+        try { summary = await Api.GetSummaryAsync(deviceId); }
+        catch (Exception ex) { errorMessage = ex.Message; }
+        finally { isLoading = false; }
+    }
+
+    private static string Fmt(HeatPumpValueAndUnitDto? v)
+        => v == null ? "—" : string.IsNullOrWhiteSpace(v.Unit) ? (v.Value ?? "—") : $"{v.Value} {v.Unit}";
+}
+

@@ -1,0 +1,109 @@
+@page "/settings"
+@inject HttpClient Http
+@rendermode InteractiveServer
+
+<PageTitle>Account Settings</PageTitle>
+
+<h1>Account Settings</h1>
+
+@if (isLoading)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="card mt-3">
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label">Account Number</label>
+                <input @bind="accountNumber" class="form-control" placeholder="A-1234-5678" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">API Key</label>
+                <input @bind="apiKey" class="form-control" placeholder="sk_live_..." />
+                <div class="form-text">Stored in the database and used for Octopus API calls.</div>
+            </div>
+            <button @onclick="SaveSettings" class="btn btn-primary" disabled="@isSaving">
+                @(isSaving ? "Saving..." : "Save Settings")
+            </button>
+            @if (!string.IsNullOrEmpty(statusMessage))
+            {
+                <div class="alert alert-info mt-3">@statusMessage</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private string accountNumber = string.Empty;
+    private string apiKey = string.Empty;
+    private bool isLoading = true;
+    private bool isSaving = false;
+    private string? statusMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var settings = await Http.GetFromJsonAsync<AccountSettingsDto[]>("http://apiservice/api/settings");
+            var current = settings?.FirstOrDefault();
+            if (current is not null)
+            {
+                accountNumber = current.AccountNumber;
+                apiKey = current.ApiKey;
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Failed to load settings: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SaveSettings()
+    {
+        if (string.IsNullOrWhiteSpace(accountNumber) || string.IsNullOrWhiteSpace(apiKey))
+        {
+            statusMessage = "Account number and API key are required.";
+            return;
+        }
+
+        isSaving = true;
+        statusMessage = null;
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync("http://apiservice/api/settings", new AccountSettingsDto
+            {
+                AccountNumber = accountNumber.Trim(),
+                ApiKey = apiKey.Trim()
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                statusMessage = "Settings saved.";
+            }
+            else
+            {
+                statusMessage = $"Save failed: {response.ReasonPhrase}";
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Save failed: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private sealed class AccountSettingsDto
+    {
+        public string AccountNumber { get; set; } = string.Empty;
+        public string ApiKey { get; set; } = string.Empty;
+    }
+}

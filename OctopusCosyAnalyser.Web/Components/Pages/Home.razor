@@ -1,0 +1,66 @@
+﻿@page "/"
+
+<PageTitle>Octopus Cosy Analyser</PageTitle>
+
+<h1>🐙 Octopus Cosy Analyser</h1>
+<p class="lead">Understand how your heat pump is running — historic data, live stats, and performance analysis.</p>
+
+<div class="row g-4 mt-3">
+    <div class="col-md-6 col-lg-3">
+        <div class="card h-100 border-success">
+            <div class="card-body text-center">
+                <h4>📊 Dashboard</h4>
+                <p>Live COP, power input, heat output, and device overview.</p>
+                <a href="/heatpump" class="btn btn-success">Open Dashboard</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+        <div class="card h-100 border-primary">
+            <div class="card-body text-center">
+                <h4>⚡ Performance</h4>
+                <p>Power consumption vs. heat output, COP history from snapshots.</p>
+                <a href="/heatpump/performance" class="btn btn-primary">View Performance</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+        <div class="card h-100 border-info">
+            <div class="card-body text-center">
+                <h4>🏠 Home Comfort</h4>
+                <p>Temperature &amp; humidity from your Cosy Pods and zone status.</p>
+                <a href="/heatpump/comfort" class="btn btn-info">View Comfort</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+        <div class="card h-100 border-warning">
+            <div class="card-body text-center">
+                <h4>🔧 System Health</h4>
+                <p>Water tank temps, flow temps, weather compensation, zones.</p>
+                <a href="/heatpump/system" class="btn btn-warning">View System</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mt-2">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h4>📈 Historic Analysis</h4>
+                <p>Compare different time ranges. See if settings changes made a positive difference.</p>
+                <a href="/heatpump/history" class="btn btn-outline-dark">View History</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h4>⚙️ Account Settings</h4>
+                <p>Configure your Octopus Energy account number and API key.</p>
+                <a href="/settings" class="btn btn-outline-secondary">Settings</a>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,269 @@
+@page "/heatpump/performance"
+@inject HeatPumpApiClient Api
+@rendermode InteractiveServer
+
+<PageTitle>Heat Pump – Performance</PageTitle>
+
+<h1>⚡ Power &amp; Efficiency</h1>
+<p class="text-muted">Power consumption vs. heat output and your live COP (efficiency).</p>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (isLoading && summary == null)
+{
+    <p><em>Loading live performance data...</em></p>
+}
+else if (summary != null)
+{
+    <!-- Live Performance Cards -->
+    <div class="row g-3">
+        <div class="col-md-3">
+            <div class="card text-center border-success h-100">
+                <div class="card-body">
+                    <h6 class="text-muted">Live COP</h6>
+                    <h1 class="text-success">@(summary.LivePerformance?.CoefficientOfPerformance ?? "—")</h1>
+                    <small class="text-muted">Higher is better (3+ good)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-primary h-100">
+                <div class="card-body">
+                    <h6 class="text-muted">Power Input</h6>
+                    <h1 class="text-primary">@Fmt(summary.LivePerformance?.PowerInput)</h1>
+                    <small class="text-muted">Electricity consumed</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-danger h-100">
+                <div class="card-body">
+                    <h6 class="text-muted">Heat Output</h6>
+                    <h1 class="text-danger">@Fmt(summary.LivePerformance?.HeatOutput)</h1>
+                    <small class="text-muted">Heat delivered</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-warning h-100">
+                <div class="card-body">
+                    <h6 class="text-muted">Outdoor Temp</h6>
+                    <h1 class="text-warning">@Fmt(summary.LivePerformance?.OutdoorTemperature)</h1>
+                    <small class="text-muted">Outside air</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-3">
+        <div class="col-12 text-end">
+            <button class="btn btn-outline-success btn-sm" @onclick="Refresh" disabled="@isLoading">⟳ Refresh Live</button>
+            <small class="text-muted ms-2">Read at: @(summary.LivePerformance?.ReadAt ?? "—")</small>
+        </div>
+    </div>
+
+    <!-- Lifetime Stats -->
+    <h4 class="mt-4">Lifetime Performance</h4>
+    <div class="row g-3">
+        <div class="col-md-4">
+            <div class="card"><div class="card-body text-center">
+                <h6 class="text-muted">Seasonal COP</h6>
+                <h2>@(summary.LifetimePerformance?.SeasonalCoefficientOfPerformance ?? "—")</h2>
+            </div></div>
+        </div>
+        <div class="col-md-4">
+            <div class="card"><div class="card-body text-center">
+                <h6 class="text-muted">Total Heat Output</h6>
+                <h2>@Fmt(summary.LifetimePerformance?.HeatOutput)</h2>
+            </div></div>
+        </div>
+        <div class="col-md-4">
+            <div class="card"><div class="card-body text-center">
+                <h6 class="text-muted">Total Energy Input</h6>
+                <h2>@Fmt(summary.LifetimePerformance?.EnergyInput)</h2>
+            </div></div>
+        </div>
+    </div>
+
+    <!-- Snapshot History Chart (from background worker data) -->
+    <h4 class="mt-5">COP History <small class="text-muted">(from snapshots)</small></h4>
+    <div class="row g-3 mb-3">
+        <div class="col-md-2">
+            <label class="form-label">From</label>
+            <input @bind="snapFrom" type="datetime-local" class="form-control form-control-sm" />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">To</label>
+            <input @bind="snapTo" type="datetime-local" class="form-control form-control-sm" />
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <button class="btn btn-primary btn-sm w-100" @onclick="LoadSnapshots" disabled="@snapshotsLoading">
+                @(snapshotsLoading ? "Loading..." : "Load Snapshots")
+            </button>
+        </div>
+        <div class="col-md-6 d-flex align-items-end">
+            <div class="btn-group btn-group-sm" role="group">
+                <button class="btn btn-outline-secondary" @onclick="() => SetSnapRange(1)">24h</button>
+                <button class="btn btn-outline-secondary" @onclick="() => SetSnapRange(3)">3d</button>
+                <button class="btn btn-outline-secondary" @onclick="() => SetSnapRange(7)">7d</button>
+                <button class="btn btn-outline-secondary" @onclick="() => SetSnapRange(30)">30d</button>
+            </div>
+        </div>
+    </div>
+
+    @if (snapshots.Count > 0)
+    {
+        <RadzenChart Style="height: 300px;">
+            <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="CoefficientOfPerformance"
+                             Title="COP" Stroke="rgb(40,167,69)" StrokeWidth="2" />
+            <RadzenCategoryAxis FormatString="{0:MMM dd HH:mm}" />
+            <RadzenValueAxis Min="0">
+                <RadzenGridLines Visible="true" />
+            </RadzenValueAxis>
+            <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+        </RadzenChart>
+
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <RadzenChart Style="height: 250px;">
+                    <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="PowerInputKilowatt"
+                                     Title="Power Input (kW)" Stroke="rgb(0,123,255)" StrokeWidth="2" />
+                    <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="HeatOutputKilowatt"
+                                     Title="Heat Output (kW)" Stroke="rgb(220,53,69)" StrokeWidth="2" />
+                    <RadzenCategoryAxis FormatString="{0:dd HH:mm}" />
+                    <RadzenValueAxis Min="0"><RadzenGridLines Visible="true" /></RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+            </div>
+            <div class="col-md-6">
+                <RadzenChart Style="height: 250px;">
+                    <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="OutdoorTemperatureCelsius"
+                                     Title="Outdoor Temp (°C)" Stroke="rgb(255,193,7)" StrokeWidth="2" />
+                    <RadzenCategoryAxis FormatString="{0:dd HH:mm}" />
+                    <RadzenValueAxis><RadzenGridLines Visible="true" /></RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+            </div>
+        </div>
+
+        <!-- Weather Compensation & Flow Temperature Chart -->
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <RadzenChart Style="height: 250px;">
+                    <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="WeatherCompensationMinCelsius"
+                                     Title="WC Min (°C)" Stroke="rgb(23,162,184)" StrokeWidth="2" LineType="LineType.Dashed" />
+                    <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="WeatherCompensationMaxCelsius"
+                                     Title="WC Max (°C)" Stroke="rgb(220,53,69)" StrokeWidth="2" LineType="LineType.Dashed" />
+                    <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="HeatingFlowTemperatureCelsius"
+                                     Title="Flow Temp (°C)" Stroke="rgb(255,133,27)" StrokeWidth="2" />
+                    <RadzenCategoryAxis FormatString="{0:dd HH:mm}" />
+                    <RadzenValueAxis><RadzenGridLines Visible="true" /></RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+            </div>
+            <div class="col-md-6">
+                <RadzenChart Style="height: 250px;">
+                    <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="PrimaryZoneSetpointCelsius"
+                                     Title="Zone Setpoint (°C)" Stroke="rgb(111,66,193)" StrokeWidth="2" />
+                    <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="PrimarySensorTemperatureCelsius"
+                                     Title="Sensor Temp (°C)" Stroke="rgb(40,167,69)" StrokeWidth="2" />
+                    <RadzenCategoryAxis FormatString="{0:dd HH:mm}" />
+                    <RadzenValueAxis><RadzenGridLines Visible="true" /></RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+            </div>
+        </div>
+
+        <h5 class="mt-3">Snapshot Statistics</h5>
+        <table class="table table-bordered table-sm">
+            <tbody>
+                <tr><td><strong>Data Points</strong></td><td>@snapshots.Count</td></tr>
+                <tr><td><strong>Avg COP</strong></td><td>@AvgOrDash(snapshots.Select(s => s.CoefficientOfPerformance))</td></tr>
+                <tr><td><strong>Avg Power In</strong></td><td>@AvgOrDash(snapshots.Select(s => s.PowerInputKilowatt)) kW</td></tr>
+                <tr><td><strong>Avg Heat Out</strong></td><td>@AvgOrDash(snapshots.Select(s => s.HeatOutputKilowatt)) kW</td></tr>
+                <tr><td><strong>Avg Outdoor Temp</strong></td><td>@AvgOrDash(snapshots.Select(s => s.OutdoorTemperatureCelsius)) °C</td></tr>
+                <tr><td><strong>Avg Flow Temp</strong></td><td>@AvgOrDash(snapshots.Select(s => s.HeatingFlowTemperatureCelsius)) °C</td></tr>
+                <tr><td><strong>WC Range</strong></td><td>@AvgOrDash(snapshots.Select(s => s.WeatherCompensationMinCelsius)) – @AvgOrDash(snapshots.Select(s => s.WeatherCompensationMaxCelsius)) °C</td></tr>
+            </tbody>
+        </table>
+    }
+    else if (!snapshotsLoading)
+    {
+        <p class="text-muted">No snapshot data yet. The background worker captures a snapshot every 15 minutes.</p>
+    }
+}
+
+@code {
+    private string? deviceId;
+    private bool isLoading;
+    private string? errorMessage;
+    private HeatPumpSummaryDto? summary;
+
+    // Snapshots
+    private bool snapshotsLoading;
+    private DateTime snapFrom = DateTime.UtcNow.AddDays(-3);
+    private DateTime snapTo = DateTime.UtcNow;
+    private List<HeatPumpSnapshotDto> snapshots = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDevice();
+        if (deviceId != null)
+        {
+            await Refresh();
+            await LoadSnapshots();
+        }
+    }
+
+    private async Task LoadDevice()
+    {
+        try
+        {
+            var devices = await Api.GetDevicesAsync();
+            if (devices.Length > 0) deviceId = devices[0].DeviceId;
+            else errorMessage = "No device set up. Go to the Dashboard to run setup.";
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+
+    private async Task Refresh()
+    {
+        if (deviceId == null) return;
+        isLoading = true;
+        try { summary = await Api.GetSummaryAsync(deviceId); }
+        catch (Exception ex) { errorMessage = ex.Message; }
+        finally { isLoading = false; }
+    }
+
+    private async Task LoadSnapshots()
+    {
+        if (deviceId == null) return;
+        snapshotsLoading = true;
+        try
+        {
+            var result = await Api.GetSnapshotsAsync(deviceId, snapFrom, snapTo);
+            snapshots = result?.Snapshots ?? [];
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+        finally { snapshotsLoading = false; }
+    }
+
+    private void SetSnapRange(int days)
+    {
+        snapTo = DateTime.UtcNow;
+        snapFrom = DateTime.UtcNow.AddDays(-days);
+    }
+
+    private static string Fmt(HeatPumpValueAndUnitDto? v)
+        => v == null ? "—" : string.IsNullOrWhiteSpace(v.Unit) ? (v.Value ?? "—") : $"{v.Value} {v.Unit}";
+
+    private static string AvgOrDash(IEnumerable<decimal?> values)
+    {
+        var valid = values.Where(v => v.HasValue).Select(v => v!.Value).ToList();
+        return valid.Count > 0 ? valid.Average().ToString("F2") : "—";
+    }
+}
+

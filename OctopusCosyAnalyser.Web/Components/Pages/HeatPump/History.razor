@@ -1,0 +1,316 @@
+@page "/heatpump/history"
+@inject HeatPumpApiClient Api
+@rendermode InteractiveServer
+
+<PageTitle>Heat Pump – History</PageTitle>
+
+<h1>📊 Historic Analysis</h1>
+<p class="text-muted">Compare different time ranges to see if settings changes made a positive difference.</p>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (string.IsNullOrEmpty(euid))
+{
+    <div class="alert alert-warning">No device set up. Go to the <a href="/heatpump">Dashboard</a> to run setup.</div>
+}
+else
+{
+    <!-- Date Range Controls -->
+    <div class="card">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label">From</label>
+                    <input @bind="fromDate" type="datetime-local" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">To</label>
+                    <input @bind="toDate" type="datetime-local" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Interval</label>
+                    <select @bind="grouping" class="form-select form-select-sm">
+                        <option value="">Auto</option>
+                        <option value="LIVE">LIVE</option>
+                        <option value="DAY">DAY</option>
+                        <option value="WEEK">WEEK</option>
+                        <option value="MONTH">MONTH</option>
+                        <option value="YEAR">YEAR</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary btn-sm w-100" @onclick="LoadTimeSeries" disabled="@isLoading">
+                        @(isLoading ? "Loading..." : "Load Data")
+                    </button>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Quick Range</label>
+                    <div class="btn-group btn-group-sm w-100">
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(1)">1 Day</button>
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(7)">7 Days</button>
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(30)">30 Days</button>
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(90)">90 Days</button>
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(365)">1 Year</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        var alertClass = statusMessage.Contains("✅") ? "alert-success"
+            : statusMessage.Contains("❌") ? "alert-danger" : "alert-info";
+        <div class="alert @alertClass mt-3">@statusMessage</div>
+    }
+
+    @if (timeSeriesData.Count > 0)
+    {
+        <!-- COP Trend Chart -->
+        <div class="card mt-4">
+            <div class="card-header">COP Trend</div>
+            <div class="card-body">
+                <RadzenChart Style="height: 300px;">
+                    <RadzenLineSeries Data="@timeSeriesData" CategoryProperty="EndAt" ValueProperty="Cop"
+                                     Title="COP" Stroke="rgb(40,167,69)" StrokeWidth="2" />
+                    <RadzenCategoryAxis FormatString="{0:MMM dd HH:mm}" />
+                    <RadzenValueAxis Min="0">
+                        <RadzenGridLines Visible="true" />
+                    </RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+            </div>
+        </div>
+
+        <!-- Energy Flow Chart -->
+        <div class="card mt-3">
+            <div class="card-header">Energy Flow</div>
+            <div class="card-body">
+                <RadzenChart Style="height: 300px;">
+                    <RadzenColumnSeries Data="@timeSeriesData" CategoryProperty="EndAt" ValueProperty="EnergyOutputVal"
+                                        Title="Energy Output (kWh)" Fill="rgb(220,53,69)" />
+                    <RadzenColumnSeries Data="@timeSeriesData" CategoryProperty="EndAt" ValueProperty="EnergyInputVal"
+                                        Title="Energy Input (kWh)" Fill="rgb(0,123,255)" />
+                    <RadzenCategoryAxis FormatString="{0:MMM dd}" />
+                    <RadzenValueAxis Min="0">
+                        <RadzenGridLines Visible="true" />
+                    </RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+            </div>
+        </div>
+
+        <!-- Outdoor Temperature Chart -->
+        <div class="card mt-3">
+            <div class="card-header">Outdoor Temperature</div>
+            <div class="card-body">
+                <RadzenChart Style="height: 250px;">
+                    <RadzenLineSeries Data="@timeSeriesData" CategoryProperty="EndAt" ValueProperty="OutdoorTempVal"
+                                     Title="Outdoor Temp (°C)" Stroke="rgb(255,193,7)" StrokeWidth="2" />
+                    <RadzenCategoryAxis FormatString="{0:MMM dd}" />
+                    <RadzenValueAxis>
+                        <RadzenGridLines Visible="true" />
+                    </RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+            </div>
+        </div>
+
+        <!-- Statistics Table -->
+        <div class="card mt-3">
+            <div class="card-header">Period Statistics</div>
+            <div class="card-body">
+                <table class="table table-bordered table-sm mb-0">
+                    <tbody>
+                        <tr>
+                            <td><strong>Data Points</strong></td><td>@timeSeriesData.Count</td>
+                            <td><strong>Period</strong></td><td>@fromDate.ToString("g") – @toDate.ToString("g")</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Avg COP</strong></td><td>@Avg(timeSeriesData.Select(d => d.Cop))</td>
+                            <td><strong>Max COP</strong></td><td>@Max(timeSeriesData.Select(d => d.Cop))</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Total Energy In</strong></td><td>@Sum(timeSeriesData.Select(d => d.EnergyInputVal)) kWh</td>
+                            <td><strong>Total Energy Out</strong></td><td>@Sum(timeSeriesData.Select(d => d.EnergyOutputVal)) kWh</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Avg Outdoor Temp</strong></td><td>@Avg(timeSeriesData.Select(d => d.OutdoorTempVal)) °C</td>
+                            <td><strong>Min Outdoor Temp</strong></td><td>@Min(timeSeriesData.Select(d => d.OutdoorTempVal)) °C</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Raw Data Table -->
+        <details class="mt-3">
+            <summary class="btn btn-outline-secondary btn-sm">Show Raw Data (@timeSeriesData.Count rows)</summary>
+            <table class="table table-striped table-sm mt-2">
+                <thead>
+                    <tr><th>Period End</th><th>COP</th><th>Energy Out (kWh)</th><th>Energy In (kWh)</th><th>Outdoor (°C)</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var pt in timeSeriesData)
+                    {
+                        <tr>
+                            <td>@pt.EndAt.ToString("g")</td>
+                            <td>@pt.Cop.ToString("F2")</td>
+                            <td>@pt.EnergyOutputVal.ToString("F2")</td>
+                            <td>@pt.EnergyInputVal.ToString("F2")</td>
+                            <td>@pt.OutdoorTempVal.ToString("F1")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </details>
+    }
+}
+
+@code {
+    private string accountNumber = "";
+    private string? euid;
+    private bool isLoading;
+    private string? errorMessage;
+    private string? statusMessage;
+
+    private DateTime fromDate = DateTime.UtcNow.AddDays(-7);
+    private DateTime toDate = DateTime.UtcNow;
+    private string grouping = "";
+
+    private List<ChartPoint> timeSeriesData = [];
+
+    /// <summary>View-model for Radzen charts — all numeric properties so charts can bind.</summary>
+    private sealed class ChartPoint
+    {
+        public DateTime EndAt { get; set; }
+        public double Cop { get; set; }
+        public double EnergyOutputVal { get; set; }
+        public double EnergyInputVal { get; set; }
+        public double OutdoorTempVal { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var settings = await Api.GetSettingsAsync();
+            var s = settings.FirstOrDefault();
+            if (s != null) accountNumber = s.AccountNumber;
+
+            var devices = await Api.GetDevicesAsync();
+            if (devices.Length > 0)
+            {
+                accountNumber = devices[0].AccountNumber;
+                euid = devices[0].Euid;
+            }
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+
+    private void SetRange(int days)
+    {
+        toDate = DateTime.UtcNow;
+        fromDate = DateTime.UtcNow.AddDays(-days);
+    }
+
+    private async Task LoadTimeSeries()
+    {
+        if (string.IsNullOrEmpty(accountNumber) || string.IsNullOrEmpty(euid))
+        { statusMessage = "❌ Account or EUID not set."; return; }
+
+        isLoading = true;
+        statusMessage = "Loading...";
+        timeSeriesData.Clear();
+
+        try
+        {
+            var raw = await Api.GetTimeSeriesRawAsync(accountNumber, euid, fromDate, toDate,
+                string.IsNullOrEmpty(grouping) ? null : grouping);
+
+            var doc = System.Text.Json.JsonDocument.Parse(raw);
+            var root = doc.RootElement.GetProperty("data");
+
+            if (root.TryGetProperty("octoHeatPumpTimeSeriesPerformance", out var seriesEl)
+                && seriesEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in seriesEl.EnumerateArray())
+                {
+                    var pt = new ChartPoint();
+
+                    if (item.TryGetProperty("endAt", out var endAt) && DateTime.TryParse(endAt.GetString(), out var dt))
+                        pt.EndAt = dt;
+
+                    var energyOut = GetNestedValue(item, "energyOutput");
+                    var energyIn = GetNestedValue(item, "energyInput");
+                    var outdoor = GetNestedValue(item, "outdoorTemperature");
+
+                    pt.EnergyOutputVal = energyOut ?? 0;
+                    pt.EnergyInputVal = energyIn ?? 0;
+                    pt.OutdoorTempVal = outdoor ?? 0;
+                    pt.Cop = energyIn > 0 ? (energyOut ?? 0) / energyIn.Value : 0;
+
+                    timeSeriesData.Add(pt);
+                }
+
+                statusMessage = $"✅ Loaded {timeSeriesData.Count} data points";
+            }
+            else if (root.TryGetProperty("octoHeatPumpTimeSeriesPerformance", out var nullEl)
+                     && nullEl.ValueKind == System.Text.Json.JsonValueKind.Null)
+            {
+                statusMessage = "❌ No data for this date range. Try a different period.";
+            }
+            else
+            {
+                statusMessage = "❌ Unexpected response format from the API.";
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"❌ {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static double? GetNestedValue(System.Text.Json.JsonElement item, string property)
+    {
+        if (item.TryGetProperty(property, out var el) && el.TryGetProperty("value", out var val))
+        {
+            var str = val.GetString();
+            if (double.TryParse(str, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var result))
+                return result;
+        }
+        return null;
+    }
+
+    private static string Avg(IEnumerable<double> values)
+    {
+        var list = values.Where(v => v != 0).ToList();
+        return list.Count > 0 ? list.Average().ToString("F2") : "—";
+    }
+
+    private static string Max(IEnumerable<double> values)
+    {
+        var list = values.Where(v => v != 0).ToList();
+        return list.Count > 0 ? list.Max().ToString("F2") : "—";
+    }
+
+    private static string Min(IEnumerable<double> values)
+    {
+        var list = values.Where(v => v != 0).ToList();
+        return list.Count > 0 ? list.Min().ToString("F1") : "—";
+    }
+
+    private static string Sum(IEnumerable<double> values)
+    {
+        return values.Sum().ToString("F2");
+    }
+}
+

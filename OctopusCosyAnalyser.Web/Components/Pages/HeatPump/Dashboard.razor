@@ -1,0 +1,204 @@
+@page "/heatpump"
+@inject HeatPumpApiClient Api
+@rendermode InteractiveServer
+
+<PageTitle>Heat Pump – Dashboard</PageTitle>
+
+<h1>🔥 Heat Pump Dashboard</h1>
+
+@if (!isSetup)
+{
+    <div class="card mt-4">
+        <div class="card-body">
+            <h3>Initial Setup</h3>
+            <p>Save your account number and API key in <a href="/settings">Account Settings</a>, then set up the device.</p>
+            <button @onclick="SetupDevice" class="btn btn-primary" disabled="@isLoading">
+                @(isLoading ? "Setting up..." : "Setup Device")
+            </button>
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger mt-3">@errorMessage</div>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="row mt-3">
+        <div class="col-md-12 d-flex justify-content-between align-items-center">
+            <div>
+                <span class="text-muted">Account:</span> <strong>@accountNumber</strong>
+                <span class="ms-3 text-muted">Device:</span> <strong>@deviceId</strong>
+            </div>
+            <button @onclick="RefreshDashboard" class="btn btn-outline-success btn-sm" disabled="@isLoading">
+                @(isLoading ? "Refreshing..." : "⟳ Refresh")
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        <div class="alert alert-info mt-2">@statusMessage</div>
+    }
+
+    @if (summary != null)
+    {
+        <div class="row mt-4 g-3">
+            <div class="col-md-3">
+                <div class="card text-center border-success">
+                    <div class="card-body">
+                        <h6 class="card-subtitle text-muted">Live COP</h6>
+                        <h2 class="card-title text-success mt-2">@(summary.LivePerformance?.CoefficientOfPerformance ?? "—")</h2>
+                        <small class="text-muted">Efficiency ratio</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center border-primary">
+                    <div class="card-body">
+                        <h6 class="card-subtitle text-muted">Power Input</h6>
+                        <h2 class="card-title text-primary mt-2">@FormatValue(summary.LivePerformance?.PowerInput)</h2>
+                        <small class="text-muted">Electricity consumed</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center border-danger">
+                    <div class="card-body">
+                        <h6 class="card-subtitle text-muted">Heat Output</h6>
+                        <h2 class="card-title text-danger mt-2">@FormatValue(summary.LivePerformance?.HeatOutput)</h2>
+                        <small class="text-muted">Heat delivered</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center border-warning">
+                    <div class="card-body">
+                        <h6 class="card-subtitle text-muted">Outdoor Temp</h6>
+                        <h2 class="card-title text-warning mt-2">@FormatValue(summary.LivePerformance?.OutdoorTemperature)</h2>
+                        <small class="text-muted">Outside air</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4 g-3">
+            <div class="col-md-4">
+                <div class="card"><div class="card-body text-center">
+                    <h6 class="text-muted">Seasonal COP (Lifetime)</h6>
+                    <h3>@(summary.LifetimePerformance?.SeasonalCoefficientOfPerformance ?? "—")</h3>
+                </div></div>
+            </div>
+            <div class="col-md-4">
+                <div class="card"><div class="card-body text-center">
+                    <h6 class="text-muted">Lifetime Heat Output</h6>
+                    <h3>@FormatValue(summary.LifetimePerformance?.HeatOutput)</h3>
+                </div></div>
+            </div>
+            <div class="col-md-4">
+                <div class="card"><div class="card-body text-center">
+                    <h6 class="text-muted">Lifetime Energy Input</h6>
+                    <h3>@FormatValue(summary.LifetimePerformance?.EnergyInput)</h3>
+                </div></div>
+            </div>
+        </div>
+
+        <div class="row mt-4 g-3">
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">Controller</div>
+                    <div class="card-body">
+                        <p><strong>Connected:</strong> @(summary.ControllerConfiguration?.Controller?.Connected == true ? "✅ Yes" : "❌ No")</p>
+                        <p><strong>Timezone:</strong> @(summary.ControllerConfiguration?.Controller?.HeatPumpTimezone ?? "—")</p>
+                        <p><strong>State:</strong> @string.Join(", ", summary.ControllerConfiguration?.Controller?.State ?? [])</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">Heat Pump Unit</div>
+                    <div class="card-body">
+                        <p><strong>Model:</strong> @(summary.ControllerConfiguration?.HeatPump?.Model ?? "—")</p>
+                        <p><strong>Serial:</strong> @(summary.ControllerConfiguration?.HeatPump?.SerialNumber ?? "—")</p>
+                        <p><strong>Hardware:</strong> @(summary.ControllerConfiguration?.HeatPump?.HardwareVersion ?? "—")</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-3">
+            <div class="col-12 text-muted">
+                <small>Live data read at: @(summary.LivePerformance?.ReadAt ?? "—")</small>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private string accountNumber = "";
+    private string? deviceId;
+    private string? euid;
+    private bool isSetup;
+    private bool isLoading;
+    private string? errorMessage;
+    private string? statusMessage;
+    private HeatPumpSummaryDto? summary;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSettingsAndDevice();
+        if (isSetup) await RefreshDashboard();
+    }
+
+    private async Task LoadSettingsAndDevice()
+    {
+        try
+        {
+            var settings = await Api.GetSettingsAsync();
+            var current = settings.FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(current?.AccountNumber))
+                accountNumber = current.AccountNumber;
+
+            var devices = await Api.GetDevicesAsync();
+            if (devices.Length > 0)
+            {
+                accountNumber = devices[0].AccountNumber;
+                deviceId = devices[0].DeviceId;
+                euid = devices[0].Euid;
+                isSetup = true;
+            }
+        }
+        catch (Exception ex) { errorMessage = $"Failed to load: {ex.Message}"; }
+    }
+
+    private async Task SetupDevice()
+    {
+        if (string.IsNullOrWhiteSpace(accountNumber))
+        { errorMessage = "Save account settings first."; return; }
+        isLoading = true; errorMessage = null;
+        try
+        {
+            var result = await Api.SetupDeviceAsync(accountNumber);
+            deviceId = result?.DeviceId; euid = result?.Euid; isSetup = true;
+            await RefreshDashboard();
+        }
+        catch (Exception ex) { errorMessage = $"Setup failed: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+
+    private async Task RefreshDashboard()
+    {
+        if (string.IsNullOrEmpty(deviceId)) return;
+        isLoading = true; statusMessage = null;
+        try
+        {
+            summary = await Api.GetSummaryAsync(deviceId);
+            statusMessage = summary == null ? "No data returned." : null;
+        }
+        catch (Exception ex) { statusMessage = $"Failed: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+
+    private static string FormatValue(HeatPumpValueAndUnitDto? v)
+        => v == null ? "—" : string.IsNullOrWhiteSpace(v.Unit) ? (v.Value ?? "—") : $"{v.Value} {v.Unit}";
+}

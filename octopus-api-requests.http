@@ -1,0 +1,156 @@
+### Octopus Energy API Direct Requests
+### Documentation: https://developer.octopus.energy/
+
+@graphqlUrl = https://api.octopus.energy/v1/graphql/
+@restUrl = https://api.octopus.energy/v1
+@apiKey = {{OCTOPUS_API_KEY}}
+@accountNumber = {{OCTOPUS_ACCOUNT_NUMBER}}
+@mpan = {{OCTOPUS_MPAN}}
+@meterSerial = {{OCTOPUS_METER_SERIAL}}
+@deviceId = {{OCTOPUS_DEVICE_ID}}
+
+# Paste your token here after getting it from step 1
+@authToken = {{OCTOPUS_AUTH_TOKEN}}
+
+# NOTE: Set environment variables for the placeholders above before running requests.
+# Example (PowerShell):
+# $env:OCTOPUS_API_KEY = "..."; $env:OCTOPUS_ACCOUNT_NUMBER = "A-...";
+
+###
+
+### 1. GraphQL - Obtain Kraken Token
+# @name getToken
+POST {{graphqlUrl}}
+Content-Type: application/json
+
+{
+  "query": "mutation { obtainKrakenToken(input: {APIKey: \"{{apiKey}}\"}) { token refreshToken } }"
+}
+
+### Copy the token from response above and paste into @authToken variable
+
+###
+
+### 2. GraphQL - Get Account Information
+POST {{graphqlUrl}}
+Content-Type: application/json
+Authorization: JWT {{authToken}}
+
+{
+  "query": "query { account(accountNumber: \"{{accountNumber}}\") { electricityAgreements(active: true) { meterPoint { mpan meters(includeInactive: false) { serialNumber smartDevices { deviceId } } } } } }"
+}
+
+###
+
+### 3. GraphQL - Get Smart Meter Telemetry (Live Data)
+POST {{graphqlUrl}}
+Content-Type: application/json
+Authorization: JWT {{authToken}}
+
+{
+  "query": "query { smartMeterTelemetry(deviceId: \"{{deviceId}}\") { readAt consumption consumptionDelta demand } }"
+}
+
+###
+
+ i### 4. GraphQL - Get Heat Pump Device Info
+POST {{graphqlUrl}}
+Content-Type: application/json
+Authorization: JWT {{authToken}}
+
+{
+  "query": "query { account(accountNumber: \"{{accountNumber}}\") { properties { id heatPumpDevice { id serialNumber make model } } } }"
+}
+
+###
+
+### 5. GraphQL - Get Heat Pump Status
+POST {{graphqlUrl}}
+Content-Type: application/json
+Authorization: JWT {{authToken}}
+
+{
+  "query": "query { heatPumpStatus }"
+}
+
+###
+
+### 6. GraphQL - Get Heat Pump Controller Configuration
+POST {{graphqlUrl}}
+Content-Type: application/json
+Authorization: JWT {{authToken}}
+
+{
+  "query": "query { heatPumpControllerConfiguration }"
+}
+
+###
+
+### 7. GraphQL - Get Heat Pump Controller Status
+POST {{graphqlUrl}}
+Content-Type: application/json
+Authorization: JWT {{authToken}}
+
+{
+  "query": "query { heatPumpControllerStatus }"
+}
+
+###
+
+### 8. GraphQL - Get Available Heat Pump Variants
+POST {{graphqlUrl}}
+Content-Type: application/json
+Authorization: JWT {{authToken}}
+
+{
+  "query": "query { heatPumpVariants(make: \"Cosy\") { make models { model } } }"
+}
+
+###
+
+### 4. REST API - Get Electricity Consumption (Half-Hourly)
+GET {{restUrl}}/electricity-meter-points/{{mpan}}/meters/{{meterSerial}}/consumption/?period_from=2024-02-05T00:00:00Z&period_to=2024-02-12T00:00:00Z&page_size=1000
+Authorization: Basic {{apiKey}}:
+
+###
+
+### 5. REST API - Get Electricity Consumption (Default - Last 30 days)
+GET {{restUrl}}/electricity-meter-points/{{mpan}}/meters/{{meterSerial}}/consumption/
+Authorization: Basic {{apiKey}}:
+
+###
+
+### 6. REST API - Get Account Details
+GET {{restUrl}}/accounts/{{accountNumber}}/
+Authorization: Basic {{apiKey}}:
+
+###
+
+### 7. REST API - Get Product Information
+GET {{restUrl}}/products/
+
+###
+
+### 8. REST API - Get Tariff Rates (Example)
+# Replace PRODUCT_CODE and TARIFF_CODE with your actual values
+GET {{restUrl}}/products/AGILE-FLEX-22-11-25/electricity-tariffs/E-1R-AGILE-FLEX-22-11-25-A/standard-unit-rates/
+
+###
+
+### Example Workflow:
+### 1. Get token (step 1)
+### 2. Get account info to find deviceId, MPAN, serial (step 2)
+### 3. Get live telemetry with deviceId (step 3)
+### 4. Get historical consumption with MPAN and serial (step 4)
+
+###
+
+### Notes:
+# - REST API uses Basic Auth with API key as username, blank password
+# - GraphQL API uses token obtained from obtainKrakenToken mutation
+# - Token expires in 60 minutes
+# - All dates should be in UTC with Z suffix
+# - Consumption values are in kWh
+# - Demand values are in Watts (negative = export)
+
+###
