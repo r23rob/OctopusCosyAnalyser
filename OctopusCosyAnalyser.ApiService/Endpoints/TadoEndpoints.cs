@@ -3,6 +3,7 @@ using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.ApiService.Services;
 using OctopusCosyAnalyser.Shared.Models;
+using System.Text.Json;
 
 namespace OctopusCosyAnalyser.ApiService.Endpoints;
 
@@ -17,18 +18,26 @@ public static class TadoEndpoints
 
         group.MapGet("/settings", async (CosyDbContext db) =>
         {
-            var settings = await db.TadoSettings.FirstOrDefaultAsync();
-            if (settings is null)
-                return Results.Ok((TadoSettingsDto?)null);
-
-            return Results.Ok(new TadoSettingsDto
+            try
             {
-                Id = settings.Id,
-                Username = settings.Username,
-                HomeId = settings.HomeId,
-                CreatedAt = settings.CreatedAt,
-                UpdatedAt = settings.UpdatedAt
-            });
+                var settings = await db.TadoSettings.FirstOrDefaultAsync();
+                if (settings is null)
+                    return Results.NoContent();
+
+                return Results.Ok(new TadoSettingsDto
+                {
+                    Id = settings.Id,
+                    Username = settings.Username,
+                    HomeId = settings.HomeId,
+                    CreatedAt = settings.CreatedAt,
+                    UpdatedAt = settings.UpdatedAt
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to load Tado settings");
+                return Results.Problem("An error occurred while loading Tado settings.", statusCode: 500);
+            }
         }).WithName("GetTadoSettings");
 
         group.MapPut("/settings", async (TadoSettingsRequestDto request, CosyDbContext db) =>
@@ -36,42 +45,50 @@ public static class TadoEndpoints
             if (string.IsNullOrWhiteSpace(request.Username))
                 return Results.BadRequest("Username is required");
 
-            var settings = await db.TadoSettings.FirstOrDefaultAsync();
-
-            if (settings is null)
+            try
             {
-                if (string.IsNullOrWhiteSpace(request.Password))
-                    return Results.BadRequest("Password is required for initial setup");
+                var settings = await db.TadoSettings.FirstOrDefaultAsync();
 
-                settings = new TadoSettings
+                if (settings is null)
                 {
-                    Username = request.Username.Trim(),
-                    Password = request.Password.Trim(),
-                    HomeId = request.HomeId,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                db.TadoSettings.Add(settings);
-            }
-            else
-            {
-                settings.Username = request.Username.Trim();
-                if (!string.IsNullOrWhiteSpace(request.Password))
-                    settings.Password = request.Password.Trim();
-                settings.HomeId = request.HomeId;
-                settings.UpdatedAt = DateTime.UtcNow;
-            }
+                    if (string.IsNullOrWhiteSpace(request.Password))
+                        return Results.BadRequest("Password is required for initial setup");
 
-            await db.SaveChangesAsync();
+                    settings = new TadoSettings
+                    {
+                        Username = request.Username.Trim(),
+                        Password = request.Password.Trim(),
+                        HomeId = request.HomeId,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    db.TadoSettings.Add(settings);
+                }
+                else
+                {
+                    settings.Username = request.Username.Trim();
+                    if (!string.IsNullOrWhiteSpace(request.Password))
+                        settings.Password = request.Password.Trim();
+                    settings.HomeId = request.HomeId;
+                    settings.UpdatedAt = DateTime.UtcNow;
+                }
 
-            return Results.Ok(new TadoSettingsDto
+                await db.SaveChangesAsync();
+
+                return Results.Ok(new TadoSettingsDto
+                {
+                    Id = settings.Id,
+                    Username = settings.Username,
+                    HomeId = settings.HomeId,
+                    CreatedAt = settings.CreatedAt,
+                    UpdatedAt = settings.UpdatedAt
+                });
+            }
+            catch (Exception ex)
             {
-                Id = settings.Id,
-                Username = settings.Username,
-                HomeId = settings.HomeId,
-                CreatedAt = settings.CreatedAt,
-                UpdatedAt = settings.UpdatedAt
-            });
+                logger.LogError(ex, "Failed to save Tado settings");
+                return Results.Problem("An error occurred while saving Tado settings.", statusCode: 500);
+            }
         }).WithName("UpsertTadoSettings");
 
         // ── Homes ─────────────────────────────────────────────────────
@@ -82,16 +99,26 @@ public static class TadoEndpoints
             if (settings is null)
                 return Results.BadRequest("Tado settings not configured");
 
-            var me = await tado.GetMeAsync(settings.Username, settings.Password);
-            var homes = me.RootElement.GetProperty("homes");
-
-            var result = homes.EnumerateArray().Select(h => new TadoHomeDto
+            try
             {
-                Id = h.GetProperty("id").GetInt64(),
-                Name = h.GetProperty("name").GetString() ?? string.Empty
-            }).ToList();
+                var me = await tado.GetMeAsync(settings.Username, settings.Password);
 
-            return Results.Ok(result);
+                if (!me.RootElement.TryGetProperty("homes", out var homes))
+                    return Results.Problem("Tado API response did not contain a 'homes' field.", statusCode: 502);
+
+                var result = homes.EnumerateArray().Select(h => new TadoHomeDto
+                {
+                    Id = h.GetProperty("id").GetInt64(),
+                    Name = h.GetProperty("name").GetString() ?? string.Empty
+                }).ToList();
+
+                return Results.Ok(result);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to fetch Tado homes");
+                return Results.Problem($"Failed to reach the Tado API: {ex.Message}", statusCode: 502);
+            }
         }).WithName("GetTadoHomes");
 
         // ── Zones ─────────────────────────────────────────────────────
@@ -106,8 +133,17 @@ public static class TadoEndpoints
             if (homeId is null)
                 return Results.BadRequest("Home ID not set — save settings with a Home ID first");
 
-            var zonesDoc = await tado.GetZonesAsync(settings.Username, settings.Password, homeId.Value);
-            var zones = zonesDoc.RootElement.EnumerateArray().ToList();
+            List<JsonElement> zones;
+            try
+            {
+                var zonesDoc = await tado.GetZonesAsync(settings.Username, settings.Password, homeId.Value);
+                zones = zonesDoc.RootElement.EnumerateArray().ToList();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to fetch Tado zones for home {HomeId}", homeId.Value);
+                return Results.Problem($"Failed to reach the Tado API: {ex.Message}", statusCode: 502);
+            }
 
             var result = new List<TadoZoneDto>();
             foreach (var zone in zones)
