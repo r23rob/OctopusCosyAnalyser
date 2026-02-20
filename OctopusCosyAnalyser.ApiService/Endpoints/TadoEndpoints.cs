@@ -18,18 +18,26 @@ public static class TadoEndpoints
 
         group.MapGet("/settings", async (CosyDbContext db) =>
         {
-            var settings = await db.TadoSettings.FirstOrDefaultAsync();
-            if (settings is null)
-                return Results.Ok((TadoSettingsDto?)null);
-
-            return Results.Ok(new TadoSettingsDto
+            try
             {
-                Id = settings.Id,
-                Username = settings.Username,
-                HomeId = settings.HomeId,
-                CreatedAt = settings.CreatedAt,
-                UpdatedAt = settings.UpdatedAt
-            });
+                var settings = await db.TadoSettings.FirstOrDefaultAsync();
+                if (settings is null)
+                    return Results.Ok((TadoSettingsDto?)null);
+
+                return Results.Ok(new TadoSettingsDto
+                {
+                    Id = settings.Id,
+                    Username = settings.Username,
+                    HomeId = settings.HomeId,
+                    CreatedAt = settings.CreatedAt,
+                    UpdatedAt = settings.UpdatedAt
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to load Tado settings");
+                return Results.Problem("An error occurred while loading Tado settings.", statusCode: 500);
+            }
         }).WithName("GetTadoSettings");
 
         group.MapPut("/settings", async (TadoSettingsRequestDto request, CosyDbContext db) =>
@@ -37,42 +45,50 @@ public static class TadoEndpoints
             if (string.IsNullOrWhiteSpace(request.Username))
                 return Results.BadRequest("Username is required");
 
-            var settings = await db.TadoSettings.FirstOrDefaultAsync();
-
-            if (settings is null)
+            try
             {
-                if (string.IsNullOrWhiteSpace(request.Password))
-                    return Results.BadRequest("Password is required for initial setup");
+                var settings = await db.TadoSettings.FirstOrDefaultAsync();
 
-                settings = new TadoSettings
+                if (settings is null)
                 {
-                    Username = request.Username.Trim(),
-                    Password = request.Password.Trim(),
-                    HomeId = request.HomeId,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                db.TadoSettings.Add(settings);
-            }
-            else
-            {
-                settings.Username = request.Username.Trim();
-                if (!string.IsNullOrWhiteSpace(request.Password))
-                    settings.Password = request.Password.Trim();
-                settings.HomeId = request.HomeId;
-                settings.UpdatedAt = DateTime.UtcNow;
-            }
+                    if (string.IsNullOrWhiteSpace(request.Password))
+                        return Results.BadRequest("Password is required for initial setup");
 
-            await db.SaveChangesAsync();
+                    settings = new TadoSettings
+                    {
+                        Username = request.Username.Trim(),
+                        Password = request.Password.Trim(),
+                        HomeId = request.HomeId,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    db.TadoSettings.Add(settings);
+                }
+                else
+                {
+                    settings.Username = request.Username.Trim();
+                    if (!string.IsNullOrWhiteSpace(request.Password))
+                        settings.Password = request.Password.Trim();
+                    settings.HomeId = request.HomeId;
+                    settings.UpdatedAt = DateTime.UtcNow;
+                }
 
-            return Results.Ok(new TadoSettingsDto
+                await db.SaveChangesAsync();
+
+                return Results.Ok(new TadoSettingsDto
+                {
+                    Id = settings.Id,
+                    Username = settings.Username,
+                    HomeId = settings.HomeId,
+                    CreatedAt = settings.CreatedAt,
+                    UpdatedAt = settings.UpdatedAt
+                });
+            }
+            catch (Exception ex)
             {
-                Id = settings.Id,
-                Username = settings.Username,
-                HomeId = settings.HomeId,
-                CreatedAt = settings.CreatedAt,
-                UpdatedAt = settings.UpdatedAt
-            });
+                logger.LogError(ex, "Failed to save Tado settings");
+                return Results.Problem("An error occurred while saving Tado settings.", statusCode: 500);
+            }
         }).WithName("UpsertTadoSettings");
 
         // ── Homes ─────────────────────────────────────────────────────
