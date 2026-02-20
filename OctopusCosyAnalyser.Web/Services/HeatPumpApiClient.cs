@@ -105,5 +105,27 @@ public class HeatPumpApiClient
             $"/api/heatpump/sync/{deviceId}?from={Uri.EscapeDataString(fromStr)}&to={Uri.EscapeDataString(toStr)}", null);
         response.EnsureSuccessStatusCode();
     }
+
+    // ── Tado Settings ─────────────────────────────────────────────────
+
+    public async Task<TadoSettingsDto?> GetTadoSettingsAsync()
+        => await _http.GetFromJsonAsync<TadoSettingsDto>("/api/tado/settings");
+
+    public async Task<TadoSettingsDto?> UpsertTadoSettingsAsync(TadoSettingsRequestDto request)
+    {
+        var response = await _http.PutAsJsonAsync("/api/tado/settings", request);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<TadoSettingsDto>();
+    }
+
+    // ── Tado Homes ────────────────────────────────────────────────────
+
+    public async Task<TadoHomeDto[]> GetTadoHomesAsync()
+        => await _http.GetFromJsonAsync<TadoHomeDto[]>("/api/tado/homes") ?? [];
+
+    // ── Tado Zones ────────────────────────────────────────────────────
+
+    public async Task<TadoZoneDto[]> GetTadoZonesAsync()
+        => await _http.GetFromJsonAsync<TadoZoneDto[]>("/api/tado/zones") ?? [];
 }
 

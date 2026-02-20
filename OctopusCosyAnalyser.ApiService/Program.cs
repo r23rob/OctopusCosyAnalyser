@@ -14,6 +14,9 @@ builder.AddNpgsqlDbContext<CosyDbContext>("cosydb");
 // Add Octopus Energy API client
 builder.Services.AddHttpClient<OctopusEnergyClient>();
 
+// Add Tado API client
+builder.Services.AddHttpClient<TadoClient>();
+
 // Add Heat Pump Snapshot Worker
 builder.Services.AddHostedService<HeatPumpSnapshotWorker>();
 
@@ -61,6 +64,7 @@ app.MapGet("/weatherforecast", () =>
 // Map Heat Pump endpoints
 app.MapHeatPumpEndpoints();
 app.MapAccountSettingsEndpoints();
+app.MapTadoEndpoints();
 
 app.MapDefaultEndpoints();
 
