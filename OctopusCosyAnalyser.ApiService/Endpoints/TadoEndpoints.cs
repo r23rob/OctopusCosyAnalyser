@@ -3,6 +3,7 @@ using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.ApiService.Services;
 using OctopusCosyAnalyser.Shared.Models;
+using System.Text.Json;
 
 namespace OctopusCosyAnalyser.ApiService.Endpoints;
 
@@ -82,16 +83,26 @@ public static class TadoEndpoints
             if (settings is null)
                 return Results.BadRequest("Tado settings not configured");
 
-            var me = await tado.GetMeAsync(settings.Username, settings.Password);
-            var homes = me.RootElement.GetProperty("homes");
-
-            var result = homes.EnumerateArray().Select(h => new TadoHomeDto
+            try
             {
-                Id = h.GetProperty("id").GetInt64(),
-                Name = h.GetProperty("name").GetString() ?? string.Empty
-            }).ToList();
+                var me = await tado.GetMeAsync(settings.Username, settings.Password);
 
-            return Results.Ok(result);
+                if (!me.RootElement.TryGetProperty("homes", out var homes))
+                    return Results.Problem("Tado API response did not contain a 'homes' field.", statusCode: 502);
+
+                var result = homes.EnumerateArray().Select(h => new TadoHomeDto
+                {
+                    Id = h.GetProperty("id").GetInt64(),
+                    Name = h.GetProperty("name").GetString() ?? string.Empty
+                }).ToList();
+
+                return Results.Ok(result);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to fetch Tado homes");
+                return Results.Problem($"Failed to reach the Tado API: {ex.Message}", statusCode: 502);
+            }
         }).WithName("GetTadoHomes");
 
         // ── Zones ─────────────────────────────────────────────────────
@@ -106,8 +117,17 @@ public static class TadoEndpoints
             if (homeId is null)
                 return Results.BadRequest("Home ID not set — save settings with a Home ID first");
 
-            var zonesDoc = await tado.GetZonesAsync(settings.Username, settings.Password, homeId.Value);
-            var zones = zonesDoc.RootElement.EnumerateArray().ToList();
+            List<JsonElement> zones;
+            try
+            {
+                var zonesDoc = await tado.GetZonesAsync(settings.Username, settings.Password, homeId.Value);
+                zones = zonesDoc.RootElement.EnumerateArray().ToList();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to fetch Tado zones for home {HomeId}", homeId.Value);
+                return Results.Problem($"Failed to reach the Tado API: {ex.Message}", statusCode: 502);
+            }
 
             var result = new List<TadoZoneDto>();
             foreach (var zone in zones)

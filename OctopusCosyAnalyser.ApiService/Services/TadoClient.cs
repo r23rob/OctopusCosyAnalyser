@@ -10,6 +10,9 @@ public class TadoClient
     private sealed record TokenCacheEntry(string AccessToken, DateTime ExpiresAt);
 
     private static readonly ConcurrentDictionary<string, TokenCacheEntry> TokenCache = new();
+    private static readonly SemaphoreSlim TokenRefreshLock = new(1, 1);
+
+    private static string GetCacheKey(string username) => username;
 
     private const string TokenEndpoint = "https://login.tado.com/oauth2/token";
     private const string ApiBaseUrl = "https://my.tado.com/api/v2";
@@ -30,33 +33,50 @@ public class TadoClient
 
     private async Task<string> GetAccessTokenAsync(string username, string password)
     {
-        var cacheKey = $"{username}";
+        var cacheKey = GetCacheKey(username);
         if (TokenCache.TryGetValue(cacheKey, out var cached) && DateTime.UtcNow < cached.ExpiresAt)
             return cached.AccessToken;
 
-        var formContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        await TokenRefreshLock.WaitAsync();
+        try
         {
-            ["grant_type"] = "password",
-            ["client_id"] = _clientId,
-            ["client_secret"] = _clientSecret,
-            ["username"] = username,
-            ["password"] = password,
-            ["scope"] = "home.user"
-        });
+            // Re-check under the lock in case another thread already refreshed.
+            if (TokenCache.TryGetValue(cacheKey, out cached) && DateTime.UtcNow < cached.ExpiresAt)
+                return cached.AccessToken;
 
-        var response = await _httpClient.PostAsync(TokenEndpoint, formContent);
-        response.EnsureSuccessStatusCode();
+            var formContent = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "password",
+                ["client_id"] = _clientId,
+                ["client_secret"] = _clientSecret,
+                ["username"] = username,
+                ["password"] = password,
+                ["scope"] = "home.user"
+            });
 
-        var result = await response.Content.ReadAsStringAsync();
-        var json = JsonDocument.Parse(result);
-        var token = json.RootElement.GetProperty("access_token").GetString()
-            ?? throw new InvalidOperationException("Tado access token was empty.");
+            var response = await _httpClient.PostAsync(TokenEndpoint, formContent);
+            var result = await response.Content.ReadAsStringAsync();
 
-        var expiresIn = json.RootElement.TryGetProperty("expires_in", out var exp) ? exp.GetInt32() : 600;
-        var entry = new TokenCacheEntry(token, DateTime.UtcNow.AddSeconds(expiresIn - 30));
-        TokenCache[cacheKey] = entry;
+            if (!response.IsSuccessStatusCode)
+                throw new HttpRequestException(
+                    $"Tado authentication failed ({(int)response.StatusCode}): {result}",
+                    null,
+                    response.StatusCode);
 
-        return token;
+            var json = JsonDocument.Parse(result);
+            var token = json.RootElement.GetProperty("access_token").GetString()
+                ?? throw new InvalidOperationException("Tado access token was empty.");
+
+            var expiresIn = json.RootElement.TryGetProperty("expires_in", out var exp) ? exp.GetInt32() : 600;
+            var entry = new TokenCacheEntry(token, DateTime.UtcNow.AddSeconds(expiresIn - 30));
+            TokenCache[cacheKey] = entry;
+
+            return token;
+        }
+        finally
+        {
+            TokenRefreshLock.Release();
+        }
     }
 
     // ── Homes ────────────────────────────────────────────────────────
@@ -97,6 +117,18 @@ public class TadoClient
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await _httpClient.SendAsync(request);
+
+        // If the token was rejected, evict it from the cache and retry once with a fresh token.
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+        {
+            TokenCache.TryRemove(GetCacheKey(username), out _);
+            token = await GetAccessTokenAsync(username, password);
+
+            request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            response = await _httpClient.SendAsync(request);
+        }
+
         var result = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)
