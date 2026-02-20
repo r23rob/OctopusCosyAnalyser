@@ -1,4 +1,4 @@
-using OctopusCosyAnalyser.ApiService.Application.HeatPumpSnapshots;
+using OctopusCosyAnalyser.ApiService.Features.HeatPumpSnapshots;
 
 namespace OctopusCosyAnalyser.ApiService.Workers;
 
@@ -27,8 +27,8 @@ public class HeatPumpSnapshotWorker : BackgroundService
             try
             {
                 using var scope = _serviceProvider.CreateScope();
-                var handler = scope.ServiceProvider.GetRequiredService<TakeHeatPumpSnapshotsHandler>();
-                await handler.HandleAsync(stoppingToken);
+                var handler = scope.ServiceProvider.GetRequiredService<TakeHeatPumpSnapshots>();
+                await handler.ExecuteAsync(stoppingToken);
             }
             catch (Exception ex)
             {

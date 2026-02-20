@@ -4,7 +4,7 @@ using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.ApiService.Services;
 using System.Text.Json;
 
-namespace OctopusCosyAnalyser.ApiService.Endpoints;
+namespace OctopusCosyAnalyser.ApiService.Features.HeatPump;
 
 public static class HeatPumpEndpoints
 {

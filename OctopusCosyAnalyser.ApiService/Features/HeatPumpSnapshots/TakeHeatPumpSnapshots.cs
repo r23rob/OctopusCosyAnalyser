@@ -2,28 +2,24 @@ using OctopusCosyAnalyser.ApiService.Application.Interfaces;
 using OctopusCosyAnalyser.ApiService.Models;
 using System.Text.Json;
 
-namespace OctopusCosyAnalyser.ApiService.Application.HeatPumpSnapshots;
+namespace OctopusCosyAnalyser.ApiService.Features.HeatPumpSnapshots;
 
 /// <summary>
-/// Command: take a live snapshot for every active heat pump device and persist it.
-/// The worker schedules this; the Application layer owns the logic.
+/// Use-case: take a live snapshot from every active heat pump device and persist it.
+/// Invoked by the scheduler worker; all snapshot logic lives here.
 /// </summary>
-public record TakeHeatPumpSnapshotsCommand;
-
-public class TakeHeatPumpSnapshotsHandler(
+public class TakeHeatPumpSnapshots(
     IHeatPumpSnapshotRepository repo,
     IHeatPumpProvider provider,
-    ILogger<TakeHeatPumpSnapshotsHandler> logger)
+    ILogger<TakeHeatPumpSnapshots> logger)
 {
-    public async Task HandleAsync(CancellationToken ct = default)
+    public async Task ExecuteAsync(CancellationToken ct = default)
     {
         var devices = await repo.GetActiveDevicesAsync(ct);
         logger.LogInformation("Snapshotting {Count} active devices", devices.Count);
 
         foreach (var device in devices)
-        {
             await SnapshotDeviceAsync(device, ct);
-        }
 
         await repo.SaveChangesAsync(ct);
     }
@@ -39,7 +35,8 @@ public class TakeHeatPumpSnapshotsHandler(
         var settings = await repo.GetSettingsForAccountAsync(device.AccountNumber, ct);
         if (settings is null)
         {
-            logger.LogWarning("No settings found for account {Account}, skipping device {DeviceId}", device.AccountNumber, device.DeviceId);
+            logger.LogWarning("No settings found for account {Account}, skipping device {DeviceId}",
+                device.AccountNumber, device.DeviceId);
             return;
         }
 
@@ -89,13 +86,13 @@ public class TakeHeatPumpSnapshotsHandler(
             if (decimal.TryParse(lifetime.GetProperty("seasonalCoefficientOfPerformance").GetString() ?? "", out var scop))
                 snapshot.SeasonalCoefficientOfPerformance = scop;
 
-            if (lifetime.TryGetProperty("heatOutput", out var lifetimeHeat) && lifetimeHeat.TryGetProperty("value", out var lifetimeHeatVal))
-                if (decimal.TryParse(lifetimeHeatVal.GetString() ?? "", out var lifetimeHeatDec))
-                    snapshot.LifetimeHeatOutputKwh = lifetimeHeatDec;
+            if (lifetime.TryGetProperty("heatOutput", out var lhHeat) && lhHeat.TryGetProperty("value", out var lhHeatVal))
+                if (decimal.TryParse(lhHeatVal.GetString() ?? "", out var lhHeatDec))
+                    snapshot.LifetimeHeatOutputKwh = lhHeatDec;
 
-            if (lifetime.TryGetProperty("energyInput", out var lifetimeEnergy) && lifetimeEnergy.TryGetProperty("value", out var lifetimeEnergyVal))
-                if (decimal.TryParse(lifetimeEnergyVal.GetString() ?? "", out var lifetimeEnergyDec))
-                    snapshot.LifetimeEnergyInputKwh = lifetimeEnergyDec;
+            if (lifetime.TryGetProperty("energyInput", out var lhEnergy) && lhEnergy.TryGetProperty("value", out var lhEnergyVal))
+                if (decimal.TryParse(lhEnergyVal.GetString() ?? "", out var lhEnergyDec))
+                    snapshot.LifetimeEnergyInputKwh = lhEnergyDec;
         }
 
         if (root.TryGetProperty("octoHeatPumpControllerStatus", out var status))
@@ -103,39 +100,40 @@ public class TakeHeatPumpSnapshotsHandler(
             if (status.TryGetProperty("zones", out var zones) && zones.GetArrayLength() > 0)
             {
                 var zone = zones[0];
-                if (zone.TryGetProperty("telemetry", out var zoneTelemetry))
+                if (zone.TryGetProperty("telemetry", out var zt))
                 {
-                    if (zoneTelemetry.TryGetProperty("setpointInCelsius", out var setpoint) && setpoint.TryGetDecimal(out var setpointDec))
-                        snapshot.PrimaryZoneSetpointCelsius = setpointDec;
-
-                    if (zoneTelemetry.TryGetProperty("mode", out var mode))
+                    if (zt.TryGetProperty("setpointInCelsius", out var sp) && sp.TryGetDecimal(out var spDec))
+                        snapshot.PrimaryZoneSetpointCelsius = spDec;
+                    if (zt.TryGetProperty("mode", out var mode))
                         snapshot.PrimaryZoneMode = mode.GetString();
-
-                    if (zoneTelemetry.TryGetProperty("heatDemand", out var heatDemand))
-                        snapshot.PrimaryZoneHeatDemand = heatDemand.ValueKind == JsonValueKind.True;
+                    if (zt.TryGetProperty("heatDemand", out var hd))
+                        snapshot.PrimaryZoneHeatDemand = hd.ValueKind == JsonValueKind.True;
                 }
             }
 
             if (status.TryGetProperty("sensors", out var sensors) && sensors.GetArrayLength() > 0)
             {
                 var sensor = sensors[0];
-                if (sensor.TryGetProperty("telemetry", out var sensorTelemetry) && sensorTelemetry.TryGetProperty("temperatureInCelsius", out var temp) && temp.TryGetDecimal(out var tempDec))
-                    snapshot.PrimarySensorTemperatureCelsius = tempDec;
+                if (sensor.TryGetProperty("telemetry", out var st)
+                    && st.TryGetProperty("temperatureInCelsius", out var t)
+                    && t.TryGetDecimal(out var tDec))
+                    snapshot.PrimarySensorTemperatureCelsius = tDec;
             }
 
+            // Find first sensor with humidity (Cosy Pod) for room readings
             if (status.TryGetProperty("sensors", out var allSensors))
             {
                 foreach (var s in allSensors.EnumerateArray())
                 {
-                    if (s.TryGetProperty("telemetry", out var sTelemetry)
-                        && sTelemetry.TryGetProperty("humidityPercentage", out var humidity)
-                        && humidity.TryGetDecimal(out var humidityDec))
+                    if (s.TryGetProperty("telemetry", out var st)
+                        && st.TryGetProperty("humidityPercentage", out var hum)
+                        && hum.TryGetDecimal(out var humDec))
                     {
-                        snapshot.RoomHumidityPercentage = humidityDec;
-                        if (sTelemetry.TryGetProperty("temperatureInCelsius", out var roomTemp) && roomTemp.TryGetDecimal(out var roomTempDec))
-                            snapshot.RoomTemperatureCelsius = roomTempDec;
-                        if (s.TryGetProperty("code", out var sCode))
-                            snapshot.RoomSensorCode = sCode.GetString();
+                        snapshot.RoomHumidityPercentage = humDec;
+                        if (st.TryGetProperty("temperatureInCelsius", out var rt) && rt.TryGetDecimal(out var rtDec))
+                            snapshot.RoomTemperatureCelsius = rtDec;
+                        if (s.TryGetProperty("code", out var sc))
+                            snapshot.RoomSensorCode = sc.GetString();
                         break;
                     }
                 }
@@ -144,37 +142,36 @@ public class TakeHeatPumpSnapshotsHandler(
 
         if (root.TryGetProperty("octoHeatPumpControllerConfiguration", out var config))
         {
-            if (config.TryGetProperty("controller", out var controller) && controller.TryGetProperty("connected", out var connected))
-                snapshot.ControllerConnected = connected.ValueKind == JsonValueKind.True;
+            if (config.TryGetProperty("controller", out var ctrl) && ctrl.TryGetProperty("connected", out var conn))
+                snapshot.ControllerConnected = conn.ValueKind == JsonValueKind.True;
 
-            if (config.TryGetProperty("heatPump", out var heatPump))
+            if (config.TryGetProperty("heatPump", out var hp))
             {
-                if (heatPump.TryGetProperty("weatherCompensation", out var weatherComp))
+                if (hp.TryGetProperty("weatherCompensation", out var wc))
                 {
-                    if (weatherComp.TryGetProperty("enabled", out var wcEnabled))
-                        snapshot.WeatherCompensationEnabled = wcEnabled.ValueKind == JsonValueKind.True;
+                    if (wc.TryGetProperty("enabled", out var wcOn))
+                        snapshot.WeatherCompensationEnabled = wcOn.ValueKind == JsonValueKind.True;
 
-                    if (weatherComp.TryGetProperty("currentRange", out var wcRange))
+                    if (wc.TryGetProperty("currentRange", out var wcRange))
                     {
-                        if (wcRange.TryGetProperty("minimum", out var wcMin) && wcMin.TryGetProperty("value", out var wcMinVal))
-                            if (decimal.TryParse(wcMinVal.GetString() ?? "", out var wcMinDec))
-                                snapshot.WeatherCompensationMinCelsius = wcMinDec;
+                        if (wcRange.TryGetProperty("minimum", out var wcMin) && wcMin.TryGetProperty("value", out var wcMinVal)
+                            && decimal.TryParse(wcMinVal.GetString() ?? "", out var wcMinDec))
+                            snapshot.WeatherCompensationMinCelsius = wcMinDec;
 
-                        if (wcRange.TryGetProperty("maximum", out var wcMax) && wcMax.TryGetProperty("value", out var wcMaxVal))
-                            if (decimal.TryParse(wcMaxVal.GetString() ?? "", out var wcMaxDec))
-                                snapshot.WeatherCompensationMaxCelsius = wcMaxDec;
+                        if (wcRange.TryGetProperty("maximum", out var wcMax) && wcMax.TryGetProperty("value", out var wcMaxVal)
+                            && decimal.TryParse(wcMaxVal.GetString() ?? "", out var wcMaxDec))
+                            snapshot.WeatherCompensationMaxCelsius = wcMaxDec;
                     }
                 }
 
-                if (heatPump.TryGetProperty("heatingFlowTemperature", out var flowTemp)
-                    && flowTemp.TryGetProperty("currentTemperature", out var currentFlow)
-                    && currentFlow.TryGetProperty("value", out var flowVal))
-                {
-                    if (decimal.TryParse(flowVal.GetString() ?? "", out var flowDec))
-                        snapshot.HeatingFlowTemperatureCelsius = flowDec;
-                }
+                if (hp.TryGetProperty("heatingFlowTemperature", out var ft)
+                    && ft.TryGetProperty("currentTemperature", out var cft)
+                    && cft.TryGetProperty("value", out var cftVal)
+                    && decimal.TryParse(cftVal.GetString() ?? "", out var cftDec))
+                    snapshot.HeatingFlowTemperatureCelsius = cftDec;
             }
 
+            // Match the first HEAT zone from config to status zones for setpoint/mode
             if (root.TryGetProperty("octoHeatPumpControllerStatus", out var statusForZone)
                 && config.TryGetProperty("zones", out var configZones)
                 && statusForZone.TryGetProperty("zones", out var statusZones))
@@ -182,10 +179,10 @@ public class TakeHeatPumpSnapshotsHandler(
                 string? heatingZoneCode = null;
                 foreach (var cz in configZones.EnumerateArray())
                 {
-                    if (cz.TryGetProperty("configuration", out var czConfig)
-                        && czConfig.TryGetProperty("zoneType", out var zt)
+                    if (cz.TryGetProperty("configuration", out var czCfg)
+                        && czCfg.TryGetProperty("zoneType", out var zt)
                         && zt.GetString() == "HEAT"
-                        && czConfig.TryGetProperty("code", out var czCode))
+                        && czCfg.TryGetProperty("code", out var czCode))
                     {
                         heatingZoneCode = czCode.GetString();
                         break;
@@ -197,14 +194,14 @@ public class TakeHeatPumpSnapshotsHandler(
                     foreach (var sz in statusZones.EnumerateArray())
                     {
                         if (sz.TryGetProperty("zone", out var szZone) && szZone.GetString() == heatingZoneCode
-                            && sz.TryGetProperty("telemetry", out var szTelemetry))
+                            && sz.TryGetProperty("telemetry", out var szT))
                         {
-                            if (szTelemetry.TryGetProperty("setpointInCelsius", out var hzSetpoint) && hzSetpoint.TryGetDecimal(out var hzSetpointDec))
-                                snapshot.HeatingZoneSetpointCelsius = hzSetpointDec;
-                            if (szTelemetry.TryGetProperty("mode", out var hzMode))
+                            if (szT.TryGetProperty("setpointInCelsius", out var hzSp) && hzSp.TryGetDecimal(out var hzSpDec))
+                                snapshot.HeatingZoneSetpointCelsius = hzSpDec;
+                            if (szT.TryGetProperty("mode", out var hzMode))
                                 snapshot.HeatingZoneMode = hzMode.GetString();
-                            if (szTelemetry.TryGetProperty("heatDemand", out var hzHeatDemand))
-                                snapshot.HeatingZoneHeatDemand = hzHeatDemand.ValueKind == JsonValueKind.True;
+                            if (szT.TryGetProperty("heatDemand", out var hzHd))
+                                snapshot.HeatingZoneHeatDemand = hzHd.ValueKind == JsonValueKind.True;
                             break;
                         }
                     }

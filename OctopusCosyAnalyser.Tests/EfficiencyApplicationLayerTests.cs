@@ -1,4 +1,4 @@
-using OctopusCosyAnalyser.ApiService.Application.Efficiency;
+using OctopusCosyAnalyser.ApiService.Features.Efficiency;
 using OctopusCosyAnalyser.Shared.Models;
 
 namespace OctopusCosyAnalyser.Tests;
