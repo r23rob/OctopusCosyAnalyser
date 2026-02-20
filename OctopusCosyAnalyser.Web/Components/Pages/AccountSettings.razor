@@ -1,5 +1,5 @@
 @page "/settings"
-@inject HttpClient Http
+@inject HeatPumpApiClient Api
 @rendermode InteractiveServer
 
 <PageTitle>Account Settings</PageTitle>
@@ -45,8 +45,8 @@ else
     {
         try
         {
-            var settings = await Http.GetFromJsonAsync<AccountSettingsDto[]>("http://apiservice/api/settings");
-            var current = settings?.FirstOrDefault();
+            var settings = await Api.GetSettingsAsync();
+            var current = settings.FirstOrDefault();
             if (current is not null)
             {
                 accountNumber = current.AccountNumber;
@@ -76,20 +76,13 @@ else
 
         try
         {
-            var response = await Http.PutAsJsonAsync("http://apiservice/api/settings", new AccountSettingsDto
+            var result = await Api.UpsertSettingsAsync(new AccountSettingsRequestDto
             {
                 AccountNumber = accountNumber.Trim(),
                 ApiKey = apiKey.Trim()
             });
 
-            if (response.IsSuccessStatusCode)
-            {
-                statusMessage = "Settings saved.";
-            }
-            else
-            {
-                statusMessage = $"Save failed: {response.ReasonPhrase}";
-            }
+            statusMessage = result is not null ? "Settings saved." : "Save failed.";
         }
         catch (Exception ex)
         {
@@ -99,11 +92,5 @@ else
         {
             isSaving = false;
         }
-    }
-
-    private sealed class AccountSettingsDto
-    {
-        public string AccountNumber { get; set; } = string.Empty;
-        public string ApiKey { get; set; } = string.Empty;
     }
 }
