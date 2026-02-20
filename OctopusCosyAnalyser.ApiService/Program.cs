@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Endpoints;
 using OctopusCosyAnalyser.ApiService.Services;
@@ -32,7 +33,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
-    db.Database.EnsureCreated();
+    db.Database.Migrate();
 }
 
 // Configure the HTTP request pipeline.
