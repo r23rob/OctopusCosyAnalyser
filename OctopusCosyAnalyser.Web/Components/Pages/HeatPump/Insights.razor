@@ -79,11 +79,10 @@ else
             <div class="card-body">
                 <RadzenChart Style="height: 300px;">
                     <RadzenLineSeries Data="@copVsOutdoor" CategoryProperty="X" ValueProperty="Y"
-                                      Title="COP" Stroke="rgba(40,167,69,0.6)"
-                                      StrokeWidth="0" MarkerType="MarkerType.Circle" MarkerSize="6" />
+                                      Title="COP" Stroke="rgba(40,167,69,0.6)" StrokeWidth="2" />
                     <RadzenLineSeries Data="@cop3RefLine" CategoryProperty="X" ValueProperty="Y"
                                      Title="COP = 3.0 (gas boiler equivalent)" Stroke="rgb(220,53,69)"
-                                     StrokeWidth="1" LineType="LineType.Dashed" MarkerType="MarkerType.None" />
+                                     StrokeWidth="1" />
                     <RadzenCategoryAxis Title="Outdoor Temp (°C)" />
                     <RadzenValueAxis Min="0" Title="COP">
                         <RadzenGridLines Visible="true" />
@@ -99,11 +98,10 @@ else
             <div class="card-body">
                 <RadzenChart Style="height: 300px;">
                     <RadzenLineSeries Data="@copVsFlow" CategoryProperty="X" ValueProperty="Y"
-                                      Title="COP" Stroke="rgba(0,123,255,0.6)"
-                                      StrokeWidth="0" MarkerType="MarkerType.Circle" MarkerSize="6" />
+                                      Title="COP" Stroke="rgba(0,123,255,0.6)" StrokeWidth="2" />
                     <RadzenLineSeries Data="@cop3RefLineFlow" CategoryProperty="X" ValueProperty="Y"
                                      Title="COP = 3.0" Stroke="rgb(220,53,69)"
-                                     StrokeWidth="1" LineType="LineType.Dashed" MarkerType="MarkerType.None" />
+                                     StrokeWidth="1" />
                     <RadzenCategoryAxis Title="Flow Temp (°C)" />
                     <RadzenValueAxis Min="0" Title="COP">
                         <RadzenGridLines Visible="true" />
@@ -125,8 +123,7 @@ else
                         <RadzenLineSeries Data="@roomTempOverTime" CategoryProperty="Time" ValueProperty="Setpoint"
                                          Title="Setpoint (°C)" Stroke="rgb(255,193,7)" StrokeWidth="2" />
                         <RadzenLineSeries Data="@roomBelowSetpointMarkers" CategoryProperty="Time" ValueProperty="RoomTemp"
-                                         Title="Below Setpoint" Stroke="rgb(220,53,69)" StrokeWidth="0"
-                                         MarkerType="MarkerType.Circle" MarkerSize="6" />
+                                         Title="Below Setpoint" Stroke="rgb(220,53,69)" StrokeWidth="2" />
                         <RadzenCategoryAxis FormatString="{0:MMM dd HH:mm}" />
                         <RadzenValueAxis Title="Temperature (°C)">
                             <RadzenGridLines Visible="true" />
@@ -149,22 +146,20 @@ else
                 {
                     <RadzenChart Style="height: 300px;">
                         <RadzenLineSeries Data="@wcAtTarget" CategoryProperty="X" ValueProperty="Y"
-                                            Title="Room at target" Stroke="rgba(40,167,69,0.6)"
-                                            StrokeWidth="0" MarkerType="MarkerType.Circle" MarkerSize="6" />
+                                            Title="Room at target" Stroke="rgba(40,167,69,0.6)" StrokeWidth="2" />
                         <RadzenLineSeries Data="@wcBelowTarget" CategoryProperty="X" ValueProperty="Y"
-                                            Title="Room below target" Stroke="rgba(220,53,69,0.6)"
-                                            StrokeWidth="0" MarkerType="MarkerType.Circle" MarkerSize="6" />
+                                            Title="Room below target" Stroke="rgba(220,53,69,0.6)" StrokeWidth="2" />
                         @if (wcMinRef.Count > 0)
                         {
                             <RadzenLineSeries Data="@wcMinRef" CategoryProperty="X" ValueProperty="Y"
                                              Title="WC Min" Stroke="rgb(100,100,200)"
-                                             StrokeWidth="1" LineType="LineType.Dashed" />
+                                             StrokeWidth="1" />
                         }
                         @if (wcMaxRef.Count > 0)
                         {
                             <RadzenLineSeries Data="@wcMaxRef" CategoryProperty="X" ValueProperty="Y"
                                              Title="WC Max" Stroke="rgb(200,100,100)"
-                                             StrokeWidth="1" LineType="LineType.Dashed" />
+                                             StrokeWidth="1" />
                         }
                         <RadzenCategoryAxis Title="Outdoor Temp (°C)" />
                         <RadzenValueAxis Title="Flow Temp (°C)">
