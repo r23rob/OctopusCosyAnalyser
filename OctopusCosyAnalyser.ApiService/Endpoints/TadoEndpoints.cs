@@ -1,6 +1,4 @@
-using Microsoft.EntityFrameworkCore;
-using OctopusCosyAnalyser.ApiService.Data;
-using OctopusCosyAnalyser.ApiService.Models;
+using OctopusCosyAnalyser.ApiService.Application.Tado;
 using OctopusCosyAnalyser.ApiService.Services;
 using OctopusCosyAnalyser.Shared.Models;
 
@@ -15,70 +13,28 @@ public static class TadoEndpoints
 
         // ── Settings ─────────────────────────────────────────────────
 
-        group.MapGet("/settings", async (CosyDbContext db) =>
-        {
-            var settings = await db.TadoSettings.FirstOrDefaultAsync();
-            if (settings is null)
-                return Results.Ok((TadoSettingsDto?)null);
+        group.MapGet("/settings", async (GetTadoSettingsHandler handler) =>
+            Results.Ok(await handler.HandleAsync())
+        ).WithName("GetTadoSettings");
 
-            return Results.Ok(new TadoSettingsDto
-            {
-                Id = settings.Id,
-                Username = settings.Username,
-                HomeId = settings.HomeId,
-                CreatedAt = settings.CreatedAt,
-                UpdatedAt = settings.UpdatedAt
-            });
-        }).WithName("GetTadoSettings");
-
-        group.MapPut("/settings", async (TadoSettingsRequestDto request, CosyDbContext db) =>
+        group.MapPut("/settings", async (TadoSettingsRequestDto request, UpsertTadoSettingsHandler handler) =>
         {
             if (string.IsNullOrWhiteSpace(request.Username))
                 return Results.BadRequest("Username is required");
 
-            var settings = await db.TadoSettings.FirstOrDefaultAsync();
+            var result = await handler.HandleAsync(new UpsertTadoSettingsCommand(request.Username, request.Password, request.HomeId));
 
-            if (settings is null)
-            {
-                if (string.IsNullOrWhiteSpace(request.Password))
-                    return Results.BadRequest("Password is required for initial setup");
+            if (result.ValidationError is not null)
+                return Results.BadRequest(result.ValidationError);
 
-                settings = new TadoSettings
-                {
-                    Username = request.Username.Trim(),
-                    Password = request.Password.Trim(),
-                    HomeId = request.HomeId,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                db.TadoSettings.Add(settings);
-            }
-            else
-            {
-                settings.Username = request.Username.Trim();
-                if (!string.IsNullOrWhiteSpace(request.Password))
-                    settings.Password = request.Password.Trim();
-                settings.HomeId = request.HomeId;
-                settings.UpdatedAt = DateTime.UtcNow;
-            }
-
-            await db.SaveChangesAsync();
-
-            return Results.Ok(new TadoSettingsDto
-            {
-                Id = settings.Id,
-                Username = settings.Username,
-                HomeId = settings.HomeId,
-                CreatedAt = settings.CreatedAt,
-                UpdatedAt = settings.UpdatedAt
-            });
+            return Results.Ok(result.Settings);
         }).WithName("UpsertTadoSettings");
 
         // ── Homes ─────────────────────────────────────────────────────
 
-        group.MapGet("/homes", async (CosyDbContext db, TadoClient tado) =>
+        group.MapGet("/homes", async (Application.Interfaces.ITadoRepository tadoRepo, TadoClient tado) =>
         {
-            var settings = await db.TadoSettings.FirstOrDefaultAsync();
+            var settings = await tadoRepo.GetSettingsAsync();
             if (settings is null)
                 return Results.BadRequest("Tado settings not configured");
 
@@ -96,9 +52,9 @@ public static class TadoEndpoints
 
         // ── Zones ─────────────────────────────────────────────────────
 
-        group.MapGet("/zones", async (CosyDbContext db, TadoClient tado) =>
+        group.MapGet("/zones", async (Application.Interfaces.ITadoRepository tadoRepo, TadoClient tado) =>
         {
-            var settings = await db.TadoSettings.FirstOrDefaultAsync();
+            var settings = await tadoRepo.GetSettingsAsync();
             if (settings is null)
                 return Results.BadRequest("Tado settings not configured");
 

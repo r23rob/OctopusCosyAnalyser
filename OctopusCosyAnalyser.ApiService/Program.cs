@@ -1,5 +1,12 @@
+using OctopusCosyAnalyser.ApiService.Application.AccountSettings;
+using OctopusCosyAnalyser.ApiService.Application.Efficiency;
+using OctopusCosyAnalyser.ApiService.Application.HeatPumpSnapshots;
+using OctopusCosyAnalyser.ApiService.Application.Interfaces;
+using OctopusCosyAnalyser.ApiService.Application.Tado;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Endpoints;
+using OctopusCosyAnalyser.ApiService.Infrastructure;
+using OctopusCosyAnalyser.ApiService.Infrastructure.Repositories;
 using OctopusCosyAnalyser.ApiService.Services;
 using OctopusCosyAnalyser.ApiService.Workers;
 
@@ -16,6 +23,33 @@ builder.Services.AddHttpClient<OctopusEnergyClient>();
 
 // Add Tado API client
 builder.Services.AddHttpClient<TadoClient>();
+
+// ── Infrastructure: repository implementations ────────────────────────────────
+builder.Services.AddScoped<IEfficiencyRepository, EfficiencyRepository>();
+builder.Services.AddScoped<IAccountSettingsRepository, AccountSettingsRepository>();
+builder.Services.AddScoped<ITadoRepository, TadoRepository>();
+builder.Services.AddScoped<IHeatPumpSnapshotRepository, HeatPumpSnapshotRepository>();
+builder.Services.AddScoped<IHeatPumpProvider, OctopusHeatPumpProvider>();
+
+// ── Application: use-case handlers ───────────────────────────────────────────
+// Efficiency
+builder.Services.AddScoped<GetEfficiencyRecordsHandler>();
+builder.Services.AddScoped<GetEfficiencyRecordHandler>();
+builder.Services.AddScoped<CreateEfficiencyRecordHandler>();
+builder.Services.AddScoped<UpdateEfficiencyRecordHandler>();
+builder.Services.AddScoped<DeleteEfficiencyRecordHandler>();
+builder.Services.AddScoped<ComparePeriodHandler>();
+builder.Services.AddScoped<GetEfficiencyGroupsHandler>();
+builder.Services.AddScoped<FilterEfficiencyByTempHandler>();
+// Account settings
+builder.Services.AddScoped<GetAccountSettingsHandler>();
+builder.Services.AddScoped<GetAccountSettingsByAccountHandler>();
+builder.Services.AddScoped<UpsertAccountSettingsHandler>();
+// Tado
+builder.Services.AddScoped<GetTadoSettingsHandler>();
+builder.Services.AddScoped<UpsertTadoSettingsHandler>();
+// Heat pump snapshots
+builder.Services.AddScoped<TakeHeatPumpSnapshotsHandler>();
 
 // Add Heat Pump Snapshot Worker
 builder.Services.AddHostedService<HeatPumpSnapshotWorker>();

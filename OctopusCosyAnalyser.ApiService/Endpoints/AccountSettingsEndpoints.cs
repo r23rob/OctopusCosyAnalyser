@@ -1,6 +1,4 @@
-using Microsoft.EntityFrameworkCore;
-using OctopusCosyAnalyser.ApiService.Data;
-using OctopusCosyAnalyser.ApiService.Models;
+using OctopusCosyAnalyser.ApiService.Application.AccountSettings;
 
 namespace OctopusCosyAnalyser.ApiService.Endpoints;
 
@@ -10,26 +8,19 @@ public static class AccountSettingsEndpoints
     {
         var group = app.MapGroup("/api/settings");
 
-        group.MapGet("", async (CosyDbContext db) =>
+        group.MapGet("", async (GetAccountSettingsHandler handler) =>
+            Results.Ok(await handler.HandleAsync())
+        ).WithName("GetAccountSettings");
+
+        group.MapGet("/{accountNumber}", async (string accountNumber, GetAccountSettingsByAccountHandler handler) =>
         {
-            var settings = await db.OctopusAccountSettings
-                .OrderBy(s => s.AccountNumber)
-                .ToListAsync();
-
-            return Results.Ok(settings);
-        }).WithName("GetAccountSettings");
-
-        group.MapGet("/{accountNumber}", async (string accountNumber, CosyDbContext db) =>
-        {
-            var settings = await db.OctopusAccountSettings
-                .FirstOrDefaultAsync(s => s.AccountNumber == accountNumber);
-
+            var settings = await handler.HandleAsync(new GetAccountSettingsByAccountQuery(accountNumber));
             return settings is null
                 ? Results.NotFound("Account settings not found")
                 : Results.Ok(settings);
         }).WithName("GetAccountSettingsByAccount");
 
-        group.MapPut("", async (AccountSettingsRequest request, CosyDbContext db) =>
+        group.MapPut("", async (AccountSettingsRequest request, UpsertAccountSettingsHandler handler) =>
         {
             if (string.IsNullOrWhiteSpace(request.AccountNumber))
                 return Results.BadRequest("Account number is required");
@@ -37,29 +28,7 @@ public static class AccountSettingsEndpoints
             if (string.IsNullOrWhiteSpace(request.ApiKey))
                 return Results.BadRequest("API key is required");
 
-            var settings = await db.OctopusAccountSettings
-                .FirstOrDefaultAsync(s => s.AccountNumber == request.AccountNumber);
-
-            if (settings is null)
-            {
-                settings = new OctopusAccountSettings
-                {
-                    AccountNumber = request.AccountNumber.Trim(),
-                    ApiKey = request.ApiKey.Trim(),
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-
-                db.OctopusAccountSettings.Add(settings);
-            }
-            else
-            {
-                settings.ApiKey = request.ApiKey.Trim();
-                settings.UpdatedAt = DateTime.UtcNow;
-            }
-
-            await db.SaveChangesAsync();
-
+            var settings = await handler.HandleAsync(new UpsertAccountSettingsCommand(request.AccountNumber, request.ApiKey));
             return Results.Ok(settings);
         }).WithName("UpsertAccountSettings");
     }
