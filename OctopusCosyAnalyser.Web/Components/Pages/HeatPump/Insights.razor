@@ -79,7 +79,7 @@ else
             <div class="card-body">
                 <RadzenChart Style="height: 300px;">
                     <RadzenLineSeries Data="@copVsOutdoor" CategoryProperty="X" ValueProperty="Y"
-                                      Title="COP" Fill="transparent" Stroke="rgba(40,167,69,0.6)"
+                                      Title="COP" Stroke="rgba(40,167,69,0.6)"
                                       StrokeWidth="0" MarkerType="MarkerType.Circle" MarkerSize="6" />
                     <RadzenLineSeries Data="@cop3RefLine" CategoryProperty="X" ValueProperty="Y"
                                      Title="COP = 3.0 (gas boiler equivalent)" Stroke="rgb(220,53,69)"
@@ -99,7 +99,7 @@ else
             <div class="card-body">
                 <RadzenChart Style="height: 300px;">
                     <RadzenLineSeries Data="@copVsFlow" CategoryProperty="X" ValueProperty="Y"
-                                      Title="COP" Fill="transparent" Stroke="rgba(0,123,255,0.6)"
+                                      Title="COP" Stroke="rgba(0,123,255,0.6)"
                                       StrokeWidth="0" MarkerType="MarkerType.Circle" MarkerSize="6" />
                     <RadzenLineSeries Data="@cop3RefLineFlow" CategoryProperty="X" ValueProperty="Y"
                                      Title="COP = 3.0" Stroke="rgb(220,53,69)"
@@ -149,10 +149,10 @@ else
                 {
                     <RadzenChart Style="height: 300px;">
                         <RadzenLineSeries Data="@wcAtTarget" CategoryProperty="X" ValueProperty="Y"
-                                            Title="Room at target" Fill="transparent" Stroke="rgba(40,167,69,0.6)"
+                                            Title="Room at target" Stroke="rgba(40,167,69,0.6)"
                                             StrokeWidth="0" MarkerType="MarkerType.Circle" MarkerSize="6" />
                         <RadzenLineSeries Data="@wcBelowTarget" CategoryProperty="X" ValueProperty="Y"
-                                            Title="Room below target" Fill="transparent" Stroke="rgba(220,53,69,0.6)"
+                                            Title="Room below target" Stroke="rgba(220,53,69,0.6)"
                                             StrokeWidth="0" MarkerType="MarkerType.Circle" MarkerSize="6" />
                         @if (wcMinRef.Count > 0)
                         {
