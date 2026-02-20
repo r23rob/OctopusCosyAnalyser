@@ -109,7 +109,13 @@ public class HeatPumpApiClient
     // ── Tado Settings ─────────────────────────────────────────────────
 
     public async Task<TadoSettingsDto?> GetTadoSettingsAsync()
-        => await _http.GetFromJsonAsync<TadoSettingsDto>("/api/tado/settings");
+    {
+        var response = await _http.GetAsync("/api/tado/settings");
+        response.EnsureSuccessStatusCode();
+        if (response.StatusCode == System.Net.HttpStatusCode.NoContent)
+            return null;
+        return await response.Content.ReadFromJsonAsync<TadoSettingsDto>();
+    }
 
     public async Task<TadoSettingsDto?> UpsertTadoSettingsAsync(TadoSettingsRequestDto request)
     {

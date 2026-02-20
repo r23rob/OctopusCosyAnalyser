@@ -22,7 +22,7 @@ public static class TadoEndpoints
             {
                 var settings = await db.TadoSettings.FirstOrDefaultAsync();
                 if (settings is null)
-                    return Results.Ok((TadoSettingsDto?)null);
+                    return Results.NoContent();
 
                 return Results.Ok(new TadoSettingsDto
                 {
