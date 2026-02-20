@@ -1,0 +1,115 @@
+@page "/tado"
+@using OctopusCosyAnalyser.Shared.Models
+@inject HeatPumpApiClient Api
+@rendermode InteractiveServer
+
+<PageTitle>Tado Thermostats</PageTitle>
+
+<h1>🌡️ Tado Thermostats</h1>
+
+@if (isLoading)
+{
+    <p>Loading Tado data...</p>
+}
+else if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-warning">
+        <strong>Unable to load Tado data.</strong> @errorMessage
+        <br />
+        <a href="/settings/tado" class="alert-link">Configure Tado settings</a> to get started.
+    </div>
+}
+else if (zones.Length == 0)
+{
+    <div class="alert alert-info">
+        No Tado zones found. Make sure your <a href="/settings/tado">Tado settings</a> are configured with the correct Home ID.
+    </div>
+}
+else
+{
+    <div class="row g-3 mt-1">
+        @foreach (var zone in zones)
+        {
+            <div class="col-sm-6 col-lg-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h5 class="card-title mb-1">@zone.Name</h5>
+                                <small class="text-muted">@zone.Type</small>
+                            </div>
+                            @if (zone.HeatingOn.HasValue)
+                            {
+                                <span class="badge @(zone.HeatingOn.Value ? "bg-danger" : "bg-secondary")">
+                                    @(zone.HeatingOn.Value ? "🔥 Heating" : "Idle")
+                                </span>
+                            }
+                        </div>
+
+                        <div class="mt-3">
+                            @if (zone.CurrentTemperatureCelsius.HasValue)
+                            {
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="fs-2 fw-bold">@zone.CurrentTemperatureCelsius.Value.ToString("F1")°C</span>
+                                    @if (zone.SetpointTemperatureCelsius.HasValue)
+                                    {
+                                        <span class="text-muted">→ @zone.SetpointTemperatureCelsius.Value.ToString("F1")°C</span>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="text-muted">Temperature unavailable</span>
+                            }
+
+                            @if (zone.CurrentHumidityPercentage.HasValue)
+                            {
+                                <div class="mt-1 text-muted small">
+                                    💧 @zone.CurrentHumidityPercentage.Value.ToString("F0")% humidity
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="mt-3 text-muted small">
+        Last refreshed: @lastRefreshed.ToLocalTime().ToString("HH:mm:ss")
+        <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="LoadZones" disabled="@isLoading">Refresh</button>
+    </div>
+}
+
+@code {
+    private TadoZoneDto[] zones = [];
+    private bool isLoading = true;
+    private string? errorMessage;
+    private DateTime lastRefreshed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadZones();
+    }
+
+    private async Task LoadZones()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            zones = await Api.GetTadoZonesAsync();
+            lastRefreshed = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            zones = [];
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

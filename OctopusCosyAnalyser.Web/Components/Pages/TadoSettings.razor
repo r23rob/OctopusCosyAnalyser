@@ -1,0 +1,137 @@
+@page "/settings/tado"
+@using OctopusCosyAnalyser.Shared.Models
+@inject HeatPumpApiClient Api
+@rendermode InteractiveServer
+
+<PageTitle>Tado Settings</PageTitle>
+
+<h1>Tado Settings</h1>
+
+<p class="text-muted">
+    Configure your Tado credentials to display thermostat temperatures and humidity alongside your heat pump data.
+    Your username and password are stored securely in the database and used to authenticate with the
+    <a href="https://my.tado.com/api/v2" target="_blank">Tado API</a>.
+</p>
+
+@if (isLoading)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="card mt-3">
+        <div class="card-header">
+            <h5 class="mb-0">Tado Account</h5>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label">Username (email)</label>
+                <input @bind="username" class="form-control" placeholder="you@example.com" autocomplete="username" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Password</label>
+                <input @bind="password" type="password" class="form-control" placeholder="••••••••" autocomplete="current-password" />
+                <div class="form-text">Leave blank to keep the existing password.</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Home ID <span class="text-muted">(optional)</span></label>
+                <input @bind="homeIdStr" class="form-control" placeholder="e.g. 123456" />
+                <div class="form-text">
+                    Your Tado Home ID. If not known, save your credentials first then use the
+                    <a href="/tado">Tado dashboard</a> to discover it.
+                </div>
+            </div>
+            <button @onclick="SaveSettings" class="btn btn-primary" disabled="@isSaving">
+                @(isSaving ? "Saving..." : "Save Tado Settings")
+            </button>
+            @if (!string.IsNullOrEmpty(statusMessage))
+            {
+                <div class="alert @statusAlertClass mt-3">@statusMessage</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private string username = string.Empty;
+    private string password = string.Empty;
+    private string homeIdStr = string.Empty;
+    private bool hasExistingSettings = false;
+    private bool isLoading = true;
+    private bool isSaving = false;
+    private string? statusMessage;
+    private string statusAlertClass = "alert-info";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var settings = await Api.GetTadoSettingsAsync();
+            if (settings is not null)
+            {
+                username = settings.Username;
+                hasExistingSettings = true;
+                if (settings.HomeId.HasValue)
+                    homeIdStr = settings.HomeId.Value.ToString();
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Failed to load settings: {ex.Message}";
+            statusAlertClass = "alert-danger";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SaveSettings()
+    {
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            statusMessage = "Username is required.";
+            statusAlertClass = "alert-warning";
+            return;
+        }
+
+        // Password is required for initial setup, optional when updating existing settings
+        if (string.IsNullOrWhiteSpace(password) && !hasExistingSettings)
+        {
+            statusMessage = "Password is required for initial setup.";
+            statusAlertClass = "alert-warning";
+            return;
+        }
+
+        long? homeId = null;
+        if (!string.IsNullOrWhiteSpace(homeIdStr) && long.TryParse(homeIdStr.Trim(), out var parsedId))
+            homeId = parsedId;
+
+        isSaving = true;
+        statusMessage = null;
+
+        try
+        {
+            await Api.UpsertTadoSettingsAsync(new TadoSettingsRequestDto
+            {
+                Username = username.Trim(),
+                Password = password.Trim(),
+                HomeId = homeId
+            });
+
+            statusMessage = "Tado settings saved successfully.";
+            statusAlertClass = "alert-success";
+            hasExistingSettings = true;
+            password = string.Empty; // Clear password field after save
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Save failed: {ex.Message}";
+            statusAlertClass = "alert-danger";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}
