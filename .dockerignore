@@ -1,0 +1,31 @@
+## Build output
+**/bin/
+**/obj/
+
+## IDE files
+.vs/
+.vscode/
+.idea/
+
+## Aspire AppHost (not needed for Docker builds)
+OctopusCosyAnalyser.AppHost/
+
+## Tests (not needed for runtime images)
+OctopusCosyAnalyser.Tests/
+
+## Git
+.git/
+.gitignore
+
+## Docs
+README.md
+*.http
+
+## OS artefacts
+.DS_Store
+Thumbs.db
+
+## Secrets
+.env
+.env.*
+!.env.example
