@@ -19,7 +19,12 @@ public class HeatPumpApiClient
     // ── Account Settings ─────────────────────────────────────────────
 
     public async Task<AccountSettingsDto[]> GetSettingsAsync()
-        => await _http.GetFromJsonAsync<AccountSettingsDto[]>("/api/settings") ?? [];
+    {
+        var response = await _http.GetAsync("/api/settings");
+        response.EnsureSuccessStatusCode();
+        if (response.Content.Headers.ContentLength == 0) return [];
+        return await response.Content.ReadFromJsonAsync<AccountSettingsDto[]>() ?? [];
+    }
 
     public async Task<AccountSettingsDto?> GetSettingsByAccountAsync(string accountNumber)
         => await _http.GetFromJsonAsync<AccountSettingsDto>($"/api/settings/{accountNumber}");
@@ -34,7 +39,12 @@ public class HeatPumpApiClient
     // ── Device Management ────────────────────────────────────────────
 
     public async Task<HeatPumpDeviceDto[]> GetDevicesAsync()
-        => await _http.GetFromJsonAsync<HeatPumpDeviceDto[]>("/api/heatpump/devices") ?? [];
+    {
+        var response = await _http.GetAsync("/api/heatpump/devices");
+        response.EnsureSuccessStatusCode();
+        if (response.Content.Headers.ContentLength == 0) return [];
+        return await response.Content.ReadFromJsonAsync<HeatPumpDeviceDto[]>() ?? [];
+    }
 
     public async Task<SetupResponseDto?> SetupDeviceAsync(string accountNumber)
     {
@@ -109,7 +119,13 @@ public class HeatPumpApiClient
     // ── Tado Settings ─────────────────────────────────────────────────
 
     public async Task<TadoSettingsDto?> GetTadoSettingsAsync()
-        => await _http.GetFromJsonAsync<TadoSettingsDto>("/api/tado/settings");
+    {
+        var response = await _http.GetAsync("/api/tado/settings");
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync();
+        if (string.IsNullOrWhiteSpace(content) || content == "null") return null;
+        return System.Text.Json.JsonSerializer.Deserialize<TadoSettingsDto>(content, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+    }
 
     public async Task<TadoSettingsDto?> UpsertTadoSettingsAsync(TadoSettingsRequestDto request)
     {
