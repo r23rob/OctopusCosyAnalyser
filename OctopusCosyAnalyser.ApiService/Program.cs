@@ -65,6 +65,7 @@ app.MapGet("/weatherforecast", () =>
 app.MapHeatPumpEndpoints();
 app.MapAccountSettingsEndpoints();
 app.MapTadoEndpoints();
+app.MapEfficiencyEndpoints();
 
 app.MapDefaultEndpoints();
 

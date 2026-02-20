@@ -1,0 +1,591 @@
+@page "/heatpump/efficiency"
+@inject HeatPumpApiClient Api
+@rendermode InteractiveServer
+@using OctopusCosyAnalyser.Shared.Models
+
+<PageTitle>Heat Pump – Efficiency Tracking</PageTitle>
+
+<h1>🌡️ Efficiency Tracking</h1>
+<p class="text-muted">Track daily electricity usage normalised for weather using Heating Degree Days (HDD). Compare performance before and after configuration changes.</p>
+
+@if (!string.IsNullOrEmpty(statusMessage))
+{
+    var alertClass = statusMessage.StartsWith("✅") ? "alert-success"
+        : statusMessage.StartsWith("❌") ? "alert-danger" : "alert-info";
+    <div class="alert @alertClass">@statusMessage</div>
+}
+
+<!-- Date Range & Actions -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label">From</label>
+                <input @bind="fromDate" type="date" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">To</label>
+                <input @bind="toDate" type="date" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary btn-sm w-100" @onclick="LoadData" disabled="@isLoading">
+                    @(isLoading ? "Loading..." : "Load Data")
+                </button>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Quick Range</label>
+                <div class="btn-group btn-group-sm w-100">
+                    <button class="btn btn-outline-secondary" @onclick="() => SetRange(30)">30 Days</button>
+                    <button class="btn btn-outline-secondary" @onclick="() => SetRange(60)">60 Days</button>
+                    <button class="btn btn-outline-secondary" @onclick="() => SetRange(90)">90 Days</button>
+                    <button class="btn btn-outline-secondary" @onclick="() => SetRange(180)">6 Months</button>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-success btn-sm w-100" @onclick="ShowAddForm">+ Add Record</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add / Edit Record Form -->
+@if (showForm)
+{
+    <div class="card mb-3 border-primary">
+        <div class="card-header bg-primary bg-opacity-10">
+            <strong>@(editingId.HasValue ? "Edit Record" : "Add Daily Record")</strong>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-2">
+                    <label class="form-label">Date *</label>
+                    <input @bind="formDate" type="date" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Electricity (kWh) *</label>
+                    <input @bind="formKWh" type="number" step="0.01" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Outdoor Avg °C *</label>
+                    <input @bind="formOutdoorAvg" type="number" step="0.1" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Outdoor High °C</label>
+                    <input @bind="formOutdoorHigh" type="number" step="0.1" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Outdoor Low °C</label>
+                    <input @bind="formOutdoorLow" type="number" step="0.1" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Indoor Avg °C</label>
+                    <input @bind="formIndoorAvg" type="number" step="0.1" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Comfort Score (1–5)</label>
+                    <input @bind="formComfortScore" type="number" min="1" max="5" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Change Active?</label>
+                    <div class="form-check mt-2">
+                        <input @bind="formChangeActive" type="checkbox" class="form-check-input" id="chkChange" />
+                        <label class="form-check-label" for="chkChange">Yes</label>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Change Description</label>
+                    <input @bind="formChangeDescription" type="text" class="form-control form-control-sm" placeholder="e.g. Lowered WC max to 45°C" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Notes</label>
+                    <input @bind="formNotes" type="text" class="form-control form-control-sm" />
+                </div>
+            </div>
+            <div class="mt-3">
+                <button class="btn btn-primary btn-sm me-2" @onclick="SaveRecord" disabled="@isLoading">Save</button>
+                <button class="btn btn-secondary btn-sm" @onclick="CancelForm">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (records.Count > 0)
+{
+    <!-- Summary Cards -->
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <div class="card text-center border-info h-100">
+                <div class="card-body">
+                    <h6 class="text-muted">Total Records</h6>
+                    <h2 class="text-info">@records.Count</h2>
+                    <small class="text-muted">days tracked</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-warning h-100">
+                <div class="card-body">
+                    <h6 class="text-muted">Avg kWh/Day</h6>
+                    <h2 class="text-warning">@Fmt(records.Average(r => r.ElectricityKWh))</h2>
+                    <small class="text-muted">electricity</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-primary h-100">
+                <div class="card-body">
+                    <h6 class="text-muted">Avg HDD/Day</h6>
+                    <h2 class="text-primary">@Fmt(records.Average(r => r.HeatingDegreeDays))</h2>
+                    <small class="text-muted">base 15.5°C</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-success h-100">
+                <div class="card-body">
+                    <h6 class="text-muted">Avg Normalised Efficiency</h6>
+                    @{ var analysable = records.Where(r => r.NormalisedEfficiency.HasValue).ToList(); }
+                    <h2 class="text-success">@(analysable.Count > 0 ? Fmt(analysable.Average(r => r.NormalisedEfficiency!.Value)) : "—")</h2>
+                    <small class="text-muted">kWh/HDD (lower = better)</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart: NormalisedEfficiency Trend -->
+    <div class="card mb-3">
+        <div class="card-header"><strong>📈 Normalised Efficiency Trend (kWh/HDD)</strong></div>
+        <div class="card-body">
+            <p class="text-muted small mb-2">Lower kWh/HDD = better efficiency. Days with HDD = 0 are excluded.</p>
+            @if (efficiencyTrend.Count > 0)
+            {
+                <RadzenChart Style="height: 300px;">
+                    <RadzenLineSeries Data="@efficiencyTrend" CategoryProperty="Date" ValueProperty="NormEff"
+                                      Title="kWh/HDD" Stroke="rgb(40,167,69)" StrokeWidth="2"
+                                      MarkerType="MarkerType.Circle" MarkerSize="5" />
+                    <RadzenLineSeries Data="@baselineChangeLine" CategoryProperty="Date" ValueProperty="NormEff"
+                                      Title="Change Active" Stroke="rgba(220,53,69,0.5)"
+                                      StrokeWidth="0" MarkerType="MarkerType.Square" MarkerSize="7" />
+                    <RadzenCategoryAxis FormatString="{0:MMM dd}" />
+                    <RadzenValueAxis Title="kWh / HDD">
+                        <RadzenGridLines Visible="true" />
+                    </RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+            }
+            else
+            {
+                <p class="text-muted">No days with HDD &gt; 0 in the selected range.</p>
+            }
+        </div>
+    </div>
+
+    <!-- Chart: kWh & HDD over Time -->
+    <div class="card mb-3">
+        <div class="card-header"><strong>⚡ Daily Electricity Usage &amp; HDD</strong></div>
+        <div class="card-body">
+            <RadzenChart Style="height: 300px;">
+                <RadzenLineSeries Data="@kwhTrend" CategoryProperty="Date" ValueProperty="KWh"
+                                  Title="kWh" Stroke="rgb(255,193,7)" StrokeWidth="2"
+                                  MarkerType="MarkerType.Circle" MarkerSize="4" />
+                <RadzenLineSeries Data="@hddTrend" CategoryProperty="Date" ValueProperty="HDD"
+                                  Title="HDD" Stroke="rgb(173,216,230)" StrokeWidth="2"
+                                  MarkerType="MarkerType.None" />
+                <RadzenCategoryAxis FormatString="{0:MMM dd}" />
+                <RadzenValueAxis Title="Value">
+                    <RadzenGridLines Visible="true" />
+                </RadzenValueAxis>
+                <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+            </RadzenChart>
+        </div>
+    </div>
+
+    <!-- Chart: Outdoor Temperature -->
+    <div class="card mb-3">
+        <div class="card-header"><strong>🌤️ Outdoor Temperature</strong></div>
+        <div class="card-body">
+            <RadzenChart Style="height: 250px;">
+                <RadzenLineSeries Data="@outdoorTempTrend" CategoryProperty="Date" ValueProperty="Avg"
+                                  Title="Avg °C" Stroke="rgb(40,167,69)" StrokeWidth="2"
+                                  MarkerType="MarkerType.None" />
+                @if (outdoorTempTrend.Any(t => t.High.HasValue))
+                {
+                    <RadzenLineSeries Data="@outdoorTempTrend" CategoryProperty="Date" ValueProperty="High"
+                                      Title="High °C" Stroke="rgba(255,100,100,0.5)" StrokeWidth="1"
+                                      MarkerType="MarkerType.None" />
+                    <RadzenLineSeries Data="@outdoorTempTrend" CategoryProperty="Date" ValueProperty="Low"
+                                      Title="Low °C" Stroke="rgba(100,100,255,0.5)" StrokeWidth="1"
+                                      MarkerType="MarkerType.None" />
+                }
+                <RadzenCategoryAxis FormatString="{0:MMM dd}" />
+                <RadzenValueAxis Title="°C">
+                    <RadzenGridLines Visible="true" />
+                </RadzenValueAxis>
+                <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+            </RadzenChart>
+        </div>
+    </div>
+
+    <!-- Before vs After Comparison -->
+    @if (comparison != null)
+    {
+        <div class="card mb-3 @(comparison.EfficiencyImproved == true ? "border-success" : comparison.EfficiencyImproved == false ? "border-danger" : "")">
+            <div class="card-header">
+                <strong>🔄 Before vs After Comparison</strong>
+                @if (comparison.EfficiencyImproved == true)
+                {
+                    <span class="badge bg-success ms-2">✅ Efficiency Improved</span>
+                    @if (comparison.EfficiencyChangePct.HasValue)
+                    {
+                        <span class="badge bg-success ms-1">@comparison.EfficiencyChangePct.Value.ToString("+0.0;-0.0;0.0")% change</span>
+                    }
+                }
+                else if (comparison.EfficiencyImproved == false)
+                {
+                    <span class="badge bg-danger ms-2">❌ Efficiency Declined</span>
+                    @if (comparison.EfficiencyChangePct.HasValue)
+                    {
+                        <span class="badge bg-danger ms-1">@comparison.EfficiencyChangePct.Value.ToString("+0.0;-0.0;0.0")% change</span>
+                    }
+                }
+            </div>
+            <div class="card-body">
+                @if (comparison.Warnings.Count > 0)
+                {
+                    <div class="alert alert-warning py-2 mb-3">
+                        <ul class="mb-0">
+                            @foreach (var w in comparison.Warnings)
+                            {
+                                <li>⚠️ @w</li>
+                            }
+                        </ul>
+                    </div>
+                }
+                <table class="table table-bordered table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Period</th>
+                            <th>Days</th>
+                            <th>Analysable Days</th>
+                            <th>Avg kWh</th>
+                            <th>Avg HDD</th>
+                            <th>Avg Outdoor °C</th>
+                            <th>Avg kWh/HDD</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>@comparison.Baseline.Label</strong></td>
+                            <td>@comparison.Baseline.RecordCount</td>
+                            <td>@comparison.Baseline.AnalysableRecords</td>
+                            <td>@Fmt(comparison.Baseline.AvgElectricityKWh)</td>
+                            <td>@Fmt(comparison.Baseline.AvgHDD)</td>
+                            <td>@Fmt(comparison.Baseline.AvgOutdoorAvgC) °C</td>
+                            <td>@FmtOpt(comparison.Baseline.AvgNormalisedEfficiency)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>@comparison.Change.Label</strong></td>
+                            <td>@comparison.Change.RecordCount</td>
+                            <td>@comparison.Change.AnalysableRecords</td>
+                            <td>@Fmt(comparison.Change.AvgElectricityKWh)</td>
+                            <td>@Fmt(comparison.Change.AvgHDD)</td>
+                            <td>@Fmt(comparison.Change.AvgOutdoorAvgC) °C</td>
+                            <td>@FmtOpt(comparison.Change.AvgNormalisedEfficiency)</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p class="text-muted small mt-2 mb-0">kWh/HDD: lower is more efficient. Only days with HDD &gt; 0 are used for normalised efficiency.</p>
+            </div>
+        </div>
+    }
+
+    <!-- Groups by ChangeDescription -->
+    @if (groups.Count > 0)
+    {
+        <div class="card mb-3">
+            <div class="card-header"><strong>📊 Efficiency by Configuration</strong></div>
+            <div class="card-body">
+                <table class="table table-bordered table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Configuration</th>
+                            <th>Days</th>
+                            <th>Analysable</th>
+                            <th>Avg kWh</th>
+                            <th>Avg HDD</th>
+                            <th>Avg Outdoor °C</th>
+                            <th>Avg kWh/HDD</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var g in groups)
+                        {
+                            <tr>
+                                <td>@g.ChangeDescription</td>
+                                <td>@g.Summary.RecordCount</td>
+                                <td>@g.Summary.AnalysableRecords</td>
+                                <td>@Fmt(g.Summary.AvgElectricityKWh)</td>
+                                <td>@Fmt(g.Summary.AvgHDD)</td>
+                                <td>@Fmt(g.Summary.AvgOutdoorAvgC) °C</td>
+                                <td>@FmtOpt(g.Summary.AvgNormalisedEfficiency)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <!-- Raw Records Table -->
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>📋 Daily Records</strong>
+            <small class="text-muted">@records.Count records</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Date</th>
+                            <th>kWh</th>
+                            <th>Outdoor Avg</th>
+                            <th>HDD</th>
+                            <th>kWh/HDD</th>
+                            <th>Change?</th>
+                            <th>Configuration</th>
+                            <th>Comfort</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in records.OrderByDescending(x => x.Date))
+                        {
+                            <tr class="@(r.ChangeActive ? "table-info" : "")">
+                                <td>@r.Date.ToString("yyyy-MM-dd")</td>
+                                <td>@r.ElectricityKWh.ToString("F2")</td>
+                                <td>@r.OutdoorAvgC.ToString("F1") °C</td>
+                                <td>@r.HeatingDegreeDays.ToString("F2")</td>
+                                <td>@(r.NormalisedEfficiency.HasValue ? r.NormalisedEfficiency.Value.ToString("F3") : "—")</td>
+                                <td>@(r.ChangeActive ? "✅" : "")</td>
+                                <td><small>@(r.ChangeDescription ?? "")</small></td>
+                                <td>@(r.ComfortScore.HasValue ? new string('⭐', r.ComfortScore.Value) : "")</td>
+                                <td>
+                                    <button class="btn btn-outline-secondary btn-sm me-1" @onclick="() => EditRecord(r)">Edit</button>
+                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteRecord(r.Id)">Del</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+else if (!isLoading)
+{
+    <div class="alert alert-info">
+        No records found for the selected period. Use <strong>+ Add Record</strong> to start tracking daily efficiency data.
+    </div>
+}
+
+@code {
+    private bool isLoading;
+    private string? statusMessage;
+    private bool showForm;
+    private int? editingId;
+
+    // Date range filter
+    private DateOnly fromDate = DateOnly.FromDateTime(DateTime.Today.AddDays(-90));
+    private DateOnly toDate = DateOnly.FromDateTime(DateTime.Today);
+
+    // Data
+    private List<HeatPumpEfficiencyRecordDto> records = [];
+    private EfficiencyComparisonDto? comparison;
+    private List<EfficiencyGroupDto> groups = [];
+
+    // Chart data
+    private List<EffTrendPoint> efficiencyTrend = [];
+    private List<EffTrendPoint> baselineChangeLine = [];
+    private List<KWhTrendPoint> kwhTrend = [];
+    private List<HddTrendPoint> hddTrend = [];
+    private List<TempTrendPoint> outdoorTempTrend = [];
+
+    // Form fields
+    private DateOnly formDate = DateOnly.FromDateTime(DateTime.Today);
+    private decimal formKWh;
+    private decimal formOutdoorAvg;
+    private decimal? formOutdoorHigh;
+    private decimal? formOutdoorLow;
+    private decimal? formIndoorAvg;
+    private int? formComfortScore;
+    private bool formChangeActive;
+    private string? formChangeDescription;
+    private string? formNotes;
+
+    private sealed class EffTrendPoint { public DateOnly Date { get; set; } public decimal NormEff { get; set; } }
+    private sealed class KWhTrendPoint { public DateOnly Date { get; set; } public decimal KWh { get; set; } }
+    private sealed class HddTrendPoint { public DateOnly Date { get; set; } public decimal HDD { get; set; } }
+    private sealed class TempTrendPoint { public DateOnly Date { get; set; } public decimal Avg { get; set; } public decimal? High { get; set; } public decimal? Low { get; set; } }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private void SetRange(int days)
+    {
+        toDate = DateOnly.FromDateTime(DateTime.Today);
+        fromDate = DateOnly.FromDateTime(DateTime.Today.AddDays(-days));
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        statusMessage = "Loading...";
+        try
+        {
+            records = [.. await Api.GetEfficiencyRecordsAsync(fromDate, toDate)];
+            comparison = await Api.GetEfficiencyComparisonAsync(fromDate, toDate);
+            groups = [.. await Api.GetEfficiencyGroupsAsync(fromDate, toDate)];
+            BuildChartData();
+            statusMessage = records.Count > 0
+                ? $"✅ Loaded {records.Count} records"
+                : "ℹ️ No records found for this period.";
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"❌ {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void BuildChartData()
+    {
+        var ordered = records.OrderBy(r => r.Date).ToList();
+
+        efficiencyTrend = ordered
+            .Where(r => r.NormalisedEfficiency.HasValue)
+            .Select(r => new EffTrendPoint { Date = r.Date, NormEff = r.NormalisedEfficiency!.Value })
+            .ToList();
+
+        baselineChangeLine = ordered
+            .Where(r => r.ChangeActive && r.NormalisedEfficiency.HasValue)
+            .Select(r => new EffTrendPoint { Date = r.Date, NormEff = r.NormalisedEfficiency!.Value })
+            .ToList();
+
+        kwhTrend = ordered
+            .Select(r => new KWhTrendPoint { Date = r.Date, KWh = r.ElectricityKWh })
+            .ToList();
+
+        hddTrend = ordered
+            .Select(r => new HddTrendPoint { Date = r.Date, HDD = r.HeatingDegreeDays })
+            .ToList();
+
+        outdoorTempTrend = ordered
+            .Select(r => new TempTrendPoint { Date = r.Date, Avg = r.OutdoorAvgC, High = r.OutdoorHighC, Low = r.OutdoorLowC })
+            .ToList();
+    }
+
+    private void ShowAddForm()
+    {
+        editingId = null;
+        formDate = DateOnly.FromDateTime(DateTime.Today);
+        formKWh = 0;
+        formOutdoorAvg = 0;
+        formOutdoorHigh = null;
+        formOutdoorLow = null;
+        formIndoorAvg = null;
+        formComfortScore = null;
+        formChangeActive = false;
+        formChangeDescription = null;
+        formNotes = null;
+        showForm = true;
+        statusMessage = null;
+    }
+
+    private void EditRecord(HeatPumpEfficiencyRecordDto r)
+    {
+        editingId = r.Id;
+        formDate = r.Date;
+        formKWh = r.ElectricityKWh;
+        formOutdoorAvg = r.OutdoorAvgC;
+        formOutdoorHigh = r.OutdoorHighC;
+        formOutdoorLow = r.OutdoorLowC;
+        formIndoorAvg = r.IndoorAvgC;
+        formComfortScore = r.ComfortScore;
+        formChangeActive = r.ChangeActive;
+        formChangeDescription = r.ChangeDescription;
+        formNotes = r.Notes;
+        showForm = true;
+        statusMessage = null;
+    }
+
+    private void CancelForm()
+    {
+        showForm = false;
+        editingId = null;
+    }
+
+    private async Task SaveRecord()
+    {
+        isLoading = true;
+        try
+        {
+            var request = new HeatPumpEfficiencyRecordRequest
+            {
+                Date = formDate,
+                ElectricityKWh = formKWh,
+                OutdoorAvgC = formOutdoorAvg,
+                OutdoorHighC = formOutdoorHigh,
+                OutdoorLowC = formOutdoorLow,
+                IndoorAvgC = formIndoorAvg,
+                ComfortScore = formComfortScore,
+                ChangeActive = formChangeActive,
+                ChangeDescription = string.IsNullOrWhiteSpace(formChangeDescription) ? null : formChangeDescription,
+                Notes = string.IsNullOrWhiteSpace(formNotes) ? null : formNotes
+            };
+
+            if (editingId.HasValue)
+                await Api.UpdateEfficiencyRecordAsync(editingId.Value, request);
+            else
+                await Api.CreateEfficiencyRecordAsync(request);
+
+            showForm = false;
+            editingId = null;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"❌ {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task DeleteRecord(int id)
+    {
+        isLoading = true;
+        try
+        {
+            await Api.DeleteEfficiencyRecordAsync(id);
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"❌ {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string Fmt(decimal value) => value.ToString("F2");
+    private static string FmtOpt(decimal? value) => value.HasValue ? value.Value.ToString("F3") : "—";
+}
