@@ -28,6 +28,16 @@ public sealed class HeatPumpSnapshotDto
     public bool? PrimaryZoneHeatDemand { get; set; }
     public decimal? PrimarySensorTemperatureCelsius { get; set; }
 
+    // Heating Zone (first zone with zoneType == "HEAT")
+    public decimal? HeatingZoneSetpointCelsius { get; set; }
+    public string? HeatingZoneMode { get; set; }
+    public bool? HeatingZoneHeatDemand { get; set; }
+
+    // Room Sensor (first Cosy Pod with humidity)
+    public decimal? RoomTemperatureCelsius { get; set; }
+    public decimal? RoomHumidityPercentage { get; set; }
+    public string? RoomSensorCode { get; set; }
+
     // Weather Compensation & Flow Temperature
     public bool? WeatherCompensationEnabled { get; set; }
     public decimal? WeatherCompensationMinCelsius { get; set; }

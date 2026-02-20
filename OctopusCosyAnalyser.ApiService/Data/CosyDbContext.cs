@@ -58,6 +58,9 @@ public class CosyDbContext : DbContext
             entity.Property(e => e.WeatherCompensationMinCelsius).HasPrecision(10, 2);
             entity.Property(e => e.WeatherCompensationMaxCelsius).HasPrecision(10, 2);
             entity.Property(e => e.HeatingFlowTemperatureCelsius).HasPrecision(10, 2);
+            entity.Property(e => e.HeatingZoneSetpointCelsius).HasPrecision(10, 2);
+            entity.Property(e => e.RoomTemperatureCelsius).HasPrecision(10, 2);
+            entity.Property(e => e.RoomHumidityPercentage).HasPrecision(10, 2);
         });
     }
 }

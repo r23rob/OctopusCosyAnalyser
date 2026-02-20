@@ -1,0 +1,553 @@
+@page "/heatpump/insights"
+@inject HeatPumpApiClient Api
+@rendermode InteractiveServer
+
+<PageTitle>Heat Pump – Insights</PageTitle>
+
+<h1>💡 Efficiency Insights</h1>
+<p class="text-muted">Analyse heat pump efficiency vs outdoor conditions, room comfort, and get actionable recommendations.</p>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (string.IsNullOrEmpty(deviceId))
+{
+    <div class="alert alert-warning">No device set up. Go to the <a href="/heatpump">Dashboard</a> to run setup.</div>
+}
+else
+{
+    <!-- Date Range Controls -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label">From</label>
+                    <input @bind="fromDate" type="datetime-local" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">To</label>
+                    <input @bind="toDate" type="datetime-local" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary btn-sm w-100" @onclick="LoadData" disabled="@isLoading">
+                        @(isLoading ? "Loading..." : "Load Data")
+                    </button>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Quick Range</label>
+                    <div class="btn-group btn-group-sm w-100">
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(1)">1 Day</button>
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(7)">7 Days</button>
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(30)">30 Days</button>
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(90)">90 Days</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        var alertClass = statusMessage.StartsWith("✅") ? "alert-success"
+            : statusMessage.StartsWith("❌") ? "alert-danger" : "alert-info";
+        <div class="alert @alertClass">@statusMessage</div>
+    }
+
+    @if (snapshots.Count > 0)
+    {
+        <!-- Quick Recommendations Card -->
+        @if (recommendations.Count > 0)
+        {
+            <div class="card mb-3 border-warning">
+                <div class="card-header bg-warning bg-opacity-10"><strong>💡 Quick Recommendations</strong></div>
+                <div class="card-body">
+                    <ul class="mb-0">
+                        @foreach (var rec in recommendations)
+                        {
+                            <li>@rec</li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        }
+
+        <!-- Chart A: COP vs Outdoor Temperature -->
+        <div class="card mt-3">
+            <div class="card-header">Chart A: COP vs Outdoor Temperature</div>
+            <div class="card-body">
+                <RadzenChart Style="height: 300px;">
+                    <RadzenLineSeries Data="@copVsOutdoor" CategoryProperty="X" ValueProperty="Y"
+                                      Title="COP" Fill="transparent" Stroke="rgba(40,167,69,0.6)"
+                                      StrokeWidth="0" MarkerType="MarkerType.Circle" MarkerSize="6" />
+                    <RadzenLineSeries Data="@cop3RefLine" CategoryProperty="X" ValueProperty="Y"
+                                     Title="COP = 3.0 (gas boiler equivalent)" Stroke="rgb(220,53,69)"
+                                     StrokeWidth="1" LineType="LineType.Dashed" MarkerType="MarkerType.None" />
+                    <RadzenCategoryAxis Title="Outdoor Temp (°C)" />
+                    <RadzenValueAxis Min="0" Title="COP">
+                        <RadzenGridLines Visible="true" />
+                    </RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+            </div>
+        </div>
+
+        <!-- Chart B: COP vs Flow Temperature -->
+        <div class="card mt-3">
+            <div class="card-header">Chart B: COP vs Flow Temperature</div>
+            <div class="card-body">
+                <RadzenChart Style="height: 300px;">
+                    <RadzenLineSeries Data="@copVsFlow" CategoryProperty="X" ValueProperty="Y"
+                                      Title="COP" Fill="transparent" Stroke="rgba(0,123,255,0.6)"
+                                      StrokeWidth="0" MarkerType="MarkerType.Circle" MarkerSize="6" />
+                    <RadzenLineSeries Data="@cop3RefLineFlow" CategoryProperty="X" ValueProperty="Y"
+                                     Title="COP = 3.0" Stroke="rgb(220,53,69)"
+                                     StrokeWidth="1" LineType="LineType.Dashed" MarkerType="MarkerType.None" />
+                    <RadzenCategoryAxis Title="Flow Temp (°C)" />
+                    <RadzenValueAxis Min="0" Title="COP">
+                        <RadzenGridLines Visible="true" />
+                    </RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+            </div>
+        </div>
+
+        <!-- Chart C: Room Temp vs Setpoint over Time -->
+        <div class="card mt-3">
+            <div class="card-header">Chart C: Room Temperature vs Setpoint over Time</div>
+            <div class="card-body">
+                @if (roomTempOverTime.Count > 0)
+                {
+                    <RadzenChart Style="height: 300px;">
+                        <RadzenLineSeries Data="@roomTempOverTime" CategoryProperty="Time" ValueProperty="RoomTemp"
+                                         Title="Room Temp (°C)" Stroke="rgb(40,167,69)" StrokeWidth="2" />
+                        <RadzenLineSeries Data="@roomTempOverTime" CategoryProperty="Time" ValueProperty="Setpoint"
+                                         Title="Setpoint (°C)" Stroke="rgb(255,193,7)" StrokeWidth="2" />
+                        <RadzenLineSeries Data="@roomBelowSetpointMarkers" CategoryProperty="Time" ValueProperty="RoomTemp"
+                                         Title="Below Setpoint" Stroke="rgb(220,53,69)" StrokeWidth="0"
+                                         MarkerType="MarkerType.Circle" MarkerSize="6" />
+                        <RadzenCategoryAxis FormatString="{0:MMM dd HH:mm}" />
+                        <RadzenValueAxis Title="Temperature (°C)">
+                            <RadzenGridLines Visible="true" />
+                        </RadzenValueAxis>
+                        <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                    </RadzenChart>
+                }
+                else
+                {
+                    <p class="text-muted">No room temperature or setpoint data available for this period.</p>
+                }
+            </div>
+        </div>
+
+        <!-- Chart D: Weather Compensation Effectiveness -->
+        <div class="card mt-3">
+            <div class="card-header">Chart D: Weather Compensation Effectiveness (Outdoor Temp vs Flow Temp)</div>
+            <div class="card-body">
+                @if (wcAtTarget.Count > 0 || wcBelowTarget.Count > 0)
+                {
+                    <RadzenChart Style="height: 300px;">
+                        <RadzenLineSeries Data="@wcAtTarget" CategoryProperty="X" ValueProperty="Y"
+                                            Title="Room at target" Fill="transparent" Stroke="rgba(40,167,69,0.6)"
+                                            StrokeWidth="0" MarkerType="MarkerType.Circle" MarkerSize="6" />
+                        <RadzenLineSeries Data="@wcBelowTarget" CategoryProperty="X" ValueProperty="Y"
+                                            Title="Room below target" Fill="transparent" Stroke="rgba(220,53,69,0.6)"
+                                            StrokeWidth="0" MarkerType="MarkerType.Circle" MarkerSize="6" />
+                        @if (wcMinRef.Count > 0)
+                        {
+                            <RadzenLineSeries Data="@wcMinRef" CategoryProperty="X" ValueProperty="Y"
+                                             Title="WC Min" Stroke="rgb(100,100,200)"
+                                             StrokeWidth="1" LineType="LineType.Dashed" />
+                        }
+                        @if (wcMaxRef.Count > 0)
+                        {
+                            <RadzenLineSeries Data="@wcMaxRef" CategoryProperty="X" ValueProperty="Y"
+                                             Title="WC Max" Stroke="rgb(200,100,100)"
+                                             StrokeWidth="1" LineType="LineType.Dashed" />
+                        }
+                        <RadzenCategoryAxis Title="Outdoor Temp (°C)" />
+                        <RadzenValueAxis Title="Flow Temp (°C)">
+                            <RadzenGridLines Visible="true" />
+                        </RadzenValueAxis>
+                        <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                    </RadzenChart>
+                }
+                else
+                {
+                    <p class="text-muted">No outdoor/flow temperature data available for this period.</p>
+                }
+            </div>
+        </div>
+
+        <!-- Chart E: Room Temp vs Setpoint vs Outdoor Temp over Time -->
+        <div class="card mt-3">
+            <div class="card-header">Chart E: Room Temp vs Setpoint vs Outdoor Temp over Time</div>
+            <div class="card-body">
+                @if (roomTempOverTime.Count > 0)
+                {
+                    <RadzenChart Style="height: 300px;">
+                        <RadzenLineSeries Data="@roomTempOverTime" CategoryProperty="Time" ValueProperty="RoomTemp"
+                                         Title="Room Temp (°C)" Stroke="rgb(40,167,69)" StrokeWidth="2" />
+                        <RadzenLineSeries Data="@roomTempOverTime" CategoryProperty="Time" ValueProperty="Setpoint"
+                                         Title="Setpoint (°C)" Stroke="rgb(255,193,7)" StrokeWidth="2" />
+                        <RadzenLineSeries Data="@roomTempOverTime" CategoryProperty="Time" ValueProperty="OutdoorTemp"
+                                         Title="Outdoor Temp (°C)" Stroke="rgb(173,216,230)" StrokeWidth="2" />
+                        <RadzenCategoryAxis FormatString="{0:MMM dd HH:mm}" />
+                        <RadzenValueAxis Title="Temperature (°C)">
+                            <RadzenGridLines Visible="true" />
+                        </RadzenValueAxis>
+                        <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                    </RadzenChart>
+                }
+                else
+                {
+                    <p class="text-muted">No room temperature data available for this period.</p>
+                }
+            </div>
+        </div>
+
+        <!-- Table: Comfort Efficiency Summary -->
+        <div class="card mt-3">
+            <div class="card-header"><strong>Comfort Efficiency Summary</strong></div>
+            <div class="card-body">
+                <table class="table table-bordered table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Group</th>
+                            <th>Count</th>
+                            <th>Avg COP</th>
+                            <th>Avg Flow Temp</th>
+                            <th>Avg Outdoor Temp</th>
+                            <th>Avg Power In (kW)</th>
+                            <th>Avg Room Temp</th>
+                            <th>Avg Setpoint</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in comfortSummary)
+                        {
+                            <tr>
+                                <td>@row.Group</td>
+                                <td>@row.Count</td>
+                                <td>@FmtDec(row.AvgCop)</td>
+                                <td>@FmtDec(row.AvgFlowTemp) °C</td>
+                                <td>@FmtDec(row.AvgOutdoorTemp) °C</td>
+                                <td>@FmtDec(row.AvgPowerInput)</td>
+                                <td>@FmtDec(row.AvgRoomTemp) °C</td>
+                                <td>@FmtDec(row.AvgSetpoint) °C</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Table: Heating Duty Cycle -->
+        <div class="card mt-3">
+            <div class="card-header"><strong>Heating Duty Cycle</strong></div>
+            <div class="card-body">
+                <p class="mb-2">
+                    Overall duty cycle: <strong>@dutyCyclePercent.ToString("F1")%</strong> of snapshots have heating demand active.
+                    @if (dutyCyclePercent > 80)
+                    {
+                        <span class="badge bg-danger ms-2">High (&gt;80%)</span>
+                    }
+                    else if (dutyCyclePercent < 30)
+                    {
+                        <span class="badge bg-info ms-2">Low (&lt;30%)</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-success ms-2">Normal</span>
+                    }
+                </p>
+                @if (dutyCycleByPeriod.Count > 0)
+                {
+                    <table class="table table-bordered table-sm mb-0">
+                        <thead>
+                            <tr><th>Time of Day</th><th>Snapshots</th><th>Heating Demand Active</th><th>Duty Cycle</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in dutyCycleByPeriod)
+                            {
+                                <tr>
+                                    <td>@row.Period</td>
+                                    <td>@row.Total</td>
+                                    <td>@row.Active</td>
+                                    <td>@row.DutyCycle.ToString("F1")%</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private string? deviceId;
+    private bool isLoading;
+    private string? errorMessage;
+    private string? statusMessage;
+
+    private DateTime fromDate = DateTime.UtcNow.AddDays(-7);
+    private DateTime toDate = DateTime.UtcNow;
+
+    private List<HeatPumpSnapshotDto> snapshots = [];
+
+    // Chart data
+    private List<ScatterPoint> copVsOutdoor = [];
+    private List<ScatterPoint> cop3RefLine = [];
+    private List<ScatterPoint> copVsFlow = [];
+    private List<ScatterPoint> cop3RefLineFlow = [];
+    private List<TimePoint> roomTempOverTime = [];
+    private List<TimePoint> roomBelowSetpointMarkers = [];
+    private List<ScatterPoint> wcAtTarget = [];
+    private List<ScatterPoint> wcBelowTarget = [];
+    private List<ScatterPoint> wcMinRef = [];
+    private List<ScatterPoint> wcMaxRef = [];
+
+    // Table data
+    private List<ComfortSummaryRow> comfortSummary = [];
+    private double dutyCyclePercent;
+    private List<DutyCycleRow> dutyCycleByPeriod = [];
+
+    // Recommendations
+    private List<string> recommendations = [];
+
+    private sealed class ScatterPoint { public double X { get; set; } public double Y { get; set; } }
+    private sealed class TimePoint
+    {
+        public DateTime Time { get; set; }
+        public double RoomTemp { get; set; }
+        public double Setpoint { get; set; }
+        public double OutdoorTemp { get; set; }
+    }
+    private sealed class ComfortSummaryRow
+    {
+        public string Group { get; set; } = "";
+        public int Count { get; set; }
+        public double? AvgCop { get; set; }
+        public double? AvgFlowTemp { get; set; }
+        public double? AvgOutdoorTemp { get; set; }
+        public double? AvgPowerInput { get; set; }
+        public double? AvgRoomTemp { get; set; }
+        public double? AvgSetpoint { get; set; }
+    }
+    private sealed class DutyCycleRow
+    {
+        public string Period { get; set; } = "";
+        public int Total { get; set; }
+        public int Active { get; set; }
+        public double DutyCycle => Total > 0 ? Active * 100.0 / Total : 0;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var devices = await Api.GetDevicesAsync();
+            if (devices.Length > 0)
+            {
+                deviceId = devices[0].DeviceId;
+                await LoadData();
+            }
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+
+    private void SetRange(int days)
+    {
+        toDate = DateTime.UtcNow;
+        fromDate = DateTime.UtcNow.AddDays(-days);
+    }
+
+    private async Task LoadData()
+    {
+        if (string.IsNullOrEmpty(deviceId)) { statusMessage = "❌ No device available."; return; }
+
+        isLoading = true;
+        statusMessage = "Loading...";
+        snapshots.Clear();
+
+        try
+        {
+            var result = await Api.GetSnapshotsAsync(deviceId, fromDate, toDate);
+            snapshots = result?.Snapshots ?? [];
+            statusMessage = snapshots.Count > 0
+                ? $"✅ Loaded {snapshots.Count} snapshots"
+                : "ℹ️ No snapshots found for this period.";
+            BuildChartData();
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"❌ {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void BuildChartData()
+    {
+        // Chart A: COP vs Outdoor Temperature
+        copVsOutdoor = snapshots
+            .Where(s => s.CoefficientOfPerformance.HasValue && s.OutdoorTemperatureCelsius.HasValue)
+            .Select(s => new ScatterPoint { X = (double)s.OutdoorTemperatureCelsius!.Value, Y = (double)s.CoefficientOfPerformance!.Value })
+            .ToList();
+
+        if (copVsOutdoor.Count > 0)
+        {
+            var minX = copVsOutdoor.Min(p => p.X);
+            var maxX = copVsOutdoor.Max(p => p.X);
+            cop3RefLine = [new ScatterPoint { X = minX, Y = 3.0 }, new ScatterPoint { X = maxX, Y = 3.0 }];
+        }
+
+        // Chart B: COP vs Flow Temperature
+        copVsFlow = snapshots
+            .Where(s => s.CoefficientOfPerformance.HasValue && s.HeatingFlowTemperatureCelsius.HasValue)
+            .Select(s => new ScatterPoint { X = (double)s.HeatingFlowTemperatureCelsius!.Value, Y = (double)s.CoefficientOfPerformance!.Value })
+            .ToList();
+
+        if (copVsFlow.Count > 0)
+        {
+            var minX = copVsFlow.Min(p => p.X);
+            var maxX = copVsFlow.Max(p => p.X);
+            cop3RefLineFlow = [new ScatterPoint { X = minX, Y = 3.0 }, new ScatterPoint { X = maxX, Y = 3.0 }];
+        }
+
+        // Chart C + E: Room Temp vs Setpoint over Time
+        roomTempOverTime = snapshots
+            .Where(s => s.RoomTemperatureCelsius.HasValue && s.HeatingZoneSetpointCelsius.HasValue)
+            .Select(s => new TimePoint
+            {
+                Time = s.SnapshotTakenAt,
+                RoomTemp = (double)s.RoomTemperatureCelsius!.Value,
+                Setpoint = (double)s.HeatingZoneSetpointCelsius!.Value,
+                OutdoorTemp = s.OutdoorTemperatureCelsius.HasValue ? (double)s.OutdoorTemperatureCelsius.Value : 0
+            })
+            .OrderBy(p => p.Time)
+            .ToList();
+
+        // Markers where room is below setpoint - 0.5
+        roomBelowSetpointMarkers = roomTempOverTime
+            .Where(p => p.RoomTemp < p.Setpoint - 0.5)
+            .ToList();
+
+        // Chart D: Weather Compensation Effectiveness
+        var wcSnapshotsWithRoom = snapshots
+            .Where(s => s.OutdoorTemperatureCelsius.HasValue && s.HeatingFlowTemperatureCelsius.HasValue)
+            .ToList();
+
+        wcAtTarget = wcSnapshotsWithRoom
+            .Where(s => !s.RoomTemperatureCelsius.HasValue || !s.HeatingZoneSetpointCelsius.HasValue
+                        || (double)s.RoomTemperatureCelsius!.Value >= (double)s.HeatingZoneSetpointCelsius!.Value - 0.5)
+            .Select(s => new ScatterPoint { X = (double)s.OutdoorTemperatureCelsius!.Value, Y = (double)s.HeatingFlowTemperatureCelsius!.Value })
+            .ToList();
+
+        wcBelowTarget = wcSnapshotsWithRoom
+            .Where(s => s.RoomTemperatureCelsius.HasValue && s.HeatingZoneSetpointCelsius.HasValue
+                        && (double)s.RoomTemperatureCelsius!.Value < (double)s.HeatingZoneSetpointCelsius!.Value - 0.5)
+            .Select(s => new ScatterPoint { X = (double)s.OutdoorTemperatureCelsius!.Value, Y = (double)s.HeatingFlowTemperatureCelsius!.Value })
+            .ToList();
+
+        var wcMinValues = snapshots.Where(s => s.WeatherCompensationMinCelsius.HasValue).ToList();
+        var wcMaxValues = snapshots.Where(s => s.WeatherCompensationMaxCelsius.HasValue).ToList();
+
+        if (wcSnapshotsWithRoom.Count > 0 && wcMinValues.Count > 0)
+        {
+            var minX = wcSnapshotsWithRoom.Min(s => (double)s.OutdoorTemperatureCelsius!.Value);
+            var maxX = wcSnapshotsWithRoom.Max(s => (double)s.OutdoorTemperatureCelsius!.Value);
+            double wcMin = (double)wcMinValues.First().WeatherCompensationMinCelsius!.Value;
+            wcMinRef = [new ScatterPoint { X = minX, Y = wcMin }, new ScatterPoint { X = maxX, Y = wcMin }];
+            if (wcMaxValues.Count > 0)
+            {
+                double wcMax = (double)wcMaxValues.First().WeatherCompensationMaxCelsius!.Value;
+                wcMaxRef = [new ScatterPoint { X = minX, Y = wcMax }, new ScatterPoint { X = maxX, Y = wcMax }];
+            }
+        }
+
+        // Comfort Efficiency Summary Table
+        var withRoomData = snapshots.Where(s => s.RoomTemperatureCelsius.HasValue && s.HeatingZoneSetpointCelsius.HasValue).ToList();
+        var keepingTemp = withRoomData.Where(s => (double)s.RoomTemperatureCelsius!.Value >= (double)s.HeatingZoneSetpointCelsius!.Value - 0.5).ToList();
+        var notKeepingTemp = withRoomData.Where(s => (double)s.RoomTemperatureCelsius!.Value < (double)s.HeatingZoneSetpointCelsius!.Value - 0.5).ToList();
+
+        comfortSummary = [
+            BuildComfortRow("✅ Keeping Temp", keepingTemp),
+            BuildComfortRow("❌ Not Keeping Temp", notKeepingTemp)
+        ];
+
+        // Heating Duty Cycle
+        var withDemand = snapshots.Where(s => s.HeatingZoneHeatDemand.HasValue).ToList();
+        dutyCyclePercent = withDemand.Count > 0
+            ? withDemand.Count(s => s.HeatingZoneHeatDemand == true) * 100.0 / withDemand.Count
+            : 0;
+
+        dutyCycleByPeriod = [];
+        if (withDemand.Count >= 4)
+        {
+            dutyCycleByPeriod.Add(BuildDutyCycleRow("Morning (6–12)", withDemand, 6, 12));
+            dutyCycleByPeriod.Add(BuildDutyCycleRow("Afternoon (12–18)", withDemand, 12, 18));
+            dutyCycleByPeriod.Add(BuildDutyCycleRow("Evening (18–24)", withDemand, 18, 24));
+            dutyCycleByPeriod.Add(BuildDutyCycleRow("Night (0–6)", withDemand, 0, 6));
+        }
+
+        // Recommendations
+        recommendations = [];
+
+        var keepingCop = keepingTemp.Where(s => s.CoefficientOfPerformance.HasValue).Select(s => (double)s.CoefficientOfPerformance!.Value).ToList();
+        if (keepingCop.Count > 0 && keepingCop.Average() < 3.0)
+            recommendations.Add("Consider lowering your WC max flow temperature to improve efficiency.");
+
+        if (dutyCyclePercent > 80)
+            recommendations.Add("Your system is running almost continuously. Your WC min may be too low for very cold days.");
+
+        if (dutyCyclePercent > 0 && dutyCyclePercent < 30)
+            recommendations.Add("Your system has headroom. Consider lowering your setpoint by 0.5°C to save energy.");
+
+        var mildWeatherSnapshots = snapshots
+            .Where(s => s.OutdoorTemperatureCelsius.HasValue && (double)s.OutdoorTemperatureCelsius!.Value > 5
+                        && s.CoefficientOfPerformance.HasValue)
+            .Select(s => (double)s.CoefficientOfPerformance!.Value)
+            .ToList();
+        if (mildWeatherSnapshots.Count > 0 && mildWeatherSnapshots.Average() < 3.0)
+            recommendations.Add("COP is lower than expected for mild weather. Check filters and system health.");
+    }
+
+    private static ComfortSummaryRow BuildComfortRow(string group, List<HeatPumpSnapshotDto> items)
+    {
+        return new ComfortSummaryRow
+        {
+            Group = group,
+            Count = items.Count,
+            AvgCop = Avg(items.Where(s => s.CoefficientOfPerformance.HasValue).Select(s => (double)s.CoefficientOfPerformance!.Value)),
+            AvgFlowTemp = Avg(items.Where(s => s.HeatingFlowTemperatureCelsius.HasValue).Select(s => (double)s.HeatingFlowTemperatureCelsius!.Value)),
+            AvgOutdoorTemp = Avg(items.Where(s => s.OutdoorTemperatureCelsius.HasValue).Select(s => (double)s.OutdoorTemperatureCelsius!.Value)),
+            AvgPowerInput = Avg(items.Where(s => s.PowerInputKilowatt.HasValue).Select(s => (double)s.PowerInputKilowatt!.Value)),
+            AvgRoomTemp = Avg(items.Where(s => s.RoomTemperatureCelsius.HasValue).Select(s => (double)s.RoomTemperatureCelsius!.Value)),
+            AvgSetpoint = Avg(items.Where(s => s.HeatingZoneSetpointCelsius.HasValue).Select(s => (double)s.HeatingZoneSetpointCelsius!.Value))
+        };
+    }
+
+    private static DutyCycleRow BuildDutyCycleRow(string period, List<HeatPumpSnapshotDto> items, int fromHour, int toHour)
+    {
+        var inPeriod = items.Where(s => s.SnapshotTakenAt.Hour >= fromHour && s.SnapshotTakenAt.Hour < toHour).ToList();
+        return new DutyCycleRow
+        {
+            Period = period,
+            Total = inPeriod.Count,
+            Active = inPeriod.Count(s => s.HeatingZoneHeatDemand == true)
+        };
+    }
+
+    private static double? Avg(IEnumerable<double> values)
+    {
+        var list = values.ToList();
+        return list.Count > 0 ? list.Average() : null;
+    }
+
+    private static string FmtDec(double? value) => value.HasValue ? value.Value.ToString("F2") : "—";
+}
