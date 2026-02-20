@@ -132,7 +132,7 @@ public class HeatPumpSnapshotWorker : BackgroundService
                     var zone = zones[0];
                     if (zone.TryGetProperty("telemetry", out var zoneTelemetry))
                     {
-                        if (zoneTelemetry.TryGetProperty("setpointInCelsius", out var setpoint) && setpoint.TryGetDecimal(out var setpointDec))
+                        if (zoneTelemetry.TryGetProperty("setpointInCelsius", out var setpoint) && setpoint.ValueKind == JsonValueKind.Number && setpoint.TryGetDecimal(out var setpointDec))
                             snapshot.PrimaryZoneSetpointCelsius = setpointDec;
 
                         if (zoneTelemetry.TryGetProperty("mode", out var mode))
@@ -147,7 +147,7 @@ public class HeatPumpSnapshotWorker : BackgroundService
                 if (status.TryGetProperty("sensors", out var sensors) && sensors.GetArrayLength() > 0)
                 {
                     var sensor = sensors[0];
-                    if (sensor.TryGetProperty("telemetry", out var sensorTelemetry) && sensorTelemetry.TryGetProperty("temperatureInCelsius", out var temp) && temp.TryGetDecimal(out var tempDec))
+                    if (sensor.TryGetProperty("telemetry", out var sensorTelemetry) && sensorTelemetry.TryGetProperty("temperatureInCelsius", out var temp) && temp.ValueKind == JsonValueKind.Number && temp.TryGetDecimal(out var tempDec))
                         snapshot.PrimarySensorTemperatureCelsius = tempDec;
                 }
 
@@ -158,10 +158,11 @@ public class HeatPumpSnapshotWorker : BackgroundService
                     {
                         if (s.TryGetProperty("telemetry", out var sTelemetry)
                             && sTelemetry.TryGetProperty("humidityPercentage", out var humidity)
+                            && humidity.ValueKind == JsonValueKind.Number
                             && humidity.TryGetDecimal(out var humidityDec))
                         {
                             snapshot.RoomHumidityPercentage = humidityDec;
-                            if (sTelemetry.TryGetProperty("temperatureInCelsius", out var roomTemp) && roomTemp.TryGetDecimal(out var roomTempDec))
+                            if (sTelemetry.TryGetProperty("temperatureInCelsius", out var roomTemp) && roomTemp.ValueKind == JsonValueKind.Number && roomTemp.TryGetDecimal(out var roomTempDec))
                                 snapshot.RoomTemperatureCelsius = roomTempDec;
                             if (s.TryGetProperty("code", out var sCode))
                                 snapshot.RoomSensorCode = sCode.GetString();
@@ -233,7 +234,7 @@ public class HeatPumpSnapshotWorker : BackgroundService
                             if (sz.TryGetProperty("zone", out var szZone) && szZone.GetString() == heatingZoneCode
                                 && sz.TryGetProperty("telemetry", out var szTelemetry))
                             {
-                                if (szTelemetry.TryGetProperty("setpointInCelsius", out var hzSetpoint) && hzSetpoint.TryGetDecimal(out var hzSetpointDec))
+                                if (szTelemetry.TryGetProperty("setpointInCelsius", out var hzSetpoint) && hzSetpoint.ValueKind == JsonValueKind.Number && hzSetpoint.TryGetDecimal(out var hzSetpointDec))
                                     snapshot.HeatingZoneSetpointCelsius = hzSetpointDec;
                                 if (szTelemetry.TryGetProperty("mode", out var hzMode))
                                     snapshot.HeatingZoneMode = hzMode.GetString();
