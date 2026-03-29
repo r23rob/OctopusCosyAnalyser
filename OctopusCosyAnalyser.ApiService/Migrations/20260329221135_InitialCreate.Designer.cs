@@ -12,8 +12,8 @@ using OctopusCosyAnalyser.ApiService.Data;
 namespace OctopusCosyAnalyser.ApiService.Migrations
 {
     [DbContext(typeof(CosyDbContext))]
-    [Migration("20260329220324_AddFlowTempAllowableRange")]
-    partial class AddFlowTempAllowableRange
+    [Migration("20260329221135_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
