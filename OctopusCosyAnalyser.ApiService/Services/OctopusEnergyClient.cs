@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace OctopusCosyAnalyser.ApiService.Services;
 
@@ -10,6 +11,15 @@ public class OctopusEnergyClient
     private sealed record TokenCacheEntry(string Token, DateTime ExpiresAt);
 
     private static readonly ConcurrentDictionary<string, TokenCacheEntry> TokenCache = new();
+
+    // Allowlist: alphanumeric, hyphens, underscores only — prevents injection via " or \ into embedded GraphQL strings
+    private static readonly Regex SafeIdentifierRegex = new(@"^[A-Za-z0-9\-_]{1,200}$", RegexOptions.Compiled);
+
+    private static void ValidateIdentifier(string value, string paramName)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !SafeIdentifierRegex.IsMatch(value))
+            throw new ArgumentException($"Invalid value for '{paramName}': must be 1–200 alphanumeric, hyphen, or underscore characters.", paramName);
+    }
 
     private readonly HttpClient _httpClient;
 
@@ -23,6 +33,8 @@ public class OctopusEnergyClient
 
     private async Task<string> GetAuthTokenAsync(string apiKey)
     {
+        ValidateIdentifier(apiKey, nameof(apiKey));
+
         if (TokenCache.TryGetValue(apiKey, out var cached) && DateTime.UtcNow < cached.ExpiresAt)
             return cached.Token;
 
@@ -57,6 +69,8 @@ public class OctopusEnergyClient
     /// </summary>
     public async Task<JsonDocument> GetAccountAsync(string apiKey, string accountNumber)
     {
+        ValidateIdentifier(accountNumber, nameof(accountNumber));
+
         var query = $$"""
         {
             "query": "query { account(accountNumber: \"{{accountNumber}}\") { electricityAgreements(active: true) { meterPoint { mpan meters(includeInactive: false) { serialNumber smartDevices { deviceId } } } } } }"
@@ -85,6 +99,8 @@ public class OctopusEnergyClient
     /// </summary>
     public async Task<JsonDocument> GetHeatPumpControllerEuidsAsync(string apiKey, string accountNumber)
     {
+        ValidateIdentifier(accountNumber, nameof(accountNumber));
+
         var query = $$"""
         {
             "query": "query { octoHeatPumpControllerEuids(accountNumber: \"{{accountNumber}}\") }"
@@ -99,6 +115,8 @@ public class OctopusEnergyClient
     /// </summary>
     public async Task<JsonDocument> GetHeatPumpDeviceAsync(string apiKey, string accountNumber, int propertyId)
     {
+        ValidateIdentifier(accountNumber, nameof(accountNumber));
+
         var query = $$"""
         {
             "query": "query { heatPumpDevice(accountNumber: \"{{accountNumber}}\", propertyId: {{propertyId}}) { id serialNumber make model installationDate } }"
@@ -130,6 +148,8 @@ public class OctopusEnergyClient
     /// </summary>
     public async Task<JsonDocument> GetSmartMeterTelemetryAsync(string apiKey, string deviceId)
     {
+        ValidateIdentifier(deviceId, nameof(deviceId));
+
         var query = $$"""
         {
             "query": "query { smartMeterTelemetry(deviceId: \"{{deviceId}}\") { readAt consumption consumptionDelta demand } }"
@@ -181,6 +201,9 @@ public class OctopusEnergyClient
     /// </summary>
     public async Task<JsonDocument> GetHeatPumpVariantsAsync(string apiKey, string? make = null)
     {
+        if (make != null)
+            ValidateIdentifier(make, nameof(make));
+
         var makeFilter = string.IsNullOrEmpty(make) ? "" : $"(make: \\\"{make}\\\")";
         var query = $$"""
         {
@@ -203,6 +226,9 @@ public class OctopusEnergyClient
     /// </summary>
     public async Task<JsonDocument> GetHeatPumpStatusAndConfigAsync(string apiKey, string accountNumber, string euid)
     {
+        ValidateIdentifier(accountNumber, nameof(accountNumber));
+        ValidateIdentifier(euid, nameof(euid));
+
         var query = $$"""
         {
             "query": "query { octoHeatPumpControllerStatus(accountNumber: \"{{accountNumber}}\", euid: \"{{euid}}\") { sensors { code connectivity { online retrievedAt } telemetry { temperatureInCelsius humidityPercentage retrievedAt } } zones { zone telemetry { setpointInCelsius mode relaySwitchedOn heatDemand retrievedAt } } } octoHeatPumpControllerConfiguration(accountNumber: \"{{accountNumber}}\", euid: \"{{euid}}\") { controller { state heatPumpTimezone connected } heatPump { serialNumber model hardwareVersion maxWaterSetpoint minWaterSetpoint heatingFlowTemperature { currentTemperature { value unit } allowableRange { minimum { value unit } maximum { value unit } } } weatherCompensation { enabled currentRange { minimum { value unit } maximum { value unit } } } } zones { configuration { code zoneType enabled displayName primarySensor currentOperation { mode setpointInCelsius action end } callForHeat heatDemand emergency sensors { ... on ADCSensorConfiguration { code displayName type enabled } ... on ZigbeeSensorConfiguration { code displayName type firmwareVersion boostEnabled } } } } } octoHeatPumpLivePerformance(euid: \"{{euid}}\") { coefficientOfPerformance outdoorTemperature { value unit } heatOutput { value unit } powerInput { value unit } readAt } octoHeatPumpLifetimePerformance(euid: \"{{euid}}\") { seasonalCoefficientOfPerformance heatOutput { value unit } energyInput { value unit } readAt } }"

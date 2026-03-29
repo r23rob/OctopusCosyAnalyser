@@ -129,23 +129,6 @@ namespace OctopusCosyAnalyser.ApiService.Migrations
                     table.PrimaryKey("PK_OctopusAccountSettings", x => x.Id);
                 });
 
-            migrationBuilder.CreateTable(
-                name: "TadoSettings",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Username = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    Password = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
-                    HomeId = table.Column<long>(type: "bigint", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_TadoSettings", x => x.Id);
-                });
-
             migrationBuilder.CreateIndex(
                 name: "IX_ConsumptionReadings_DeviceId_ReadAt",
                 table: "ConsumptionReadings",
@@ -194,9 +177,6 @@ namespace OctopusCosyAnalyser.ApiService.Migrations
 
             migrationBuilder.DropTable(
                 name: "OctopusAccountSettings");
-
-            migrationBuilder.DropTable(
-                name: "TadoSettings");
         }
     }
 }

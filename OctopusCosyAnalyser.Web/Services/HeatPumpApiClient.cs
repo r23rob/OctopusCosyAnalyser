@@ -164,7 +164,6 @@ public class HeatPumpApiClient
 
     public async Task<TadoZoneDto[]> GetTadoZonesAsync()
         => await _http.GetFromJsonAsync<TadoZoneDto[]>("/api/tado/zones") ?? [];
-
     // ── Efficiency Records ────────────────────────────────────────────
 
     public async Task<HeatPumpEfficiencyRecordDto[]> GetEfficiencyRecordsAsync(DateOnly? from = null, DateOnly? to = null)

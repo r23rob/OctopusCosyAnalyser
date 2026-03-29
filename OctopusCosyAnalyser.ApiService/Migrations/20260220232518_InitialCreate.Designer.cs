@@ -310,37 +310,6 @@ namespace OctopusCosyAnalyser.ApiService.Migrations
                     b.ToTable("OctopusAccountSettings");
                 });
 
-            modelBuilder.Entity("OctopusCosyAnalyser.ApiService.Models.TadoSettings", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long?>("HomeId")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("Password")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Username")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("TadoSettings");
-                });
 #pragma warning restore 612, 618
         }
     }
