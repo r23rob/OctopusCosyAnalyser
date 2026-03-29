@@ -1,10 +1,11 @@
 @page "/heatpump/history"
 @inject HeatPumpApiClient Api
 @rendermode InteractiveServer
+@using OctopusCosyAnalyser.Web.Services
 
 <PageTitle>Heat Pump – History</PageTitle>
 
-<h1>📊 Historic Analysis</h1>
+<h1>Historic Analysis</h1>
 <p class="text-muted">Compare different time ranges to see if settings changes made a positive difference.</p>
 
 @if (!string.IsNullOrEmpty(errorMessage))
@@ -21,10 +22,10 @@ else
     <!-- Grouping Info Panel -->
     <div class="card mb-3 border-info">
         <div class="card-header bg-info bg-opacity-10">
-            <strong>ℹ️ About Grouping (Data Granularity)</strong>
+            <strong>About Grouping (Data Granularity)</strong>
         </div>
         <div class="card-body py-2">
-            <p class="mb-1 small">The <strong>Grouping</strong> setting controls how large each time bucket is in the chart — i.e. how finely the data is split up:</p>
+            <p class="mb-1 small">The <strong>Grouping</strong> setting controls how large each time bucket is in the chart:</p>
             <ul class="mb-0 small">
                 <li><strong>Live</strong> — Minute-by-minute data. Select at most <strong>1 hour</strong>.</li>
                 <li><strong>Day</strong> — Hour-by-hour data. Select at most <strong>2 days</strong>.</li>
@@ -51,16 +52,24 @@ else
                     <label class="form-label">Grouping</label>
                     <select @bind="grouping" class="form-select form-select-sm">
                         <option value="">Auto</option>
-                        <option value="LIVE">Live (min-by-min, max 1 hr)</option>
-                        <option value="DAY">Day (hour-by-hour, max 2 days)</option>
-                        <option value="WEEK">Week (day-by-day, max 14 days)</option>
-                        <option value="MONTH">Month (day-by-day, max 60 days)</option>
-                        <option value="YEAR">Year (day-by-day, max 13 months)</option>
+                        <option value="@GroupingLive">Live (min-by-min, max 1 hr)</option>
+                        <option value="@GroupingDay">Day (hour-by-hour, max 2 days)</option>
+                        <option value="@GroupingWeek">Week (day-by-day, max 14 days)</option>
+                        <option value="@GroupingMonth">Month (day-by-day, max 60 days)</option>
+                        <option value="@GroupingYear">Year (day-by-day, max 13 months)</option>
                     </select>
                 </div>
                 <div class="col-md-2">
                     <button class="btn btn-primary btn-sm w-100" @onclick="LoadTimeSeries" disabled="@isLoading">
-                        @(isLoading ? "Loading..." : "Load Data")
+                        @if (isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            <span>Loading...</span>
+                        }
+                        else
+                        {
+                            <span>Load Data</span>
+                        }
                     </button>
                 </div>
                 <div class="col-md-4">
@@ -76,15 +85,15 @@ else
             </div>
             @if (!string.IsNullOrEmpty(rangeValidationMessage))
             {
-                <div class="alert alert-warning mt-2 mb-0 py-1 small">⚠️ @rangeValidationMessage</div>
+                <div class="alert alert-warning mt-2 mb-0 py-1 small">@rangeValidationMessage</div>
             }
         </div>
     </div>
 
     @if (!string.IsNullOrEmpty(statusMessage))
     {
-        var alertClass = statusMessage.Contains("✅") ? "alert-success"
-            : statusMessage.Contains("❌") ? "alert-danger" : "alert-info";
+        var alertClass = statusMessage.Contains("Loaded") ? "alert-success"
+            : statusMessage.Contains("No data") || statusMessage.Contains("Unexpected") || statusMessage.Contains("Account") ? "alert-danger" : "alert-info";
         <div class="alert @alertClass mt-3">@statusMessage</div>
     }
 
@@ -92,7 +101,7 @@ else
     {
         <!-- Period Summary -->
         <div class="card mt-3 border-success">
-            <div class="card-header bg-success bg-opacity-10"><strong>📋 Period Summary</strong></div>
+            <div class="card-header bg-success bg-opacity-10"><strong>Period Summary</strong></div>
             <div class="card-body py-2">
                 <div class="row g-2 text-center">
                     <div class="col-6 col-md-2">
@@ -241,6 +250,12 @@ else
 }
 
 @code {
+    private const string GroupingLive = "LIVE";
+    private const string GroupingDay = "DAY";
+    private const string GroupingWeek = "WEEK";
+    private const string GroupingMonth = "MONTH";
+    private const string GroupingYear = "YEAR";
+
     private string accountNumber = "";
     private string? euid;
     private bool isLoading;
@@ -252,36 +267,26 @@ else
     private DateTime toDate = DateTime.UtcNow;
     private string grouping = "";
 
-    private List<ChartPoint> timeSeriesData = [];
-
-    /// <summary>View-model for Radzen charts — all numeric properties so charts can bind.</summary>
-    private sealed class ChartPoint
-    {
-        public DateTime EndAt { get; set; }
-        public double Cop { get; set; }
-        public double EnergyOutputVal { get; set; }
-        public double EnergyInputVal { get; set; }
-        public double OutdoorTempVal { get; set; }
-    }
+    private List<TimeSeriesChartPoint> timeSeriesData = [];
 
     private string GroupingDescription => grouping?.ToUpperInvariant() switch
     {
-        "LIVE"  => "min-by-min",
-        "DAY"   => "hour-by-hour",
-        "WEEK"  => "day-by-day",
-        "MONTH" => "day-by-day",
-        "YEAR"  => "day-by-day",
-        _       => "auto"
+        GroupingLive  => "min-by-min",
+        GroupingDay   => "hour-by-hour",
+        GroupingWeek  => "day-by-day",
+        GroupingMonth => "day-by-day",
+        GroupingYear  => "day-by-day",
+        _             => "auto"
     };
 
     private string GroupingGranularityNote => grouping?.ToUpperInvariant() switch
     {
-        "LIVE"  => "Each data point represents one minute of data for the selected hour.",
-        "DAY"   => "Each data point represents one hour of data.",
-        "WEEK"  => "Each data point represents one day of data.",
-        "MONTH" => "Each data point represents one day of data.",
-        "YEAR"  => "Each data point represents one day of data.",
-        _       => "Grouping is chosen automatically based on the selected date range."
+        GroupingLive  => "Each data point represents one minute of data for the selected hour.",
+        GroupingDay   => "Each data point represents one hour of data.",
+        GroupingWeek  => "Each data point represents one day of data.",
+        GroupingMonth => "Each data point represents one day of data.",
+        GroupingYear  => "Each data point represents one day of data.",
+        _             => "Grouping is chosen automatically based on the selected date range."
     };
 
     private string? ValidateDateRange()
@@ -289,11 +294,11 @@ else
         var span = toDate - fromDate;
         return grouping?.ToUpperInvariant() switch
         {
-            "LIVE"  when span > TimeSpan.FromHours(1)       => "Live grouping: maximum range is 1 hour (minute-by-minute data).",
-            "DAY"   when span > TimeSpan.FromDays(2)        => "Day grouping: maximum range is 2 days (hour-by-hour data).",
-            "WEEK"  when span > TimeSpan.FromDays(14)       => "Week grouping: maximum range is 14 days (day-by-day data).",
-            "MONTH" when span > TimeSpan.FromDays(60)       => "Month grouping: maximum range is 60 days (day-by-day data).",
-            "YEAR"  when span > TimeSpan.FromDays(13 * 31)  => "Year grouping: maximum range is 13 months (day-by-day data).",
+            GroupingLive  when span > TimeSpan.FromHours(1)       => "Live grouping: maximum range is 1 hour (minute-by-minute data).",
+            GroupingDay   when span > TimeSpan.FromDays(2)        => "Day grouping: maximum range is 2 days (hour-by-hour data).",
+            GroupingWeek  when span > TimeSpan.FromDays(14)       => "Week grouping: maximum range is 14 days (day-by-day data).",
+            GroupingMonth when span > TimeSpan.FromDays(60)       => "Month grouping: maximum range is 60 days (day-by-day data).",
+            GroupingYear  when span > TimeSpan.FromDays(13 * 31)  => "Year grouping: maximum range is 13 months (day-by-day data).",
             _ => null
         };
     }
@@ -326,11 +331,11 @@ else
     private async Task LoadTimeSeries()
     {
         if (string.IsNullOrEmpty(accountNumber) || string.IsNullOrEmpty(euid))
-        { statusMessage = "❌ Account or EUID not set."; return; }
+        { statusMessage = "Account or EUID not set."; return; }
 
         rangeValidationMessage = ValidateDateRange();
         if (rangeValidationMessage is not null)
-        { statusMessage = $"❌ {rangeValidationMessage}"; return; }
+        { statusMessage = rangeValidationMessage; return; }
 
         isLoading = true;
         statusMessage = "Loading...";
@@ -338,66 +343,26 @@ else
 
         try
         {
-            var raw = await Api.GetTimeSeriesRawAsync(accountNumber, euid, fromDate, toDate,
+            var result = await Api.GetTimeSeriesAsync(accountNumber, euid, fromDate, toDate,
                 string.IsNullOrEmpty(grouping) ? null : grouping);
 
-            var doc = System.Text.Json.JsonDocument.Parse(raw);
-            var root = doc.RootElement.GetProperty("data");
+            timeSeriesData = result.Points;
 
-            if (root.TryGetProperty("octoHeatPumpTimeSeriesPerformance", out var seriesEl)
-                && seriesEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+            statusMessage = result.Status switch
             {
-                foreach (var item in seriesEl.EnumerateArray())
-                {
-                    var pt = new ChartPoint();
-
-                    if (item.TryGetProperty("endAt", out var endAt) && DateTime.TryParse(endAt.GetString(), out var dt))
-                        pt.EndAt = dt;
-
-                    var energyOut = GetNestedValue(item, "energyOutput");
-                    var energyIn = GetNestedValue(item, "energyInput");
-                    var outdoor = GetNestedValue(item, "outdoorTemperature");
-
-                    pt.EnergyOutputVal = energyOut ?? 0;
-                    pt.EnergyInputVal = energyIn ?? 0;
-                    pt.OutdoorTempVal = outdoor ?? 0;
-                    pt.Cop = energyIn > 0 ? (energyOut ?? 0) / energyIn.Value : 0;
-
-                    timeSeriesData.Add(pt);
-                }
-
-                statusMessage = $"✅ Loaded {timeSeriesData.Count} data points";
-            }
-            else if (root.TryGetProperty("octoHeatPumpTimeSeriesPerformance", out var nullEl)
-                     && nullEl.ValueKind == System.Text.Json.JsonValueKind.Null)
-            {
-                statusMessage = "❌ No data for this date range. Try a different period.";
-            }
-            else
-            {
-                statusMessage = "❌ Unexpected response format from the API.";
-            }
+                TimeSeriesStatus.Ok => $"Loaded {timeSeriesData.Count} data points.",
+                TimeSeriesStatus.NoData => "No data for this date range. Try a different period.",
+                _ => "Unexpected response format from the API."
+            };
         }
         catch (Exception ex)
         {
-            statusMessage = $"❌ {ex.Message}";
+            statusMessage = $"Error: {ex.Message}";
         }
         finally
         {
             isLoading = false;
         }
-    }
-
-    private static double? GetNestedValue(System.Text.Json.JsonElement item, string property)
-    {
-        if (item.TryGetProperty(property, out var el) && el.TryGetProperty("value", out var val))
-        {
-            var str = val.GetString();
-            if (double.TryParse(str, System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out var result))
-                return result;
-        }
-        return null;
     }
 
     private static string Avg(IEnumerable<double> values)
@@ -423,4 +388,3 @@ else
         return values.Sum().ToString("F2");
     }
 }
-
