@@ -13,7 +13,15 @@
             <h3>Initial Setup</h3>
             <p>Save your account number and API key in <a href="/settings">Account Settings</a>, then set up the device.</p>
             <button @onclick="SetupDevice" class="btn btn-primary" disabled="@isLoading">
-                @(isLoading ? "Setting up..." : "Setup Device")
+                @if (isLoading)
+                {
+                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                    <span>Setting up...</span>
+                }
+                else
+                {
+                    <span>Setup Device</span>
+                }
             </button>
             @if (!string.IsNullOrEmpty(errorMessage))
             {
@@ -31,7 +39,15 @@ else
                 <span class="ms-3 text-muted">Device:</span> <strong>@deviceId</strong>
             </div>
             <button @onclick="RefreshDashboard" class="btn btn-outline-success btn-sm" disabled="@isLoading">
-                @(isLoading ? "Refreshing..." : "⟳ Refresh")
+                @if (isLoading)
+                {
+                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                    <span>Refreshing...</span>
+                }
+                else
+                {
+                    <span>Refresh</span>
+                }
             </button>
         </div>
     </div>
