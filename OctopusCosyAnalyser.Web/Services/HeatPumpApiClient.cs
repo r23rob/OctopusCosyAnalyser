@@ -106,6 +106,37 @@ public class HeatPumpApiClient
         response.EnsureSuccessStatusCode();
     }
 
+    // ── Controllers at Location (Multi-HP) ──────────────────────────
+
+    public async Task<string> GetControllersAtLocationRawAsync(string accountNumber, int propertyId)
+    {
+        var response = await _http.GetAsync($"/api/heatpump/controllers-at-location/{accountNumber}/{propertyId}");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    // ── Applicable Rates (Tariff) ─────────────────────────────────
+
+    public async Task<string> GetApplicableRatesRawAsync(string accountNumber)
+    {
+        var response = await _http.GetAsync($"/api/heatpump/rates/{accountNumber}");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    // ── Cost of Usage ─────────────────────────────────────────────
+
+    public async Task<string> GetCostOfUsageRawAsync(string accountNumber, DateTime? from = null, DateTime? to = null)
+    {
+        var fromStr = (from ?? DateTime.UtcNow.AddDays(-7)).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+        var toStr = (to ?? DateTime.UtcNow).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+
+        var response = await _http.GetAsync(
+            $"/api/heatpump/cost/{accountNumber}?from={Uri.EscapeDataString(fromStr)}&to={Uri.EscapeDataString(toStr)}");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
+
     // ── Tado Settings ─────────────────────────────────────────────────
 
     public async Task<TadoSettingsDto?> GetTadoSettingsAsync()

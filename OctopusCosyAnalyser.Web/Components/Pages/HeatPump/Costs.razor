@@ -1,0 +1,359 @@
+@page "/heatpump/costs"
+@inject HeatPumpApiClient Api
+@rendermode InteractiveServer
+
+<PageTitle>Heat Pump - Costs</PageTitle>
+
+<h1>Cost Analysis</h1>
+<p class="text-muted">View your heat pump running costs and tariff rates over time.</p>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (string.IsNullOrEmpty(accountNumber))
+{
+    <div class="alert alert-warning">No device set up. Go to the <a href="/heatpump">Dashboard</a> to run setup.</div>
+}
+else
+{
+    <!-- Date Range Controls -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label">From</label>
+                    <input @bind="fromDate" type="datetime-local" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">To</label>
+                    <input @bind="toDate" type="datetime-local" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary btn-sm w-100" @onclick="LoadData" disabled="@isLoading">
+                        @(isLoading ? "Loading..." : "Load Data")
+                    </button>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Quick Range</label>
+                    <div class="btn-group btn-group-sm w-100">
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(1)">1 Day</button>
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(7)">7 Days</button>
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(30)">30 Days</button>
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(90)">90 Days</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        <div class="alert alert-info py-1 small">@statusMessage</div>
+    }
+
+    <!-- Cost Summary Cards -->
+    @if (costLoaded)
+    {
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h6 class="card-subtitle text-muted">Total Cost (inc. tax)</h6>
+                        <h3 class="card-title">@FormatPence(totalCostInclTax)</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h6 class="card-subtitle text-muted">Unit Rate Cost</h6>
+                        <h3 class="card-title">@FormatPence(unitRateCostInclTax)</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h6 class="card-subtitle text-muted">Standing Charge</h6>
+                        <h3 class="card-title">@FormatPence(standingChargeCostInclTax)</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h6 class="card-subtitle text-muted">Total Usage</h6>
+                        <h3 class="card-title">@totalUsageKwh.ToString("F1") kWh</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (costRates.Count > 0)
+        {
+            <div class="row mb-3">
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h6 class="card-subtitle text-muted">Avg Daily Cost</h6>
+                            <h3 class="card-title">@FormatPence(avgDailyCost)</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h6 class="card-subtitle text-muted">Avg Unit Rate</h6>
+                            <h3 class="card-title">@(totalUsageKwh > 0 ? (unitRateCostInclTax / totalUsageKwh * 100).ToString("F2") : "—") p/kWh</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cost Breakdown Chart -->
+            <div class="card mb-3">
+                <div class="card-header"><strong>Cost by Rate Period</strong></div>
+                <div class="card-body">
+                    <RadzenChart Style="height: 350px">
+                        <RadzenColumnSeries Data="@costRates" CategoryProperty="Label" ValueProperty="CostInclTax"
+                                            Title="Cost (p)" Fill="#ff6600" />
+                        <RadzenCategoryAxis>
+                            <RadzenGridLines Visible="true" />
+                        </RadzenCategoryAxis>
+                        <RadzenValueAxis>
+                            <RadzenGridLines Visible="true" />
+                            <RadzenAxisTitle Text="Cost (pence)" />
+                        </RadzenValueAxis>
+                        <RadzenLegend Position="LegendPosition.Bottom" />
+                    </RadzenChart>
+                </div>
+            </div>
+
+            <!-- Usage by Rate Period Chart -->
+            <div class="card mb-3">
+                <div class="card-header"><strong>Usage by Rate Period</strong></div>
+                <div class="card-body">
+                    <RadzenChart Style="height: 350px">
+                        <RadzenColumnSeries Data="@costRates" CategoryProperty="Label" ValueProperty="UsageKwh"
+                                            Title="Usage (kWh)" Fill="#0066cc" />
+                        <RadzenCategoryAxis>
+                            <RadzenGridLines Visible="true" />
+                        </RadzenCategoryAxis>
+                        <RadzenValueAxis>
+                            <RadzenGridLines Visible="true" />
+                            <RadzenAxisTitle Text="Usage (kWh)" />
+                        </RadzenValueAxis>
+                        <RadzenLegend Position="LegendPosition.Bottom" />
+                    </RadzenChart>
+                </div>
+            </div>
+        }
+    }
+
+    <!-- Current Rates Section -->
+    @if (ratesLoaded)
+    {
+        <div class="card mb-3">
+            <div class="card-header"><strong>Current Tariff Rates</strong></div>
+            <div class="card-body">
+                @if (!string.IsNullOrEmpty(ratesRawJson))
+                {
+                    <pre class="small bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto;">@ratesRawJson</pre>
+                }
+                else
+                {
+                    <p class="text-muted">No rate data available.</p>
+                }
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private string? accountNumber;
+    private string? errorMessage;
+    private string? statusMessage;
+    private bool isLoading;
+    private bool costLoaded;
+    private bool ratesLoaded;
+
+    private DateTime fromDate = DateTime.UtcNow.AddDays(-7);
+    private DateTime toDate = DateTime.UtcNow;
+
+    // Cost summary
+    private double totalCostInclTax;
+    private double unitRateCostInclTax;
+    private double standingChargeCostInclTax;
+    private double totalUsageKwh;
+    private double avgDailyCost;
+    private string costCurrency = "GBP";
+
+    // Rate breakdown
+    private List<CostRatePoint> costRates = [];
+    private string? ratesRawJson;
+
+    private sealed class CostRatePoint
+    {
+        public string Label { get; set; } = "";
+        public double CostInclTax { get; set; }
+        public double UsageKwh { get; set; }
+        public double UnitRate { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var devices = await Api.GetDevicesAsync();
+            if (devices.Length > 0)
+            {
+                accountNumber = devices[0].AccountNumber;
+            }
+            else
+            {
+                var settings = await Api.GetSettingsAsync();
+                var s = settings.FirstOrDefault();
+                if (s != null) accountNumber = s.AccountNumber;
+            }
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+
+    private void SetRange(int days)
+    {
+        toDate = DateTime.UtcNow;
+        fromDate = DateTime.UtcNow.AddDays(-days);
+    }
+
+    private async Task LoadData()
+    {
+        if (string.IsNullOrEmpty(accountNumber))
+        { statusMessage = "Account not set."; return; }
+
+        isLoading = true;
+        statusMessage = "Loading cost data...";
+        costLoaded = false;
+        ratesLoaded = false;
+
+        try
+        {
+            // Load cost of usage
+            await LoadCostOfUsage();
+
+            // Load applicable rates
+            await LoadApplicableRates();
+
+            statusMessage = costLoaded ? "Data loaded successfully." : "Could not load cost data. The query schema may need adjustment after introspection.";
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadCostOfUsage()
+    {
+        try
+        {
+            var raw = await Api.GetCostOfUsageRawAsync(accountNumber!, fromDate, toDate);
+            var doc = System.Text.Json.JsonDocument.Parse(raw);
+            var root = doc.RootElement.GetProperty("data");
+
+            if (root.TryGetProperty("costOfUsage", out var costEl) && costEl.ValueKind != System.Text.Json.JsonValueKind.Null)
+            {
+                totalCostInclTax = GetDoubleValue(costEl, "totalCostInclTax");
+                unitRateCostInclTax = GetDoubleValue(costEl, "unitRateCostInclTax");
+                standingChargeCostInclTax = GetDoubleValue(costEl, "standingChargeCostInclTax");
+                totalUsageKwh = GetDoubleValue(costEl, "totalUsageKwh");
+
+                if (costEl.TryGetProperty("costCurrency", out var curr))
+                    costCurrency = curr.GetString() ?? "GBP";
+
+                var days = (toDate - fromDate).TotalDays;
+                avgDailyCost = days > 0 ? totalCostInclTax / days : 0;
+
+                // Parse rate breakdown
+                costRates.Clear();
+                if (costEl.TryGetProperty("rates", out var ratesEl) && ratesEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    int idx = 0;
+                    foreach (var rate in ratesEl.EnumerateArray())
+                    {
+                        idx++;
+                        var validFrom = rate.TryGetProperty("validFrom", out var vf) ? vf.GetString() : null;
+                        var label = validFrom != null && DateTime.TryParse(validFrom, out var dt)
+                            ? dt.ToString("MMM dd HH:mm")
+                            : $"Period {idx}";
+
+                        costRates.Add(new CostRatePoint
+                        {
+                            Label = label,
+                            CostInclTax = GetDoubleValue(rate, "costInclTax"),
+                            UsageKwh = GetDoubleValue(rate, "usageKwh"),
+                            UnitRate = GetDoubleValue(rate, "unitRateInclTax")
+                        });
+                    }
+                }
+
+                costLoaded = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Cost query error: {ex.Message}. You may need to use the introspect endpoint to discover the exact schema.";
+        }
+    }
+
+    private async Task LoadApplicableRates()
+    {
+        try
+        {
+            var raw = await Api.GetApplicableRatesRawAsync(accountNumber!);
+            ratesRawJson = FormatJson(raw);
+            ratesLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            ratesRawJson = $"Could not load rates: {ex.Message}";
+            ratesLoaded = true;
+        }
+    }
+
+    private static double GetDoubleValue(System.Text.Json.JsonElement el, string property)
+    {
+        if (!el.TryGetProperty(property, out var val)) return 0;
+
+        if (val.ValueKind == System.Text.Json.JsonValueKind.Number && val.TryGetDouble(out var d))
+            return d;
+
+        if (val.ValueKind == System.Text.Json.JsonValueKind.String
+            && double.TryParse(val.GetString(), System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+            return parsed;
+
+        return 0;
+    }
+
+    private static string FormatPence(double pence)
+    {
+        if (pence >= 100)
+            return $"\u00a3{(pence / 100):F2}";
+        return $"{pence:F1}p";
+    }
+
+    private static string FormatJson(string json)
+    {
+        try
+        {
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            return System.Text.Json.JsonSerializer.Serialize(doc, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        }
+        catch { return json; }
+    }
+}

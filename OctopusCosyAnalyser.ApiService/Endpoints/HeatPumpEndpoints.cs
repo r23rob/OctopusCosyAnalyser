@@ -132,6 +132,26 @@ public static class HeatPumpEndpoints
                 }
             }
 
+            // Third fallback: try octoHeatPumpControllersAtLocation if we have a propertyId
+            if (string.IsNullOrWhiteSpace(euid) && propertyId.HasValue)
+            {
+                try
+                {
+                    var controllersData = await client.GetHeatPumpControllersAtLocationAsync(settings.ApiKey, accountNumber, propertyId.Value);
+                    if (controllersData.RootElement.TryGetProperty("data", out var locData)
+                        && locData.TryGetProperty("octoHeatPumpControllersAtLocation", out var controllers)
+                        && controllers.ValueKind == JsonValueKind.Array
+                        && controllers.GetArrayLength() > 0)
+                    {
+                        euid = controllers[0].GetString();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Failed to fetch controllers at location: {ex.Message}");
+                }
+            }
+
             var device = await db.HeatPumpDevices.FirstOrDefaultAsync(d => d.AccountNumber == accountNumber);
             if (device == null)
             {
@@ -328,6 +348,17 @@ public static class HeatPumpEndpoints
             return Results.Ok(data);
         }).WithName("GetHeatPumpCompleteData");
 
+        group.MapGet("/introspect/{typeName}", async (string typeName, string accountNumber, OctopusEnergyClient client, CosyDbContext db) =>
+        {
+            var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
+            if (error is not null)
+                return error;
+
+            var introspectionQuery = $"{{ __type(name: \"{typeName}\") {{ name kind fields {{ name args {{ name type {{ name kind ofType {{ name kind ofType {{ name kind }} }} }} defaultValue }} type {{ name kind ofType {{ name kind ofType {{ name kind }} }} }} }} }} }}";
+            var result = await client.ExecuteRawQueryAsync(settings!.ApiKey, introspectionQuery);
+            return Results.Ok(result);
+        }).WithName("IntrospectType");
+
         group.MapPost("/graphql", async (GraphqlQueryRequest request, OctopusEnergyClient client, CosyDbContext db) =>
         {
             if (string.IsNullOrWhiteSpace(request.AccountNumber))
@@ -448,6 +479,53 @@ public static class HeatPumpEndpoints
                 data = root
             });
         }).WithName("GetHeatPumpTimeSeriesPerformance");
+
+        // ── Controllers at Location (Multi-HP) ────────────────────────
+
+        group.MapGet("/controllers-at-location/{accountNumber}/{propertyId:int}", async (string accountNumber, int propertyId, OctopusEnergyClient client, CosyDbContext db) =>
+        {
+            var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
+            if (error is not null)
+                return error;
+
+            var data = await client.GetHeatPumpControllersAtLocationAsync(settings!.ApiKey, accountNumber, propertyId);
+            return Results.Ok(data);
+        }).WithName("GetControllersAtLocation");
+
+        // ── Applicable Rates (Tariff) ─────────────────────────────────
+
+        group.MapGet("/rates/{accountNumber}", async (string accountNumber, OctopusEnergyClient client, CosyDbContext db) =>
+        {
+            var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
+            if (error is not null)
+                return error;
+
+            var data = await client.GetApplicableRatesAsync(settings!.ApiKey, accountNumber);
+            return Results.Ok(data);
+        }).WithName("GetApplicableRates");
+
+        // ── Cost of Usage ─────────────────────────────────────────────
+
+        group.MapGet("/cost/{accountNumber}", async (string accountNumber, DateTime? from, DateTime? to, OctopusEnergyClient client, CosyDbContext db) =>
+        {
+            var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
+            if (error is not null)
+                return error;
+
+            from ??= DateTime.UtcNow.AddDays(-7);
+            to ??= DateTime.UtcNow;
+
+            var data = await client.GetCostOfUsageAsync(settings!.ApiKey, accountNumber, from.Value, to.Value);
+            var root = data.RootElement.GetProperty("data");
+
+            return Results.Ok(new
+            {
+                accountNumber,
+                from,
+                to,
+                data = root
+            });
+        }).WithName("GetCostOfUsage");
     }
 
     private static HeatPumpSummary MapHeatPumpSummary(JsonElement data)
