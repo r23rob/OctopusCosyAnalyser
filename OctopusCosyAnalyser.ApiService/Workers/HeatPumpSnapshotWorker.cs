@@ -199,13 +199,24 @@ public class HeatPumpSnapshotWorker : BackgroundService
                         }
                     }
 
-                    // Current heating flow temperature
-                    if (heatPump.TryGetProperty("heatingFlowTemperature", out var flowTemp)
-                        && flowTemp.TryGetProperty("currentTemperature", out var currentFlow)
-                        && currentFlow.TryGetProperty("value", out var flowVal))
+                    // Current heating flow temperature and allowable range
+                    if (heatPump.TryGetProperty("heatingFlowTemperature", out var flowTemp))
                     {
-                        if (decimal.TryParse(flowVal.GetString() ?? "", out var flowDec))
+                        if (flowTemp.TryGetProperty("currentTemperature", out var currentFlow)
+                            && currentFlow.TryGetProperty("value", out var flowVal)
+                            && decimal.TryParse(flowVal.GetString() ?? "", out var flowDec))
                             snapshot.HeatingFlowTemperatureCelsius = flowDec;
+
+                        if (flowTemp.TryGetProperty("allowableRange", out var flowRange))
+                        {
+                            if (flowRange.TryGetProperty("minimum", out var flowMin) && flowMin.TryGetProperty("value", out var flowMinVal)
+                                && decimal.TryParse(flowMinVal.GetString() ?? "", out var flowMinDec))
+                                snapshot.HeatingFlowTempAllowableMinCelsius = flowMinDec;
+
+                            if (flowRange.TryGetProperty("maximum", out var flowMax) && flowMax.TryGetProperty("value", out var flowMaxVal)
+                                && decimal.TryParse(flowMaxVal.GetString() ?? "", out var flowMaxDec))
+                                snapshot.HeatingFlowTempAllowableMaxCelsius = flowMaxDec;
+                        }
                     }
                 }
 

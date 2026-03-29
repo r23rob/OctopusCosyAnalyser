@@ -39,6 +39,8 @@ public class HeatPumpSnapshot
     public decimal? WeatherCompensationMinCelsius { get; set; }
     public decimal? WeatherCompensationMaxCelsius { get; set; }
     public decimal? HeatingFlowTemperatureCelsius { get; set; }
+    public decimal? HeatingFlowTempAllowableMinCelsius { get; set; }
+    public decimal? HeatingFlowTempAllowableMaxCelsius { get; set; }
 
     // Metadata
     public DateTime SnapshotTakenAt { get; set; } = DateTime.UtcNow;

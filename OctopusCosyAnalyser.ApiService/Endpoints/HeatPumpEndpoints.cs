@@ -390,6 +390,21 @@ public static class HeatPumpEndpoints
             });
         }).WithName("GetHeatPumpSnapshots");
 
+        group.MapGet("/snapshots/{deviceId}/latest", async (string deviceId, CosyDbContext db) =>
+        {
+            var latest = await db.HeatPumpSnapshots
+                .Where(s => s.DeviceId == deviceId)
+                .OrderByDescending(s => s.SnapshotTakenAt)
+                .Select(s => new { s.SnapshotTakenAt, s.CoefficientOfPerformance })
+                .FirstOrDefaultAsync();
+
+            if (latest is null)
+                return Results.Ok(new { hasData = false, snapshotTakenAt = (DateTime?)null, minutesAgo = (double?)null });
+
+            var minutesAgo = (DateTime.UtcNow - latest.SnapshotTakenAt).TotalMinutes;
+            return Results.Ok(new { hasData = true, latest.SnapshotTakenAt, minutesAgo });
+        }).WithName("GetLatestSnapshot");
+
         group.MapGet("/time-ranged/{accountNumber}/{euid}", async (string accountNumber, string euid, DateTime? from, DateTime? to, OctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);

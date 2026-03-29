@@ -43,10 +43,22 @@ public sealed class HeatPumpSnapshotDto
     public decimal? WeatherCompensationMinCelsius { get; set; }
     public decimal? WeatherCompensationMaxCelsius { get; set; }
     public decimal? HeatingFlowTemperatureCelsius { get; set; }
+    public decimal? HeatingFlowTempAllowableMinCelsius { get; set; }
+    public decimal? HeatingFlowTempAllowableMaxCelsius { get; set; }
 
     // Metadata
     public DateTime SnapshotTakenAt { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+/// Lightweight status of the latest snapshot for health monitoring.
+/// </summary>
+public sealed class LatestSnapshotDto
+{
+    public bool HasData { get; set; }
+    public DateTime? SnapshotTakenAt { get; set; }
+    public double? MinutesAgo { get; set; }
 }
 
 /// <summary>
