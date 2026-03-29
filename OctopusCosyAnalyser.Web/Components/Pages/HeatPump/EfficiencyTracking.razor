@@ -29,7 +29,15 @@
             </div>
             <div class="col-md-2">
                 <button class="btn btn-primary btn-sm w-100" @onclick="LoadData" disabled="@isLoading">
-                    @(isLoading ? "Loading..." : "Load Data")
+                    @if (isLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        <span>Loading...</span>
+                    }
+                    else
+                    {
+                        <span>Load Data</span>
+                    }
                 </button>
             </div>
             <div class="col-md-4">
@@ -372,7 +380,15 @@
                                 <td>@(r.ComfortScore.HasValue ? new string('⭐', r.ComfortScore.Value) : "")</td>
                                 <td>
                                     <button class="btn btn-outline-secondary btn-sm me-1" @onclick="() => EditRecord(r)">Edit</button>
-                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteRecord(r.Id)">Del</button>
+                                    @if (confirmDeleteId == r.Id)
+                                    {
+                                        <button class="btn btn-danger btn-sm me-1" @onclick="() => DeleteRecord(r.Id)">Confirm</button>
+                                        <button class="btn btn-outline-secondary btn-sm" @onclick="CancelDelete">Cancel</button>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => ConfirmDelete(r.Id)">Del</button>
+                                    }
                                 </td>
                             </tr>
                         }
@@ -394,6 +410,7 @@ else if (!isLoading)
     private string? statusMessage;
     private bool showForm;
     private int? editingId;
+    private int? confirmDeleteId;
 
     // Date range filter
     private DateOnly fromDate = DateOnly.FromDateTime(DateTime.Today.AddDays(-90));
@@ -568,8 +585,12 @@ else if (!isLoading)
         }
     }
 
+    private void ConfirmDelete(int id) => confirmDeleteId = id;
+    private void CancelDelete() => confirmDeleteId = null;
+
     private async Task DeleteRecord(int id)
     {
+        confirmDeleteId = null;
         isLoading = true;
         try
         {

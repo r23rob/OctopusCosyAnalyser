@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Globalization;
 using OctopusCosyAnalyser.Shared.Models;
 
 namespace OctopusCosyAnalyser.Web.Services;
@@ -72,6 +74,59 @@ public class HeatPumpApiClient
         var response = await _http.GetAsync(url);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
+    }
+
+    /// <summary>
+    /// Fetches time-series data and parses the raw GraphQL response into typed points.
+    /// </summary>
+    public async Task<TimeSeriesResult> GetTimeSeriesAsync(string accountNumber, string euid, DateTime from, DateTime to, string? grouping = null)
+    {
+        var raw = await GetTimeSeriesRawAsync(accountNumber, euid, from, to, grouping);
+        var doc = JsonDocument.Parse(raw);
+        var root = doc.RootElement.GetProperty("data");
+
+        if (root.TryGetProperty("octoHeatPumpTimeSeriesPerformance", out var seriesEl)
+            && seriesEl.ValueKind == JsonValueKind.Array)
+        {
+            var points = new List<TimeSeriesChartPoint>();
+            foreach (var item in seriesEl.EnumerateArray())
+            {
+                var pt = new TimeSeriesChartPoint();
+
+                if (item.TryGetProperty("endAt", out var endAt) && DateTime.TryParse(endAt.GetString(), out var dt))
+                    pt.EndAt = dt;
+
+                var energyOut = GetNestedValue(item, "energyOutput");
+                var energyIn = GetNestedValue(item, "energyInput");
+                var outdoor = GetNestedValue(item, "outdoorTemperature");
+
+                pt.EnergyOutputVal = energyOut ?? 0;
+                pt.EnergyInputVal = energyIn ?? 0;
+                pt.OutdoorTempVal = outdoor ?? 0;
+                pt.Cop = energyIn > 0 ? (energyOut ?? 0) / energyIn.Value : 0;
+
+                points.Add(pt);
+            }
+            return new TimeSeriesResult { Points = points, Status = TimeSeriesStatus.Ok };
+        }
+        else if (root.TryGetProperty("octoHeatPumpTimeSeriesPerformance", out var nullEl)
+                 && nullEl.ValueKind == JsonValueKind.Null)
+        {
+            return new TimeSeriesResult { Points = [], Status = TimeSeriesStatus.NoData };
+        }
+
+        return new TimeSeriesResult { Points = [], Status = TimeSeriesStatus.UnexpectedFormat };
+    }
+
+    private static double? GetNestedValue(JsonElement item, string property)
+    {
+        if (item.TryGetProperty(property, out var el) && el.TryGetProperty("value", out var val))
+        {
+            var str = val.GetString();
+            if (double.TryParse(str, NumberStyles.Any, CultureInfo.InvariantCulture, out var result))
+                return result;
+        }
+        return null;
     }
 
     // ── Time Ranged (Octopus API aggregated) ─────────────────────────
@@ -218,5 +273,23 @@ public class HeatPumpApiClient
         foreach (var (key, value) in extra) parts.Add($"{key}={value}");
         return parts.Count > 0 ? "?" + string.Join("&", parts) : string.Empty;
     }
+}
+
+/// <summary>View-model for Radzen time-series charts — all numeric properties for chart binding.</summary>
+public sealed class TimeSeriesChartPoint
+{
+    public DateTime EndAt { get; set; }
+    public double Cop { get; set; }
+    public double EnergyOutputVal { get; set; }
+    public double EnergyInputVal { get; set; }
+    public double OutdoorTempVal { get; set; }
+}
+
+public enum TimeSeriesStatus { Ok, NoData, UnexpectedFormat }
+
+public sealed class TimeSeriesResult
+{
+    public List<TimeSeriesChartPoint> Points { get; set; } = [];
+    public TimeSeriesStatus Status { get; set; }
 }
 

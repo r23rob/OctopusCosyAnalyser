@@ -32,7 +32,15 @@ else
                 </div>
                 <div class="col-md-2">
                     <button class="btn btn-primary btn-sm w-100" @onclick="LoadData" disabled="@isLoading">
-                        @(isLoading ? "Loading..." : "Load Data")
+                        @if (isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            <span>Loading...</span>
+                        }
+                        else
+                        {
+                            <span>Load Data</span>
+                        }
                     </button>
                 </div>
                 <div class="col-md-6">
@@ -388,33 +396,37 @@ else
 
     private void BuildChartData()
     {
-        // Chart A: COP vs Outdoor Temperature
+        BuildCopVsOutdoorChart();
+        BuildCopVsFlowChart();
+        BuildRoomTempCharts();
+        BuildWeatherCompensationChart();
+        BuildComfortSummaryTable();
+        BuildDutyCycleTable();
+        BuildRecommendations();
+    }
+
+    private void BuildCopVsOutdoorChart()
+    {
         copVsOutdoor = snapshots
             .Where(s => s.CoefficientOfPerformance.HasValue && s.OutdoorTemperatureCelsius.HasValue)
             .Select(s => new ScatterPoint { X = (double)s.OutdoorTemperatureCelsius!.Value, Y = (double)s.CoefficientOfPerformance!.Value })
             .ToList();
 
-        if (copVsOutdoor.Count > 0)
-        {
-            var minX = copVsOutdoor.Min(p => p.X);
-            var maxX = copVsOutdoor.Max(p => p.X);
-            cop3RefLine = [new ScatterPoint { X = minX, Y = 3.0 }, new ScatterPoint { X = maxX, Y = 3.0 }];
-        }
+        cop3RefLine = BuildHorizontalRefLine(copVsOutdoor, 3.0);
+    }
 
-        // Chart B: COP vs Flow Temperature
+    private void BuildCopVsFlowChart()
+    {
         copVsFlow = snapshots
             .Where(s => s.CoefficientOfPerformance.HasValue && s.HeatingFlowTemperatureCelsius.HasValue)
             .Select(s => new ScatterPoint { X = (double)s.HeatingFlowTemperatureCelsius!.Value, Y = (double)s.CoefficientOfPerformance!.Value })
             .ToList();
 
-        if (copVsFlow.Count > 0)
-        {
-            var minX = copVsFlow.Min(p => p.X);
-            var maxX = copVsFlow.Max(p => p.X);
-            cop3RefLineFlow = [new ScatterPoint { X = minX, Y = 3.0 }, new ScatterPoint { X = maxX, Y = 3.0 }];
-        }
+        cop3RefLineFlow = BuildHorizontalRefLine(copVsFlow, 3.0);
+    }
 
-        // Chart C + E: Room Temp vs Setpoint over Time
+    private void BuildRoomTempCharts()
+    {
         roomTempOverTime = snapshots
             .Where(s => s.RoomTemperatureCelsius.HasValue && s.HeatingZoneSetpointCelsius.HasValue)
             .Select(s => new TimePoint
@@ -427,55 +439,58 @@ else
             .OrderBy(p => p.Time)
             .ToList();
 
-        // Markers where room is below setpoint - 0.5
         roomBelowSetpointMarkers = roomTempOverTime
             .Where(p => p.RoomTemp < p.Setpoint - 0.5)
             .ToList();
+    }
 
-        // Chart D: Weather Compensation Effectiveness
-        var wcSnapshotsWithRoom = snapshots
+    private void BuildWeatherCompensationChart()
+    {
+        var wcSnapshots = snapshots
             .Where(s => s.OutdoorTemperatureCelsius.HasValue && s.HeatingFlowTemperatureCelsius.HasValue)
             .ToList();
 
-        wcAtTarget = wcSnapshotsWithRoom
-            .Where(s => !s.RoomTemperatureCelsius.HasValue || !s.HeatingZoneSetpointCelsius.HasValue
-                        || (double)s.RoomTemperatureCelsius!.Value >= (double)s.HeatingZoneSetpointCelsius!.Value - 0.5)
+        wcAtTarget = wcSnapshots
+            .Where(s => !IsRoomBelowTarget(s))
             .Select(s => new ScatterPoint { X = (double)s.OutdoorTemperatureCelsius!.Value, Y = (double)s.HeatingFlowTemperatureCelsius!.Value })
             .ToList();
 
-        wcBelowTarget = wcSnapshotsWithRoom
-            .Where(s => s.RoomTemperatureCelsius.HasValue && s.HeatingZoneSetpointCelsius.HasValue
-                        && (double)s.RoomTemperatureCelsius!.Value < (double)s.HeatingZoneSetpointCelsius!.Value - 0.5)
+        wcBelowTarget = wcSnapshots
+            .Where(IsRoomBelowTarget)
             .Select(s => new ScatterPoint { X = (double)s.OutdoorTemperatureCelsius!.Value, Y = (double)s.HeatingFlowTemperatureCelsius!.Value })
             .ToList();
 
-        var wcMinValues = snapshots.Where(s => s.WeatherCompensationMinCelsius.HasValue).ToList();
-        var wcMaxValues = snapshots.Where(s => s.WeatherCompensationMaxCelsius.HasValue).ToList();
+        wcMinRef = [];
+        wcMaxRef = [];
 
-        if (wcSnapshotsWithRoom.Count > 0 && wcMinValues.Count > 0)
-        {
-            var minX = wcSnapshotsWithRoom.Min(s => (double)s.OutdoorTemperatureCelsius!.Value);
-            var maxX = wcSnapshotsWithRoom.Max(s => (double)s.OutdoorTemperatureCelsius!.Value);
-            double wcMin = (double)wcMinValues.First().WeatherCompensationMinCelsius!.Value;
-            wcMinRef = [new ScatterPoint { X = minX, Y = wcMin }, new ScatterPoint { X = maxX, Y = wcMin }];
-            if (wcMaxValues.Count > 0)
-            {
-                double wcMax = (double)wcMaxValues.First().WeatherCompensationMaxCelsius!.Value;
-                wcMaxRef = [new ScatterPoint { X = minX, Y = wcMax }, new ScatterPoint { X = maxX, Y = wcMax }];
-            }
-        }
+        if (wcSnapshots.Count == 0) return;
 
-        // Comfort Efficiency Summary Table
+        var minX = wcSnapshots.Min(s => (double)s.OutdoorTemperatureCelsius!.Value);
+        var maxX = wcSnapshots.Max(s => (double)s.OutdoorTemperatureCelsius!.Value);
+
+        var firstWcMin = snapshots.FirstOrDefault(s => s.WeatherCompensationMinCelsius.HasValue);
+        if (firstWcMin != null)
+            wcMinRef = [new ScatterPoint { X = minX, Y = (double)firstWcMin.WeatherCompensationMinCelsius!.Value }, new ScatterPoint { X = maxX, Y = (double)firstWcMin.WeatherCompensationMinCelsius!.Value }];
+
+        var firstWcMax = snapshots.FirstOrDefault(s => s.WeatherCompensationMaxCelsius.HasValue);
+        if (firstWcMax != null)
+            wcMaxRef = [new ScatterPoint { X = minX, Y = (double)firstWcMax.WeatherCompensationMaxCelsius!.Value }, new ScatterPoint { X = maxX, Y = (double)firstWcMax.WeatherCompensationMaxCelsius!.Value }];
+    }
+
+    private void BuildComfortSummaryTable()
+    {
         var withRoomData = snapshots.Where(s => s.RoomTemperatureCelsius.HasValue && s.HeatingZoneSetpointCelsius.HasValue).ToList();
-        var keepingTemp = withRoomData.Where(s => (double)s.RoomTemperatureCelsius!.Value >= (double)s.HeatingZoneSetpointCelsius!.Value - 0.5).ToList();
-        var notKeepingTemp = withRoomData.Where(s => (double)s.RoomTemperatureCelsius!.Value < (double)s.HeatingZoneSetpointCelsius!.Value - 0.5).ToList();
+        var keepingTemp = withRoomData.Where(s => !IsRoomBelowTarget(s)).ToList();
+        var notKeepingTemp = withRoomData.Where(IsRoomBelowTarget).ToList();
 
         comfortSummary = [
-            BuildComfortRow("✅ Keeping Temp", keepingTemp),
-            BuildComfortRow("❌ Not Keeping Temp", notKeepingTemp)
+            BuildComfortRow("Keeping Temp", keepingTemp),
+            BuildComfortRow("Not Keeping Temp", notKeepingTemp)
         ];
+    }
 
-        // Heating Duty Cycle
+    private void BuildDutyCycleTable()
+    {
         var withDemand = snapshots.Where(s => s.HeatingZoneHeatDemand.HasValue).ToList();
         dutyCyclePercent = withDemand.Count > 0
             ? withDemand.Count(s => s.HeatingZoneHeatDemand == true) * 100.0 / withDemand.Count
@@ -484,16 +499,21 @@ else
         dutyCycleByPeriod = [];
         if (withDemand.Count >= 4)
         {
-            dutyCycleByPeriod.Add(BuildDutyCycleRow("Morning (6–12)", withDemand, 6, 12));
-            dutyCycleByPeriod.Add(BuildDutyCycleRow("Afternoon (12–18)", withDemand, 12, 18));
-            dutyCycleByPeriod.Add(BuildDutyCycleRow("Evening (18–24)", withDemand, 18, 24));
-            dutyCycleByPeriod.Add(BuildDutyCycleRow("Night (0–6)", withDemand, 0, 6));
+            dutyCycleByPeriod.Add(BuildDutyCycleRow("Morning (6-12)", withDemand, 6, 12));
+            dutyCycleByPeriod.Add(BuildDutyCycleRow("Afternoon (12-18)", withDemand, 12, 18));
+            dutyCycleByPeriod.Add(BuildDutyCycleRow("Evening (18-24)", withDemand, 18, 24));
+            dutyCycleByPeriod.Add(BuildDutyCycleRow("Night (0-6)", withDemand, 0, 6));
         }
+    }
 
-        // Recommendations
+    private void BuildRecommendations()
+    {
         recommendations = [];
 
+        var withRoomData = snapshots.Where(s => s.RoomTemperatureCelsius.HasValue && s.HeatingZoneSetpointCelsius.HasValue).ToList();
+        var keepingTemp = withRoomData.Where(s => !IsRoomBelowTarget(s)).ToList();
         var keepingCop = keepingTemp.Where(s => s.CoefficientOfPerformance.HasValue).Select(s => (double)s.CoefficientOfPerformance!.Value).ToList();
+
         if (keepingCop.Count > 0 && keepingCop.Average() < 3.0)
             recommendations.Add("Consider lowering your WC max flow temperature to improve efficiency.");
 
@@ -501,15 +521,28 @@ else
             recommendations.Add("Your system is running almost continuously. Your WC min may be too low for very cold days.");
 
         if (dutyCyclePercent > 0 && dutyCyclePercent < 30)
-            recommendations.Add("Your system has headroom. Consider lowering your setpoint by 0.5°C to save energy.");
+            recommendations.Add("Your system has headroom. Consider lowering your setpoint by 0.5 C to save energy.");
 
-        var mildWeatherSnapshots = snapshots
+        var mildWeatherCop = snapshots
             .Where(s => s.OutdoorTemperatureCelsius.HasValue && (double)s.OutdoorTemperatureCelsius!.Value > 5
                         && s.CoefficientOfPerformance.HasValue)
             .Select(s => (double)s.CoefficientOfPerformance!.Value)
             .ToList();
-        if (mildWeatherSnapshots.Count > 0 && mildWeatherSnapshots.Average() < 3.0)
+
+        if (mildWeatherCop.Count > 0 && mildWeatherCop.Average() < 3.0)
             recommendations.Add("COP is lower than expected for mild weather. Check filters and system health.");
+    }
+
+    private static bool IsRoomBelowTarget(HeatPumpSnapshotDto s) =>
+        s.RoomTemperatureCelsius.HasValue && s.HeatingZoneSetpointCelsius.HasValue
+        && (double)s.RoomTemperatureCelsius!.Value < (double)s.HeatingZoneSetpointCelsius!.Value - 0.5;
+
+    private static List<ScatterPoint> BuildHorizontalRefLine(List<ScatterPoint> data, double yValue)
+    {
+        if (data.Count == 0) return [];
+        var minX = data.Min(p => p.X);
+        var maxX = data.Max(p => p.X);
+        return [new ScatterPoint { X = minX, Y = yValue }, new ScatterPoint { X = maxX, Y = yValue }];
     }
 
     private static ComfortSummaryRow BuildComfortRow(string group, List<HeatPumpSnapshotDto> items)

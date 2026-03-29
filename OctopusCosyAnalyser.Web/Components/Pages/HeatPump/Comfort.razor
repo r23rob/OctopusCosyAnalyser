@@ -14,7 +14,10 @@
 
 @if (isLoading && summary == null)
 {
-    <p><em>Loading sensor data...</em></p>
+    <div class="d-flex align-items-center mt-3">
+        <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+        <span>Loading sensor data...</span>
+    </div>
 }
 else if (summary != null)
 {

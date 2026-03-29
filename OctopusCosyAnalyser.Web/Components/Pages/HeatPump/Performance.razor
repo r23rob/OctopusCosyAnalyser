@@ -14,7 +14,10 @@
 
 @if (isLoading && summary == null)
 {
-    <p><em>Loading live performance data...</em></p>
+    <div class="d-flex align-items-center mt-3">
+        <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+        <span>Loading live performance data...</span>
+    </div>
 }
 else if (summary != null)
 {
@@ -101,7 +104,15 @@ else if (summary != null)
         </div>
         <div class="col-md-2 d-flex align-items-end">
             <button class="btn btn-primary btn-sm w-100" @onclick="LoadSnapshots" disabled="@snapshotsLoading">
-                @(snapshotsLoading ? "Loading..." : "Load Snapshots")
+                @if (snapshotsLoading)
+                {
+                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                    <span>Loading...</span>
+                }
+                else
+                {
+                    <span>Load Snapshots</span>
+                }
             </button>
         </div>
         <div class="col-md-6 d-flex align-items-end">
