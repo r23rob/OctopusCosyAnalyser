@@ -219,14 +219,18 @@ public static class HeatPumpEndpoints
         }).WithName("SyncConsumption");
 
         // Get consumption data
-        group.MapGet("/consumption/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, CosyDbContext db) =>
+        group.MapGet("/consumption/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, int? skip, int? take, CosyDbContext db) =>
         {
             from ??= DateTime.UtcNow.AddDays(-7);
             to ??= DateTime.UtcNow;
+            var actualTake = Math.Min(take ?? 10000, 50000);
 
             var readings = await db.ConsumptionReadings
+                .AsNoTracking()
                 .Where(r => r.DeviceId == deviceId && r.ReadAt >= from && r.ReadAt <= to)
                 .OrderBy(r => r.ReadAt)
+                .Skip(skip ?? 0)
+                .Take(actualTake)
                 .ToListAsync();
 
             return Results.Ok(readings);
@@ -235,7 +239,7 @@ public static class HeatPumpEndpoints
         // Get devices
         group.MapGet("/devices", async (CosyDbContext db) =>
         {
-            var devices = await db.HeatPumpDevices.Where(d => d.IsActive).ToListAsync();
+            var devices = await db.HeatPumpDevices.AsNoTracking().Where(d => d.IsActive).ToListAsync();
             return Results.Ok(devices);
         }).WithName("GetDevices");
 
@@ -328,21 +332,24 @@ public static class HeatPumpEndpoints
             return Results.Ok(data);
         }).WithName("GetHeatPumpCompleteData");
 
-        group.MapPost("/graphql", async (GraphqlQueryRequest request, OctopusEnergyClient client, CosyDbContext db) =>
+        if (app.Environment.IsDevelopment())
         {
-            if (string.IsNullOrWhiteSpace(request.AccountNumber))
-                return Results.BadRequest("Account number is required.");
+            group.MapPost("/graphql", async (GraphqlQueryRequest request, OctopusEnergyClient client, CosyDbContext db) =>
+            {
+                if (string.IsNullOrWhiteSpace(request.AccountNumber))
+                    return Results.BadRequest("Account number is required.");
 
-            if (string.IsNullOrWhiteSpace(request.Query))
-                return Results.BadRequest("Query is required.");
+                if (string.IsNullOrWhiteSpace(request.Query))
+                    return Results.BadRequest("Query is required.");
 
-            var (settings, error) = await GetSettingsForAccountAsync(db, request.AccountNumber);
-            if (error is not null)
-                return error;
+                var (settings, error) = await GetSettingsForAccountAsync(db, request.AccountNumber);
+                if (error is not null)
+                    return error;
 
-            var result = await client.ExecuteRawQueryAsync(settings!.ApiKey, request.Query, request.Variables);
-            return Results.Ok(result);
-        }).WithName("RunGraphqlQuery");
+                var result = await client.ExecuteRawQueryAsync(settings!.ApiKey, request.Query, request.Variables);
+                return Results.Ok(result);
+            }).WithName("RunGraphqlQuery");
+        }
 
         group.MapGet("/controller-euids/{accountNumber}", async (string accountNumber, OctopusEnergyClient client, CosyDbContext db) =>
         {
@@ -370,14 +377,18 @@ public static class HeatPumpEndpoints
             return Results.Ok(summary);
         }).WithName("GetHeatPumpSummary");
 
-        group.MapGet("/snapshots/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, CosyDbContext db) =>
+        group.MapGet("/snapshots/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, int? skip, int? take, CosyDbContext db) =>
         {
             from ??= DateTime.UtcNow.AddDays(-7);
             to ??= DateTime.UtcNow;
+            var actualTake = Math.Min(take ?? 10000, 50000);
 
             var snapshots = await db.HeatPumpSnapshots
+                .AsNoTracking()
                 .Where(s => s.DeviceId == deviceId && s.SnapshotTakenAt >= from && s.SnapshotTakenAt <= to)
                 .OrderBy(s => s.SnapshotTakenAt)
+                .Skip(skip ?? 0)
+                .Take(actualTake)
                 .ToListAsync();
 
             return Results.Ok(new
