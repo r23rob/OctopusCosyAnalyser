@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OctopusCosyAnalyser.AppHost\OctopusCosyAnalyser.AppHost.csproj" />
+    <ProjectReference Include="..\OctopusCosyAnalyser.ApiService\OctopusCosyAnalyser.ApiService.csproj" />
   </ItemGroup>
 
   <ItemGroup>

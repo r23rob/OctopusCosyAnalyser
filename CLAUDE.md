@@ -46,7 +46,7 @@ OctopusCosyAnalyser/
 │   │   └── HeatPump/                   # All heat pump pages
 │   ├── Components/Layout/NavMenu.razor # Navigation sidebar
 │   └── Services/HeatPumpApiClient.cs   # Typed HTTP client → ApiService
-└── OctopusCosyAnalyser.Tests/         # Integration tests (requires Docker)
+└── OctopusCosyAnalyser.Tests/          # NUnit tests (unit + integration)
 ```
 
 ## Key Patterns
@@ -81,7 +81,7 @@ Follow this 4-layer pattern:
 | Table | Purpose |
 |-------|---------|
 | `HeatPumpDevices` | Registered heat pump devices (DeviceId, AccountNumber, MPAN, Euid) |
-| `HeatPumpSnapshots` | 15-min telemetry snapshots (COP, temps, power, heating/hot water zone state, controller state, all sensor readings as JSONB, flow temp allowable range) |
+| `HeatPumpSnapshots` | 15-min telemetry snapshots (COP, temps, power, heating/hot water zone state, controller state, weather compensation, all sensor readings as JSONB, flow temp allowable range) |
 | `ConsumptionReadings` | Smart meter readings (kWh, demand) |
 | `OctopusAccountSettings` | Octopus API credentials (AccountNumber, ApiKey) |
 | `HeatPumpEfficiencyRecords` | Manual daily records for efficiency tracking |
@@ -125,7 +125,7 @@ Consumption history uses basic auth REST:
 
 `HeatPumpSnapshotWorker` runs every **15 minutes**. For each active `HeatPumpDevice`, it:
 1. Calls `GetHeatPumpStatusAndConfigAsync` (the batched 4-in-1 query)
-2. Extracts: COP, heat output, power input, outdoor temp, lifetime performance, room temp/humidity, heating zone setpoints, hot water zone setpoints, controller state (HEATING/IDLE), weather compensation settings, flow temperature + allowable range, all sensor readings (serialised to JSONB)
+2. Extracts: COP, heat output, power input, outdoor temp, lifetime performance, room temp/humidity, heating zone setpoints, hot water zone setpoints, controller state (HEATING/IDLE), weather compensation settings (enabled + min/max range), flow temperature (current + allowable min/max range), all sensor readings (serialised to JSONB)
 3. Upserts a `HeatPumpSnapshot` row (skips duplicates via unique constraint)
 
 ## API Endpoints
@@ -137,6 +137,7 @@ Consumption history uses basic auth REST:
 | GET | `/devices` | List registered devices |
 | GET | `/summary/{deviceId}` | Live parsed summary (COP, temps, zones) |
 | GET | `/snapshots/{deviceId}` | Historical snapshots with date range filter + pagination (skip/take) |
+| GET | `/snapshots/{deviceId}/latest` | Latest snapshot timestamp + health status |
 | GET | `/time-series/{accountNumber}/{euid}` | Bucketed chart data from Octopus API |
 | GET | `/time-ranged/{accountNumber}/{euid}` | Aggregated totals for a date range |
 | GET | `/consumption/{deviceId}` | Smart meter consumption readings + pagination (skip/take) |
@@ -162,7 +163,7 @@ All under `/heatpump`:
 
 | Page | Route | Shows |
 |------|-------|-------|
-| Dashboard | `/heatpump` | Current status overview |
+| Dashboard | `/heatpump` | Current status overview + snapshot worker health indicator |
 | Performance | `/heatpump/performance` | Live COP, heat output, power input |
 | Home Comfort | `/heatpump/comfort` | Indoor temp and humidity |
 | System Health | `/heatpump/system` | Device connectivity, controller state |
@@ -174,11 +175,22 @@ Settings page at `/settings` for Octopus API credentials.
 
 ## Efficiency Analysis
 
-`EfficiencyAnalysisService` computes weather-normalised efficiency for before/after comparisons:
+`EfficiencyCalculationService` computes derived metrics:
 - **Heating Degree Days (HDD)** = max(0, 15.5 - outdoorAvgC) — standard UK baseline
 - **Normalised efficiency** = kWh / HDD (excludes days where HDD = 0)
-- Compares a "change" period against a baseline period
-- Flags unreliable results when sample size is small
+
+`EfficiencyAnalysisService` provides analysis helpers:
+- **Summarise** — computes averages across a set of records (only HDD > 0 days contribute to normalised efficiency)
+- **Compare** — baseline vs change period comparison with improvement % and warnings
+- **GroupByChange** — groups records by ChangeDescription for per-configuration analysis
+- **FilterByTemperatureRange** — filters records by outdoor temperature range
+
+## Tests
+
+Unit tests in `OctopusCosyAnalyser.Tests/` (NUnit):
+- `EfficiencyCalculationServiceTests` — HDD computation, normalised efficiency edge cases
+- `EfficiencyAnalysisServiceTests` — summarise, compare, group, filter, warm day exclusion, warning generation
+- `WebTests` — Aspire integration test (requires Docker)
 
 ## Build & Run
 
@@ -241,6 +253,7 @@ These were in the original design but not yet built:
 - **15-minute snapshot interval**: original design suggested 30 minutes; tightened to 15 to match Octopus telemetry resolution
 - **Manual efficiency records**: added as a pragmatic workaround while automatic daily cost/COP rollups are not yet implemented — lets the user track their own observations and make before/after comparisons manually
 - **Aspire for dev orchestration**: used for local development only (AppHost project); production runs via plain Docker Compose
+- **Tado integration removed**: was briefly added then removed — the Octopus API provides all necessary indoor/outdoor temperature data via the Cosy Pod sensors
 - **JSONB for sensor readings**: all sensor data stored as a single JSONB column (`SensorReadingsJson`) on snapshot rows rather than a child table — keeps the schema flat with no joins
 - **Raw GraphQL endpoint gated to Development**: `/api/heatpump/graphql` only registers in `IsDevelopment()` to prevent arbitrary query proxying in production
 - **Per-request HTTP auth headers**: `OctopusEnergyClient` uses `HttpRequestMessage` headers (not `DefaultRequestHeaders`) to avoid thread-safety issues between concurrent JWT (GraphQL) and Basic (REST) auth requests

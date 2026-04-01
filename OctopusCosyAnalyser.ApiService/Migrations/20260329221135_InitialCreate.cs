@@ -105,6 +105,8 @@ namespace OctopusCosyAnalyser.ApiService.Migrations
                     WeatherCompensationMinCelsius = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: true),
                     WeatherCompensationMaxCelsius = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: true),
                     HeatingFlowTemperatureCelsius = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: true),
+                    HeatingFlowTempAllowableMinCelsius = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: true),
+                    HeatingFlowTempAllowableMaxCelsius = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: true),
                     SnapshotTakenAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },

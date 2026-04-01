@@ -147,6 +147,42 @@ else
                 <small>Live data read at: @(summary.LivePerformance?.ReadAt ?? "—")</small>
             </div>
         </div>
+
+        @if (latestSnapshot != null)
+        {
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <div class="card @(SnapshotHealthClass)">
+                        <div class="card-body py-2">
+                            <small>
+                                @if (latestSnapshot.HasData)
+                                {
+                                    var mins = (int)(latestSnapshot.MinutesAgo ?? 0);
+                                    <strong>Snapshot Worker:</strong>
+                                    @if (mins < 20)
+                                    {
+                                        <span class="text-success">Healthy</span>
+                                    }
+                                    else if (mins < 60)
+                                    {
+                                        <span class="text-warning">Delayed (@mins min ago)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-danger">Stale (@mins min ago)</span>
+                                    }
+                                    <span class="text-muted ms-2">Last: @latestSnapshot.SnapshotTakenAt?.ToString("dd MMM HH:mm")</span>
+                                }
+                                else
+                                {
+                                    <strong>Snapshot Worker:</strong> <span class="text-warning">No snapshots yet</span>
+                                }
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
     }
 }
 
@@ -159,6 +195,21 @@ else
     private string? errorMessage;
     private string? statusMessage;
     private HeatPumpSummaryDto? summary;
+    private LatestSnapshotDto? latestSnapshot;
+
+    private string SnapshotHealthClass
+    {
+        get
+        {
+            if (latestSnapshot?.HasData == true)
+            {
+                var minutesAgo = latestSnapshot.MinutesAgo ?? double.MaxValue;
+                if (minutesAgo < 20) return "border-success";
+                if (minutesAgo < 60) return "border-warning";
+            }
+            return "border-danger";
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -209,6 +260,7 @@ else
         try
         {
             summary = await Api.GetSummaryAsync(deviceId);
+            latestSnapshot = await Api.GetLatestSnapshotAsync(deviceId);
             statusMessage = summary == null ? "No data returned." : null;
         }
         catch (Exception ex) { statusMessage = $"Failed: {ex.Message}"; }

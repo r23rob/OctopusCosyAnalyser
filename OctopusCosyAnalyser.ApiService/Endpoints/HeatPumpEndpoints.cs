@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.ApiService.Services;
+using OctopusCosyAnalyser.Shared.Models;
 using System.Text.Json;
 
 namespace OctopusCosyAnalyser.ApiService.Endpoints;
@@ -433,6 +434,26 @@ public static class HeatPumpEndpoints
                 snapshots
             });
         }).WithName("GetHeatPumpSnapshots");
+
+        group.MapGet("/snapshots/{deviceId}/latest", async (string deviceId, CosyDbContext db) =>
+        {
+            var latest = await db.HeatPumpSnapshots
+                .Where(s => s.DeviceId == deviceId)
+                .OrderByDescending(s => s.SnapshotTakenAt)
+                .Select(s => new { s.SnapshotTakenAt })
+                .FirstOrDefaultAsync();
+
+            if (latest is null)
+                return Results.Ok(new LatestSnapshotDto { HasData = false });
+
+            var minutesAgo = (DateTime.UtcNow - latest.SnapshotTakenAt).TotalMinutes;
+            return Results.Ok(new LatestSnapshotDto
+            {
+                HasData = true,
+                SnapshotTakenAt = latest.SnapshotTakenAt,
+                MinutesAgo = minutesAgo
+            });
+        }).WithName("GetLatestSnapshot");
 
         group.MapGet("/time-ranged/{accountNumber}/{euid}", async (string accountNumber, string euid, DateTime? from, DateTime? to, OctopusEnergyClient client, CosyDbContext db) =>
         {

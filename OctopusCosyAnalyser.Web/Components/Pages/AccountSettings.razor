@@ -89,12 +89,13 @@ else
 
         try
         {
-            await Api.UpsertSettingsAsync(new AccountSettingsRequestDto
+            var result = await Api.UpsertSettingsAsync(new AccountSettingsRequestDto
             {
                 AccountNumber = accountNumber.Trim(),
                 ApiKey = apiKey.Trim()
             });
-            statusMessage = "Settings saved.";
+
+            statusMessage = result != null ? "Settings saved." : "Save failed.";
         }
         catch (Exception ex)
         {

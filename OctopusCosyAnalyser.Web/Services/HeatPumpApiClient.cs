@@ -52,6 +52,9 @@ public class HeatPumpApiClient
 
     // ── Snapshots (persisted history from background worker) ─────────
 
+    public async Task<LatestSnapshotDto?> GetLatestSnapshotAsync(string deviceId)
+        => await _http.GetFromJsonAsync<LatestSnapshotDto>($"/api/heatpump/snapshots/{deviceId}/latest");
+
     public async Task<SnapshotsResponseDto?> GetSnapshotsAsync(string deviceId, DateTime? from = null, DateTime? to = null)
     {
         var fromStr = (from ?? DateTime.UtcNow.AddDays(-7)).ToString("o");

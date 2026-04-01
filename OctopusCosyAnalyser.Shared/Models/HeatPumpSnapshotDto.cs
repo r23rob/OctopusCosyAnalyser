@@ -63,6 +63,16 @@ public sealed class HeatPumpSnapshotDto
 }
 
 /// <summary>
+/// Lightweight status of the latest snapshot for health monitoring.
+/// </summary>
+public sealed class LatestSnapshotDto
+{
+    public bool HasData { get; set; }
+    public DateTime? SnapshotTakenAt { get; set; }
+    public double? MinutesAgo { get; set; }
+}
+
+/// <summary>
 /// Wrapper returned by the snapshots endpoint.
 /// </summary>
 public sealed class SnapshotsResponseDto
