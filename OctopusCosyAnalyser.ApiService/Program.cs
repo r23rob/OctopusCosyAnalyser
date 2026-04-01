@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Http.Resilience;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Endpoints;
 using OctopusCosyAnalyser.ApiService.Services;
@@ -12,8 +13,14 @@ builder.AddServiceDefaults();
 // Add PostgreSQL DbContext
 builder.AddNpgsqlDbContext<CosyDbContext>("cosydb");
 
-// Add Octopus Energy API client
-builder.Services.AddHttpClient<OctopusEnergyClient>();
+// Add Octopus Energy API client with extended timeouts for large queries
+builder.Services.AddHttpClient<OctopusEnergyClient>()
+    .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromMinutes(2))
+    .AddStandardResilienceHandler(options =>
+    {
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(2);
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
+    });
 
 // Add Heat Pump Snapshot Worker
 builder.Services.AddHostedService<HeatPumpSnapshotWorker>();
