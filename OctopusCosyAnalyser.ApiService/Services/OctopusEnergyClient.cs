@@ -169,10 +169,11 @@ public class OctopusEnergyClient
 
         var url = $"https://api.octopus.energy/v1/electricity-meter-points/{mpan}/meters/{serialNumber}/consumption/?period_from={fromStr}&period_to={toStr}&page_size=25000";
 
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Basic",
             Convert.ToBase64String(Encoding.ASCII.GetBytes($"{apiKey}:")));
 
-        var response = await _httpClient.GetAsync(url);
+        using var response = await _httpClient.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadAsStringAsync();
@@ -452,10 +453,11 @@ public class OctopusEnergyClient
     {
         var token = await GetAuthTokenAsync(apiKey);
 
-        var content = new StringContent(query, Encoding.UTF8, "application/json");
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("JWT", token);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "");
+        request.Headers.Authorization = new AuthenticationHeaderValue("JWT", token);
+        request.Content = new StringContent(query, Encoding.UTF8, "application/json");
 
-        var response = await _httpClient.PostAsync("", content);
+        using var response = await _httpClient.SendAsync(request);
         var result = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)

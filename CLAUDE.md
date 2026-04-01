@@ -81,7 +81,7 @@ Follow this 4-layer pattern:
 | Table | Purpose |
 |-------|---------|
 | `HeatPumpDevices` | Registered heat pump devices (DeviceId, AccountNumber, MPAN, Euid) |
-| `HeatPumpSnapshots` | 15-min telemetry snapshots (COP, temps, power, zone state) |
+| `HeatPumpSnapshots` | 15-min telemetry snapshots (COP, temps, power, heating/hot water zone state, controller state, all sensor readings as JSONB, flow temp allowable range) |
 | `ConsumptionReadings` | Smart meter readings (kWh, demand) |
 | `OctopusAccountSettings` | Octopus API credentials (AccountNumber, ApiKey) |
 | `HeatPumpEfficiencyRecords` | Manual daily records for efficiency tracking |
@@ -125,7 +125,7 @@ Consumption history uses basic auth REST:
 
 `HeatPumpSnapshotWorker` runs every **15 minutes**. For each active `HeatPumpDevice`, it:
 1. Calls `GetHeatPumpStatusAndConfigAsync` (the batched 4-in-1 query)
-2. Extracts: COP, heat output, power input, outdoor temp, lifetime performance, room temp/humidity, zone setpoints, weather compensation settings, flow temperature
+2. Extracts: COP, heat output, power input, outdoor temp, lifetime performance, room temp/humidity, heating zone setpoints, hot water zone setpoints, controller state (HEATING/IDLE), weather compensation settings, flow temperature + allowable range, all sensor readings (serialised to JSONB)
 3. Upserts a `HeatPumpSnapshot` row (skips duplicates via unique constraint)
 
 ## API Endpoints
@@ -136,10 +136,10 @@ Consumption history uses basic auth REST:
 | POST | `/setup` | Discover and register heat pump device for an account |
 | GET | `/devices` | List registered devices |
 | GET | `/summary/{deviceId}` | Live parsed summary (COP, temps, zones) |
-| GET | `/snapshots/{deviceId}` | Historical snapshots with date range filter |
+| GET | `/snapshots/{deviceId}` | Historical snapshots with date range filter + pagination (skip/take) |
 | GET | `/time-series/{accountNumber}/{euid}` | Bucketed chart data from Octopus API |
 | GET | `/time-ranged/{accountNumber}/{euid}` | Aggregated totals for a date range |
-| GET | `/consumption/{deviceId}` | Smart meter consumption readings |
+| GET | `/consumption/{deviceId}` | Smart meter consumption readings + pagination (skip/take) |
 | POST | `/sync/{deviceId}` | Backfill consumption readings |
 
 ### `/api/settings`
@@ -241,3 +241,6 @@ These were in the original design but not yet built:
 - **15-minute snapshot interval**: original design suggested 30 minutes; tightened to 15 to match Octopus telemetry resolution
 - **Manual efficiency records**: added as a pragmatic workaround while automatic daily cost/COP rollups are not yet implemented — lets the user track their own observations and make before/after comparisons manually
 - **Aspire for dev orchestration**: used for local development only (AppHost project); production runs via plain Docker Compose
+- **JSONB for sensor readings**: all sensor data stored as a single JSONB column (`SensorReadingsJson`) on snapshot rows rather than a child table — keeps the schema flat with no joins
+- **Raw GraphQL endpoint gated to Development**: `/api/heatpump/graphql` only registers in `IsDevelopment()` to prevent arbitrary query proxying in production
+- **Per-request HTTP auth headers**: `OctopusEnergyClient` uses `HttpRequestMessage` headers (not `DefaultRequestHeaders`) to avoid thread-safety issues between concurrent JWT (GraphQL) and Basic (REST) auth requests
