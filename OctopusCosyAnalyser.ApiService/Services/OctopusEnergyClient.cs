@@ -468,8 +468,9 @@ public class OctopusEnergyClient
     /// <summary>
     /// Gets the actual cost of energy usage for a date range.
     /// Returns cost breakdown including unit costs and standing charges.
+    /// grouping: HALF_HOUR, DAY, WEEK, MONTH, QUARTER
     /// </summary>
-    public async Task<JsonDocument> GetCostOfUsageAsync(string apiKey, string accountNumber, DateTime from, DateTime to)
+    public async Task<JsonDocument> GetCostOfUsageAsync(string apiKey, string accountNumber, DateTime from, DateTime to, string grouping = "DAY")
     {
         var fromStr = from.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
         var toStr = to.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
@@ -477,27 +478,26 @@ public class OctopusEnergyClient
         var query = """
         query CostOfUsage(
           $accountNumber: String!,
-          $fromDatetime: DateTime!,
-          $toDatetime: DateTime!
+          $startAt: DateTime!,
+          $endAt: DateTime!,
+          $grouping: ConsumptionGroupings!
         ) {
           costOfUsage(
             accountNumber: $accountNumber,
-            fromDatetime: $fromDatetime,
-            toDatetime: $toDatetime
+            startAt: $startAt,
+            endAt: $endAt,
+            grouping: $grouping
           ) {
-            costCurrency
-            totalCostInclTax
-            totalCostExclTax
-            totalUsageKwh
-            standingChargeCostInclTax
-            unitRateCostInclTax
-            rates {
-              validFrom
-              validTo
-              costInclTax
-              costExclTax
-              usageKwh
-              unitRateInclTax
+            edges {
+              node {
+                startAt
+                endAt
+                costInclTax
+                costExclTax
+                consumptionKwh
+                unitRateInclTax
+                unitRateExclTax
+              }
             }
           }
         }
@@ -506,8 +506,9 @@ public class OctopusEnergyClient
         var variables = new
         {
             accountNumber,
-            fromDatetime = fromStr,
-            toDatetime = toStr
+            startAt = fromStr,
+            endAt = toStr,
+            grouping
         };
 
         return await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(variables));

@@ -298,48 +298,58 @@ else
             var doc = System.Text.Json.JsonDocument.Parse(raw);
             var root = doc.RootElement.GetProperty("data");
 
-            if (root.TryGetProperty("costOfUsage", out var costEl) && costEl.ValueKind != System.Text.Json.JsonValueKind.Null)
+            if (root.TryGetProperty("costOfUsage", out var costEl)
+                && costEl.ValueKind != System.Text.Json.JsonValueKind.Null
+                && costEl.TryGetProperty("edges", out var edgesEl)
+                && edgesEl.ValueKind == System.Text.Json.JsonValueKind.Array)
             {
-                totalCostInclTax = GetDoubleValue(costEl, "totalCostInclTax");
-                unitRateCostInclTax = GetDoubleValue(costEl, "unitRateCostInclTax");
-                standingChargeCostInclTax = GetDoubleValue(costEl, "standingChargeCostInclTax");
-                totalUsageKwh = GetDoubleValue(costEl, "totalUsageKwh");
+                costRates.Clear();
+                double totalCost = 0;
+                double totalUsage = 0;
+                double totalUnitCost = 0;
+                int idx = 0;
 
-                if (costEl.TryGetProperty("costCurrency", out var curr))
-                    costCurrency = curr.GetString() ?? "GBP";
+                foreach (var edge in edgesEl.EnumerateArray())
+                {
+                    if (!edge.TryGetProperty("node", out var node)) continue;
+                    idx++;
+
+                    var startAt = node.TryGetProperty("startAt", out var sa) ? sa.GetString() : null;
+                    var label = startAt != null && DateTime.TryParse(startAt, out var dt)
+                        ? dt.ToLocalTime().ToString("MMM dd HH:mm")
+                        : $"Period {idx}";
+
+                    var cost = GetDoubleValue(node, "costInclTax");
+                    var usage = GetDoubleValue(node, "consumptionKwh");
+                    var unitRate = GetDoubleValue(node, "unitRateInclTax");
+
+                    totalCost += cost;
+                    totalUsage += usage;
+                    totalUnitCost += cost; // unit portion (standing charge not broken out per node)
+
+                    costRates.Add(new CostRatePoint
+                    {
+                        Label = label,
+                        CostInclTax = cost,
+                        UsageKwh = usage,
+                        UnitRate = unitRate
+                    });
+                }
+
+                totalCostInclTax = totalCost;
+                unitRateCostInclTax = totalUnitCost;
+                standingChargeCostInclTax = 0; // not available per-node in this API
+                totalUsageKwh = totalUsage;
 
                 var days = (toDate - fromDate).TotalDays;
                 avgDailyCost = days > 0 ? totalCostInclTax / days : 0;
-
-                // Parse rate breakdown
-                costRates.Clear();
-                if (costEl.TryGetProperty("rates", out var ratesEl) && ratesEl.ValueKind == System.Text.Json.JsonValueKind.Array)
-                {
-                    int idx = 0;
-                    foreach (var rate in ratesEl.EnumerateArray())
-                    {
-                        idx++;
-                        var validFrom = rate.TryGetProperty("validFrom", out var vf) ? vf.GetString() : null;
-                        var label = validFrom != null && DateTime.TryParse(validFrom, out var dt)
-                            ? dt.ToString("MMM dd HH:mm")
-                            : $"Period {idx}";
-
-                        costRates.Add(new CostRatePoint
-                        {
-                            Label = label,
-                            CostInclTax = GetDoubleValue(rate, "costInclTax"),
-                            UsageKwh = GetDoubleValue(rate, "usageKwh"),
-                            UnitRate = GetDoubleValue(rate, "unitRateInclTax")
-                        });
-                    }
-                }
 
                 costLoaded = true;
             }
         }
         catch (Exception ex)
         {
-            statusMessage = $"Cost query error: {ex.Message}. You may need to use the introspect endpoint to discover the exact schema.";
+            statusMessage = $"Cost query error: {ex.Message}";
         }
     }
 
@@ -353,10 +363,22 @@ else
             // Parse Relay connection response
             applicableRates.Clear();
             var doc = System.Text.Json.JsonDocument.Parse(raw);
+
+            // The endpoint wraps the response: { data: { applicableRates: { edges: [...] } } }
+            System.Text.Json.JsonElement edgesEl = default;
+            bool foundEdges = false;
+
             if (doc.RootElement.TryGetProperty("data", out var dataEl)
+                && dataEl.ValueKind == System.Text.Json.JsonValueKind.Object
                 && dataEl.TryGetProperty("applicableRates", out var ratesEl)
-                && ratesEl.TryGetProperty("edges", out var edgesEl)
+                && ratesEl.ValueKind == System.Text.Json.JsonValueKind.Object
+                && ratesEl.TryGetProperty("edges", out edgesEl)
                 && edgesEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foundEdges = true;
+            }
+
+            if (foundEdges)
             {
                 foreach (var edge in edgesEl.EnumerateArray())
                 {
