@@ -347,6 +347,90 @@ public class OctopusEnergyClient
         return await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(variables));
     }
 
+    // ── Heat Pump – Controllers at Location ──────────────────────────
+
+    /// <summary>
+    /// Discovers all heat pump controllers at a given location.
+    /// Useful for multi-HP setups and as a fallback during device discovery.
+    /// </summary>
+    public async Task<JsonDocument> GetHeatPumpControllersAtLocationAsync(string apiKey, string accountNumber, int propertyId)
+    {
+        var query = $$"""
+        {
+            "query": "query { octoHeatPumpControllersAtLocation(accountNumber: \"{{accountNumber}}\", propertyId: {{propertyId}}) }"
+        }
+        """;
+
+        return await ExecuteQueryAsync(apiKey, query);
+    }
+
+    // ── Tariff Rates ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Gets applicable tariff rates for an account.
+    /// Returns rate periods with unit rates and standing charges.
+    /// </summary>
+    public async Task<JsonDocument> GetApplicableRatesAsync(string apiKey, string accountNumber)
+    {
+        var query = $$"""
+        {
+            "query": "query { applicableRates(accountNumber: \"{{accountNumber}}\") { tariffCode unitRates { validFrom validTo value } standingCharges { validFrom validTo value } } }"
+        }
+        """;
+
+        return await ExecuteQueryAsync(apiKey, query);
+    }
+
+    // ── Cost of Usage ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Gets the actual cost of energy usage for a date range.
+    /// Returns cost breakdown including unit costs and standing charges.
+    /// </summary>
+    public async Task<JsonDocument> GetCostOfUsageAsync(string apiKey, string accountNumber, DateTime from, DateTime to)
+    {
+        var fromStr = from.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+        var toStr = to.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+
+        var query = """
+        query CostOfUsage(
+          $accountNumber: String!,
+          $fromDatetime: DateTime!,
+          $toDatetime: DateTime!
+        ) {
+          costOfUsage(
+            accountNumber: $accountNumber,
+            fromDatetime: $fromDatetime,
+            toDatetime: $toDatetime
+          ) {
+            costCurrency
+            totalCostInclTax
+            totalCostExclTax
+            totalUsageKwh
+            standingChargeCostInclTax
+            unitRateCostInclTax
+            rates {
+              validFrom
+              validTo
+              costInclTax
+              costExclTax
+              usageKwh
+              unitRateInclTax
+            }
+          }
+        }
+        """;
+
+        var variables = new
+        {
+            accountNumber,
+            fromDatetime = fromStr,
+            toDatetime = toStr
+        };
+
+        return await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(variables));
+    }
+
     // ── Raw / Generic ────────────────────────────────────────────────
 
     /// <summary>

@@ -21,27 +21,62 @@ A personal heat pump monitoring dashboard for Octopus Energy Cosy heat pump cust
 
 ```
 OctopusCosyAnalyser/
-├── OctopusCosyAnalyser.AppHost/        # Aspire dev orchestration (postgres + pgadmin + services)
+├── OctopusCosyAnalyser.AppHost/        # .NET Aspire orchestrator (postgres + pgadmin + services)
 ├── OctopusCosyAnalyser.ServiceDefaults/ # Shared: health checks, OpenTelemetry, service discovery
-├── OctopusCosyAnalyser.Shared/         # DTOs shared between API and Web
+├── OctopusCosyAnalyser.Shared/         # Shared DTOs (Models/)
 │   └── Models/                         # *Dto.cs files — the API contract
-├── OctopusCosyAnalyser.ApiService/     # Backend
-│   ├── Data/CosyDbContext.cs           # EF Core DbContext
+├── OctopusCosyAnalyser.ApiService/     # Backend API (Minimal APIs)
+│   ├── Data/CosyDbContext.cs           # EF Core context (PostgreSQL)
 │   ├── Models/                         # EF entity models
-│   ├── Endpoints/                      # Minimal API route handlers
-│   ├── Services/                       # OctopusEnergyClient, EfficiencyCalculationService, EfficiencyAnalysisService
+│   ├── Endpoints/                      # Minimal API endpoint groups
+│   │   ├── HeatPumpEndpoints.cs        # /api/heatpump/* (main)
+│   │   ├── AccountSettingsEndpoints.cs # /api/settings/*
+│   │   ├── EfficiencyEndpoints.cs      # /api/efficiency/*
+│   │   └── TadoEndpoints.cs            # /api/tado/*
+│   ├── Services/
+│   │   ├── OctopusEnergyClient.cs      # GraphQL + REST client for Octopus API
+│   │   ├── TadoClient.cs               # Tado API client
+│   │   ├── GraphQLIntrospection.cs     # Schema introspection helpers
+│   │   └── Efficiency*.cs              # Efficiency analysis services
 │   ├── Workers/HeatPumpSnapshotWorker.cs # 15-min background data collector
 │   ├── Migrations/                     # EF Core migrations
 │   └── Program.cs                      # Service registration + route mapping
-├── OctopusCosyAnalyser.Tests/          # NUnit tests (unit + integration)
-└── OctopusCosyAnalyser.Web/            # Blazor frontend
-    ├── Components/Pages/               # Blazor pages
-    │   └── HeatPump/                   # All heat pump pages
-    ├── Components/Layout/NavMenu.razor # Navigation sidebar
-    └── Services/HeatPumpApiClient.cs   # Typed HTTP client → ApiService
+├── OctopusCosyAnalyser.Web/            # Blazor Server frontend
+│   ├── Components/Pages/               # Blazor pages
+│   │   └── HeatPump/                   # All heat pump pages
+│   ├── Components/Layout/NavMenu.razor # Navigation sidebar
+│   └── Services/HeatPumpApiClient.cs   # Typed HTTP client → ApiService
+└── OctopusCosyAnalyser.Tests/          # NUnit tests (unit + integration)
 ```
 
+## Key Patterns
+
+### Adding a new Octopus GraphQL query
+
+Follow this 4-layer pattern:
+
+1.  **OctopusEnergyClient.cs** — Add query method returning `Task<JsonDocument>`
+    -   Simple queries: use raw string literal with `$"""` interpolation
+    -   Parameterised queries: use `ExecuteRawQueryAsync()` with a variables object
+    -   Auth is handled automatically via `GetAuthTokenAsync()` (JWT cached 55 min)
+
+2.  **HeatPumpEndpoints.cs** — Add endpoint in `MapHeatPumpEndpoints()`
+    -   Use `GetSettingsForAccountAsync(db, accountNumber)` or `GetDeviceAndSettingsAsync(db, deviceId)` for auth
+    -   Return `Results.Ok(data)` with the response
+
+3.  **HeatPumpApiClient.cs** — Add frontend client method
+    -   Typed methods return DTOs; raw methods return `Task<string>` for JSON
+
+4.  **Blazor page** — Add or update a `.razor` page in `Components/Pages/HeatPump/`
+    -   Charts use Radzen (`RadzenChart`, `RadzenLineSeries`, `RadzenColumnSeries`)
+    -   Add nav entry in `Components/Layout/NavMenu.razor`
+
 ## Database Tables (EF Core)
+
+- PostgreSQL via EF Core with Npgsql
+- Auto-migrates on startup (`db.Database.Migrate()`)
+- Single migration: `20260220232518_InitialCreate`
+- Add new migrations with: `dotnet ef migrations add <Name> --project OctopusCosyAnalyser.ApiService`
 
 | Table | Purpose |
 |-------|---------|
@@ -53,15 +88,13 @@ OctopusCosyAnalyser/
 
 Unique constraints prevent duplicate snapshots `(DeviceId, SnapshotTakenAt)` and consumption readings `(DeviceId, ReadAt)`.
 
-EF migrations run automatically on startup via `db.Database.Migrate()` in `Program.cs`.
-
 ## Octopus Energy API
 
 Base URL: `https://api.octopus.energy/v1/graphql/`
 
 Authentication: POST to GraphQL with `obtainKrakenToken(input: {APIKey: "..."})` mutation → returns JWT. Token cached for 55 minutes in a `ConcurrentDictionary`.
 
-All user-supplied values (`apiKey`, `accountNumber`, `euid`, `deviceId`, `make`) are validated against `^[A-Za-z0-9\-_]{1,200}$` before string interpolation into GraphQL payloads to prevent injection.
+All user-supplied values (`apiKey`, `accountNumber`, `euid`, `deviceId`, `make`) are validated against `^[A-Za-z0-9\-_]{1,200}` before string interpolation into GraphQL payloads to prevent injection.
 
 ### GraphQL Queries in Use
 
@@ -159,7 +192,24 @@ Unit tests in `OctopusCosyAnalyser.Tests/` (NUnit):
 - `EfficiencyAnalysisServiceTests` — summarise, compare, group, filter, warm day exclusion, warning generation
 - `WebTests` — Aspire integration test (requires Docker)
 
-## Deployment
+## Build & Run
+
+### Local Development
+
+```bash
+# Build
+dotnet build
+
+# Run locally (requires Docker for PostgreSQL)
+dotnet run --project OctopusCosyAnalyser.AppHost
+
+# Run tests (requires Docker)
+dotnet test
+```
+
+The web UI runs at `http://localhost:8080` (configurable via `WEB_PORT`).
+
+### Production Deployment
 
 ```bash
 # Production (Docker Compose)

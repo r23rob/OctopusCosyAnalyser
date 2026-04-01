@@ -1,6 +1,7 @@
 @page "/settings"
 @inject HeatPumpApiClient Api
 @rendermode InteractiveServer
+@using OctopusCosyAnalyser.Shared.Models
 
 <PageTitle>Account Settings</PageTitle>
 
@@ -8,7 +9,10 @@
 
 @if (isLoading)
 {
-    <p>Loading...</p>
+    <div class="d-flex align-items-center mt-3">
+        <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+        <span>Loading settings...</span>
+    </div>
 }
 else
 {
@@ -20,15 +24,24 @@ else
             </div>
             <div class="mb-3">
                 <label class="form-label">API Key</label>
-                <input @bind="apiKey" class="form-control" placeholder="sk_live_..." />
+                <input @bind="apiKey" type="password" class="form-control" placeholder="sk_live_..." />
                 <div class="form-text">Stored in the database and used for Octopus API calls.</div>
             </div>
             <button @onclick="SaveSettings" class="btn btn-primary" disabled="@isSaving">
-                @(isSaving ? "Saving..." : "Save Settings")
+                @if (isSaving)
+                {
+                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                    <span>Saving...</span>
+                }
+                else
+                {
+                    <span>Save Settings</span>
+                }
             </button>
             @if (!string.IsNullOrEmpty(statusMessage))
             {
-                <div class="alert alert-info mt-3">@statusMessage</div>
+                var alertClass = statusMessage.StartsWith("Settings saved") ? "alert-success" : "alert-info";
+                <div class="alert @alertClass mt-3">@statusMessage</div>
             }
         </div>
     </div>
