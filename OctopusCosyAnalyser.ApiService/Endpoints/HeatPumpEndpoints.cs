@@ -528,13 +528,20 @@ public static class HeatPumpEndpoints
 
         // ── Applicable Rates (Tariff) ─────────────────────────────────
 
-        group.MapGet("/rates/{accountNumber}", async (string accountNumber, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/rates/{accountNumber}", async (string accountNumber, DateTime? from, DateTime? to, OctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
             if (error is not null)
                 return error;
 
-            var data = await client.GetApplicableRatesAsync(settings!.ApiKey, accountNumber);
+            var device = await db.HeatPumpDevices.FirstOrDefaultAsync(d => d.AccountNumber == accountNumber);
+            if (device == null || string.IsNullOrWhiteSpace(device.Mpan))
+                return Results.Problem("No device with MPAN found for this account. Run setup first.");
+
+            from ??= DateTime.UtcNow.AddDays(-1);
+            to ??= DateTime.UtcNow;
+
+            var data = await client.GetApplicableRatesAsync(settings!.ApiKey, accountNumber, device.Mpan, from.Value, to.Value);
             return Results.Ok(data);
         }).WithName("GetApplicableRates");
 

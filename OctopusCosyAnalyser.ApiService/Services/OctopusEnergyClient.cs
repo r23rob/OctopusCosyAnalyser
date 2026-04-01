@@ -12,13 +12,13 @@ public class OctopusEnergyClient
 
     private static readonly ConcurrentDictionary<string, TokenCacheEntry> TokenCache = new();
 
-    // Allowlist: alphanumeric, hyphens, underscores only — prevents injection via " or \ into embedded GraphQL strings
-    private static readonly Regex SafeIdentifierRegex = new(@"^[A-Za-z0-9\-_]{1,200}$", RegexOptions.Compiled);
+    // Allowlist: alphanumeric, hyphens, underscores, dots — prevents injection via " or \ into embedded GraphQL strings
+    private static readonly Regex SafeIdentifierRegex = new(@"^[A-Za-z0-9\-_.]{1,200}$", RegexOptions.Compiled);
 
     private static void ValidateIdentifier(string value, string paramName)
     {
         if (string.IsNullOrWhiteSpace(value) || !SafeIdentifierRegex.IsMatch(value))
-            throw new ArgumentException($"Invalid value for '{paramName}': must be 1–200 alphanumeric, hyphen, or underscore characters.", paramName);
+            throw new ArgumentException($"Invalid value for '{paramName}': must be 1–200 alphanumeric, hyphen, underscore, or dot characters.", paramName);
     }
 
     private readonly HttpClient _httpClient;
@@ -227,16 +227,63 @@ public class OctopusEnergyClient
     /// </summary>
     public async Task<JsonDocument> GetHeatPumpStatusAndConfigAsync(string apiKey, string accountNumber, string euid)
     {
-        ValidateIdentifier(accountNumber, nameof(accountNumber));
-        ValidateIdentifier(euid, nameof(euid));
-
-        var query = $$"""
-        {
-            "query": "query { octoHeatPumpControllerStatus(accountNumber: \"{{accountNumber}}\", euid: \"{{euid}}\") { sensors { code connectivity { online retrievedAt } telemetry { temperatureInCelsius humidityPercentage retrievedAt } } zones { zone telemetry { setpointInCelsius mode relaySwitchedOn heatDemand retrievedAt } } } octoHeatPumpControllerConfiguration(accountNumber: \"{{accountNumber}}\", euid: \"{{euid}}\") { controller { state heatPumpTimezone connected } heatPump { serialNumber model hardwareVersion maxWaterSetpoint minWaterSetpoint heatingFlowTemperature { currentTemperature { value unit } allowableRange { minimum { value unit } maximum { value unit } } } weatherCompensation { enabled currentRange { minimum { value unit } maximum { value unit } } } } zones { configuration { code zoneType enabled displayName primarySensor currentOperation { mode setpointInCelsius action end } callForHeat heatDemand emergency sensors { ... on ADCSensorConfiguration { code displayName type enabled } ... on ZigbeeSensorConfiguration { code displayName type firmwareVersion boostEnabled } } } } } octoHeatPumpLivePerformance(euid: \"{{euid}}\") { coefficientOfPerformance outdoorTemperature { value unit } heatOutput { value unit } powerInput { value unit } readAt } octoHeatPumpLifetimePerformance(euid: \"{{euid}}\") { seasonalCoefficientOfPerformance heatOutput { value unit } energyInput { value unit } readAt } }"
+        var query = """
+        query HeatPumpStatusAndConfig($accountNumber: String!, $euid: ID!) {
+          octoHeatPumpControllerStatus(accountNumber: $accountNumber, euid: $euid) {
+            sensors {
+              code
+              connectivity { online retrievedAt }
+              telemetry { temperatureInCelsius humidityPercentage retrievedAt }
+            }
+            zones {
+              zone
+              telemetry { setpointInCelsius mode relaySwitchedOn heatDemand retrievedAt }
+            }
+          }
+          octoHeatPumpControllerConfiguration(accountNumber: $accountNumber, euid: $euid) {
+            controller { state heatPumpTimezone connected }
+            heatPump {
+              serialNumber model hardwareVersion maxWaterSetpoint minWaterSetpoint
+              heatingFlowTemperature {
+                currentTemperature { value unit }
+                allowableRange { minimum { value unit } maximum { value unit } }
+              }
+              weatherCompensation {
+                enabled
+                currentRange { minimum { value unit } maximum { value unit } }
+              }
+            }
+            zones {
+              configuration {
+                code zoneType enabled displayName primarySensor
+                currentOperation { mode setpointInCelsius action end }
+                callForHeat heatDemand emergency
+                sensors {
+                  ... on ADCSensorConfiguration { code displayName type enabled }
+                  ... on ZigbeeSensorConfiguration { code displayName type firmwareVersion boostEnabled }
+                }
+              }
+            }
+          }
+          octoHeatPumpLivePerformance(euid: $euid) {
+            coefficientOfPerformance
+            outdoorTemperature { value unit }
+            heatOutput { value unit }
+            powerInput { value unit }
+            readAt
+          }
+          octoHeatPumpLifetimePerformance(euid: $euid) {
+            seasonalCoefficientOfPerformance
+            heatOutput { value unit }
+            energyInput { value unit }
+            readAt
+          }
         }
         """;
 
-        return await ExecuteQueryAsync(apiKey, query);
+        var variables = new { accountNumber, euid };
+
+        return await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(variables));
     }
 
     // ── Heat Pump – Historic Performance ─────────────────────────────
@@ -368,18 +415,47 @@ public class OctopusEnergyClient
     // ── Tariff Rates ───────────────────────────────────────────────
 
     /// <summary>
-    /// Gets applicable tariff rates for an account.
-    /// Returns rate periods with unit rates and standing charges.
+    /// Gets applicable tariff rates for an account and meter point.
+    /// Returns rate periods with unit rates via the Relay connection type.
     /// </summary>
-    public async Task<JsonDocument> GetApplicableRatesAsync(string apiKey, string accountNumber)
+    public async Task<JsonDocument> GetApplicableRatesAsync(string apiKey, string accountNumber, string mpxn, DateTime startAt, DateTime endAt)
     {
-        var query = $$"""
-        {
-            "query": "query { applicableRates(accountNumber: \"{{accountNumber}}\") { tariffCode unitRates { validFrom validTo value } standingCharges { validFrom validTo value } } }"
+        var startStr = startAt.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+        var endStr = endAt.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+
+        var query = """
+        query ApplicableRates(
+          $accountNumber: String!,
+          $mpxn: String!,
+          $startAt: DateTime!,
+          $endAt: DateTime!
+        ) {
+          applicableRates(
+            accountNumber: $accountNumber,
+            mpxn: $mpxn,
+            startAt: $startAt,
+            endAt: $endAt
+          ) {
+            edges {
+              node {
+                validFrom
+                validTo
+                value
+              }
+            }
+          }
         }
         """;
 
-        return await ExecuteQueryAsync(apiKey, query);
+        var variables = new
+        {
+            accountNumber,
+            mpxn,
+            startAt = startStr,
+            endAt = endStr
+        };
+
+        return await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(variables));
     }
 
     // ── Cost of Usage ──────────────────────────────────────────────

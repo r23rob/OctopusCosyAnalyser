@@ -314,7 +314,7 @@ else
     {
         try
         {
-            var raw = await Api.GetApplicableRatesRawAsync(accountNumber!);
+            var raw = await Api.GetApplicableRatesRawAsync(accountNumber!, fromDate, toDate);
             ratesRawJson = FormatJson(raw);
             ratesLoaded = true;
         }

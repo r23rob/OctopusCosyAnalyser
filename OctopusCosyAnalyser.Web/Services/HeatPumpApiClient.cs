@@ -175,9 +175,13 @@ public class HeatPumpApiClient
 
     // ── Applicable Rates (Tariff) ─────────────────────────────────
 
-    public async Task<string> GetApplicableRatesRawAsync(string accountNumber)
+    public async Task<string> GetApplicableRatesRawAsync(string accountNumber, DateTime? from = null, DateTime? to = null)
     {
-        var response = await _http.GetAsync($"/api/heatpump/rates/{accountNumber}");
+        var fromStr = (from ?? DateTime.UtcNow.AddDays(-1)).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+        var toStr = (to ?? DateTime.UtcNow).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+
+        var response = await _http.GetAsync(
+            $"/api/heatpump/rates/{accountNumber}?from={Uri.EscapeDataString(fromStr)}&to={Uri.EscapeDataString(toStr)}");
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
     }
@@ -193,61 +197,6 @@ public class HeatPumpApiClient
             $"/api/heatpump/cost/{accountNumber}?from={Uri.EscapeDataString(fromStr)}&to={Uri.EscapeDataString(toStr)}");
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
-    }
-
-    // ── Efficiency Records ────────────────────────────────────────────
-
-    public async Task<HeatPumpEfficiencyRecordDto[]> GetEfficiencyRecordsAsync(DateOnly? from = null, DateOnly? to = null)
-    {
-        var query = BuildDateOnlyQuery(from, to);
-        return await _http.GetFromJsonAsync<HeatPumpEfficiencyRecordDto[]>($"/api/efficiency/records{query}") ?? [];
-    }
-
-    public async Task<HeatPumpEfficiencyRecordDto?> CreateEfficiencyRecordAsync(HeatPumpEfficiencyRecordRequest request)
-    {
-        var response = await _http.PostAsJsonAsync("/api/efficiency/records", request);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<HeatPumpEfficiencyRecordDto>();
-    }
-
-    public async Task<HeatPumpEfficiencyRecordDto?> UpdateEfficiencyRecordAsync(int id, HeatPumpEfficiencyRecordRequest request)
-    {
-        var response = await _http.PutAsJsonAsync($"/api/efficiency/records/{id}", request);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<HeatPumpEfficiencyRecordDto>();
-    }
-
-    public async Task DeleteEfficiencyRecordAsync(int id)
-    {
-        var response = await _http.DeleteAsync($"/api/efficiency/records/{id}");
-        response.EnsureSuccessStatusCode();
-    }
-
-    public async Task<EfficiencyComparisonDto?> GetEfficiencyComparisonAsync(DateOnly? from = null, DateOnly? to = null)
-    {
-        var query = BuildDateOnlyQuery(from, to);
-        return await _http.GetFromJsonAsync<EfficiencyComparisonDto>($"/api/efficiency/comparison{query}");
-    }
-
-    public async Task<EfficiencyGroupDto[]> GetEfficiencyGroupsAsync(DateOnly? from = null, DateOnly? to = null)
-    {
-        var query = BuildDateOnlyQuery(from, to);
-        return await _http.GetFromJsonAsync<EfficiencyGroupDto[]>($"/api/efficiency/groups{query}") ?? [];
-    }
-
-    public async Task<HeatPumpEfficiencyRecordDto[]> FilterEfficiencyRecordsAsync(decimal minOutdoorC, decimal maxOutdoorC, DateOnly? from = null, DateOnly? to = null)
-    {
-        var query = BuildDateOnlyQuery(from, to, ("minOutdoorC", minOutdoorC.ToString()), ("maxOutdoorC", maxOutdoorC.ToString()));
-        return await _http.GetFromJsonAsync<HeatPumpEfficiencyRecordDto[]>($"/api/efficiency/filter{query}") ?? [];
-    }
-
-    private static string BuildDateOnlyQuery(DateOnly? from, DateOnly? to, params (string Key, string Value)[] extra)
-    {
-        var parts = new List<string>();
-        if (from.HasValue) parts.Add($"from={from.Value:yyyy-MM-dd}");
-        if (to.HasValue) parts.Add($"to={to.Value:yyyy-MM-dd}");
-        foreach (var (key, value) in extra) parts.Add($"{key}={value}");
-        return parts.Count > 0 ? "?" + string.Join("&", parts) : string.Empty;
     }
 }
 
