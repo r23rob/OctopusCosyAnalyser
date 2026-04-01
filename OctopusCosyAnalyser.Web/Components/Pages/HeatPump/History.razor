@@ -422,6 +422,9 @@ else
         if (string.IsNullOrEmpty(deviceId))
         { statusMessage = "No device set up."; return; }
 
+        if (fromDate > toDate)
+        { statusMessage = "'From' date must be before 'To' date."; return; }
+
         isLoading = true;
         statusMessage = "Loading from database...";
         timeSeriesData.Clear();

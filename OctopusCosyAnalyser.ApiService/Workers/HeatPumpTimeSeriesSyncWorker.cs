@@ -93,24 +93,28 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
                 foreach (var item in series.EnumerateArray())
                 {
                     if (!item.TryGetProperty("startAt", out var startAtEl)
-                        || !DateTime.TryParse(startAtEl.GetString(), out var startAt))
+                        || !DateTimeOffset.TryParse(startAtEl.GetString(), CultureInfo.InvariantCulture,
+                            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var startAtDto))
                         continue;
 
-                    startAt = startAt.ToUniversalTime();
+                    var startAt = startAtDto.UtcDateTime;
 
                     if (existingSet.Contains(startAt))
                         continue;
+
+                    var endAtUtc = startAt.AddHours(1); // default for hourly buckets
+                    if (item.TryGetProperty("endAt", out var endAtEl)
+                        && DateTimeOffset.TryParse(endAtEl.GetString(), CultureInfo.InvariantCulture,
+                            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var endAtDto))
+                        endAtUtc = endAtDto.UtcDateTime;
 
                     var record = new HeatPumpTimeSeriesRecord
                     {
                         DeviceId = device.DeviceId,
                         StartAt = startAt,
+                        EndAt = endAtUtc,
                         CreatedAt = DateTime.UtcNow
                     };
-
-                    if (item.TryGetProperty("endAt", out var endAtEl)
-                        && DateTime.TryParse(endAtEl.GetString(), out var endAt))
-                        record.EndAt = endAt.ToUniversalTime();
 
                     if (item.TryGetProperty("energyInput", out var ei) && ei.TryGetProperty("value", out var eiVal)
                         && decimal.TryParse(eiVal.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var eiDec))

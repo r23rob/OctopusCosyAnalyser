@@ -521,17 +521,25 @@ public static class HeatPumpEndpoints
             from ??= DateTime.UtcNow.AddDays(-7);
             to ??= DateTime.UtcNow;
 
+            if (from > to)
+                return Results.BadRequest(new { error = "'from' must be before 'to'." });
+
+            // Normalise to UTC for consistent querying
+            var fromUtc = DateTime.SpecifyKind(from.Value, DateTimeKind.Utc);
+            var toUtc = DateTime.SpecifyKind(to.Value, DateTimeKind.Utc);
+
             var records = await db.HeatPumpTimeSeriesRecords
                 .AsNoTracking()
-                .Where(r => r.DeviceId == deviceId && r.StartAt >= from && r.StartAt <= to)
+                .Where(r => r.DeviceId == deviceId && r.StartAt >= fromUtc && r.StartAt <= toUtc)
                 .OrderBy(r => r.StartAt)
+                .Take(50000)
                 .ToListAsync();
 
             return Results.Ok(new
             {
                 deviceId,
-                from,
-                to,
+                from = fromUtc,
+                to = toUtc,
                 count = records.Count,
                 records = records.Select(r => new
                 {
@@ -557,16 +565,16 @@ public static class HeatPumpEndpoints
             from ??= DateTime.UtcNow.AddMonths(-12);
             to ??= DateTime.UtcNow;
 
-            // Load existing StartAt values for this device to skip duplicates
-            var existing = await db.HeatPumpTimeSeriesRecords
-                .Where(r => r.DeviceId == deviceId && r.StartAt >= from && r.StartAt <= to)
-                .Select(r => r.StartAt)
-                .ToListAsync();
-            var existingSet = new HashSet<DateTime>(existing);
+            if (from > to)
+                return Results.BadRequest(new { error = "'from' must be before 'to'." });
+
+            if ((to.Value - from.Value).TotalDays > 400)
+                return Results.BadRequest(new { error = "Maximum sync range is 400 days." });
 
             var synced = 0;
             var chunkStart = from.Value;
             var chunkSize = TimeSpan.FromDays(2); // DAY grouping max span
+            var logger = loggerFactory.CreateLogger("TimeSeriesSync");
 
             while (chunkStart < to.Value)
             {
@@ -580,31 +588,32 @@ public static class HeatPumpEndpoints
                         settings!.ApiKey, device.Euid, chunkStart, chunkEnd, "DAY");
                     var root = data.RootElement.GetProperty("data");
 
+                    var chunkSynced = 0;
                     if (root.TryGetProperty("octoHeatPumpTimeSeriesPerformance", out var series)
                         && series.ValueKind == JsonValueKind.Array)
                     {
                         foreach (var item in series.EnumerateArray())
                         {
                             if (!item.TryGetProperty("startAt", out var startAtEl)
-                                || !DateTime.TryParse(startAtEl.GetString(), out var startAt))
+                                || !DateTimeOffset.TryParse(startAtEl.GetString(), System.Globalization.CultureInfo.InvariantCulture,
+                                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var startAtDto))
                                 continue;
 
-                            // Normalise to UTC for consistent duplicate detection
-                            startAt = startAt.ToUniversalTime();
+                            var startAt = startAtDto.UtcDateTime;
 
-                            if (existingSet.Contains(startAt))
-                                continue;
+                            var endAtUtc = startAt.AddHours(1); // default for hourly buckets
+                            if (item.TryGetProperty("endAt", out var endAtEl)
+                                && DateTimeOffset.TryParse(endAtEl.GetString(), System.Globalization.CultureInfo.InvariantCulture,
+                                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var endAtDto))
+                                endAtUtc = endAtDto.UtcDateTime;
 
                             var record = new HeatPumpTimeSeriesRecord
                             {
                                 DeviceId = deviceId,
                                 StartAt = startAt,
+                                EndAt = endAtUtc,
                                 CreatedAt = DateTime.UtcNow
                             };
-
-                            if (item.TryGetProperty("endAt", out var endAtEl)
-                                && DateTime.TryParse(endAtEl.GetString(), out var endAt))
-                                record.EndAt = endAt.ToUniversalTime();
 
                             if (item.TryGetProperty("energyInput", out var ei) && ei.TryGetProperty("value", out var eiVal)
                                 && decimal.TryParse(eiVal.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var eiDec))
@@ -619,23 +628,34 @@ public static class HeatPumpEndpoints
                                 record.OutdoorTemperatureCelsius = otDec;
 
                             db.HeatPumpTimeSeriesRecords.Add(record);
-                            existingSet.Add(startAt);
-                            synced++;
+                            chunkSynced++;
                         }
+                    }
+
+                    // Save per chunk to bound memory and make partial progress durable
+                    if (chunkSynced > 0)
+                    {
+                        try
+                        {
+                            await db.SaveChangesAsync();
+                        }
+                        catch (DbUpdateException)
+                        {
+                            // Unique constraint violation — some records already exist, skip
+                            db.ChangeTracker.Clear();
+                        }
+                        db.ChangeTracker.Clear();
+                        synced += chunkSynced;
                     }
                 }
                 catch (Exception ex)
                 {
-                    var logger = loggerFactory.CreateLogger("TimeSeriesSync");
                     logger.LogWarning(ex, "Failed to sync time-series chunk {From} to {To} for device {DeviceId}",
                         chunkStart, chunkEnd, deviceId);
                 }
 
                 chunkStart = chunkEnd;
             }
-
-            if (synced > 0)
-                await db.SaveChangesAsync();
 
             return Results.Ok(new { synced, from, to });
         }).WithName("SyncTimeSeries");

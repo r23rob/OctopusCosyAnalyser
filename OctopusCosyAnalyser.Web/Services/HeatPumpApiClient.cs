@@ -143,7 +143,7 @@ public class HeatPumpApiClient
             $"/api/heatpump/timeseries/{deviceId}?from={Uri.EscapeDataString(fromStr)}&to={Uri.EscapeDataString(toStr)}");
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync();
-        var doc = JsonDocument.Parse(json);
+        using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
         if (root.TryGetProperty("records", out var records) && records.ValueKind == JsonValueKind.Array)
@@ -151,10 +151,12 @@ public class HeatPumpApiClient
             var points = new List<TimeSeriesChartPoint>();
             foreach (var item in records.EnumerateArray())
             {
-                var pt = new TimeSeriesChartPoint();
+                if (!item.TryGetProperty("endAt", out var endAt)
+                    || !DateTimeOffset.TryParse(endAt.GetString(), CultureInfo.InvariantCulture,
+                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var dto))
+                    continue;
 
-                if (item.TryGetProperty("endAt", out var endAt) && DateTime.TryParse(endAt.GetString(), out var dt))
-                    pt.EndAt = dt;
+                var pt = new TimeSeriesChartPoint { EndAt = dto.UtcDateTime };
 
                 if (item.TryGetProperty("energyOutputKwh", out var eoEl) && eoEl.ValueKind == JsonValueKind.Number)
                     pt.EnergyOutputVal = eoEl.GetDouble();
@@ -183,7 +185,7 @@ public class HeatPumpApiClient
             $"/api/heatpump/sync-timeseries/{deviceId}?from={Uri.EscapeDataString(fromStr)}&to={Uri.EscapeDataString(toStr)}", null);
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync();
-        var doc = JsonDocument.Parse(json);
+        using var doc = JsonDocument.Parse(json);
         var synced = doc.RootElement.TryGetProperty("synced", out var s) ? s.GetInt32() : 0;
         return new SyncResult { Synced = synced };
     }
