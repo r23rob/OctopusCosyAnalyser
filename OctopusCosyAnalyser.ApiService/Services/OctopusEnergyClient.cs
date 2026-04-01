@@ -416,12 +416,12 @@ public class OctopusEnergyClient
 
     /// <summary>
     /// Gets applicable tariff rates for an account and meter point.
-    /// Returns rate periods with unit rates via the Relay connection type.
+    /// Returns rate periods via Relay connection (edges/node pattern).
     /// </summary>
     public async Task<JsonDocument> GetApplicableRatesAsync(string apiKey, string accountNumber, string mpxn, DateTime startAt, DateTime endAt)
     {
-        var startStr = startAt.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
-        var endStr = endAt.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+        var startAtStr = startAt.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+        var endAtStr = endAt.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
 
         var query = """
         query ApplicableRates(
@@ -434,7 +434,8 @@ public class OctopusEnergyClient
             accountNumber: $accountNumber,
             mpxn: $mpxn,
             startAt: $startAt,
-            endAt: $endAt
+            endAt: $endAt,
+            first: 500
           ) {
             edges {
               node {
@@ -442,6 +443,10 @@ public class OctopusEnergyClient
                 validTo
                 value
               }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
             }
           }
         }
@@ -451,8 +456,8 @@ public class OctopusEnergyClient
         {
             accountNumber,
             mpxn,
-            startAt = startStr,
-            endAt = endStr
+            startAt = startAtStr,
+            endAt = endAtStr
         };
 
         return await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(variables));

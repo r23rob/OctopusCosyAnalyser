@@ -534,15 +534,25 @@ public static class HeatPumpEndpoints
             if (error is not null)
                 return error;
 
-            var device = await db.HeatPumpDevices.FirstOrDefaultAsync(d => d.AccountNumber == accountNumber);
-            if (device == null || string.IsNullOrWhiteSpace(device.Mpan))
-                return Results.Problem("No device with MPAN found for this account. Run setup first.");
+            var device = await db.HeatPumpDevices
+                .FirstOrDefaultAsync(d => d.AccountNumber == accountNumber && d.IsActive && d.Mpan != null);
+            if (device is null)
+                return Results.BadRequest(new { error = "No active device with MPAN found for this account. Run setup first." });
 
             from ??= DateTime.UtcNow.AddDays(-1);
             to ??= DateTime.UtcNow;
 
-            var data = await client.GetApplicableRatesAsync(settings!.ApiKey, accountNumber, device.Mpan, from.Value, to.Value);
-            return Results.Ok(data);
+            var data = await client.GetApplicableRatesAsync(settings!.ApiKey, accountNumber, device.Mpan!, from.Value, to.Value);
+            var root = data.RootElement.GetProperty("data");
+
+            return Results.Ok(new
+            {
+                accountNumber,
+                mpan = device.Mpan,
+                from,
+                to,
+                data = root
+            });
         }).WithName("GetApplicableRates");
 
         // ── Cost of Usage ─────────────────────────────────────────────
