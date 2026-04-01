@@ -152,14 +152,39 @@ else
         }
     }
 
-    <!-- Current Rates Section -->
+    <!-- Tariff Rates Section -->
     @if (ratesLoaded)
     {
         <div class="card mb-3">
-            <div class="card-header"><strong>Current Tariff Rates</strong></div>
+            <div class="card-header"><strong>Tariff Rates</strong></div>
             <div class="card-body">
-                @if (!string.IsNullOrEmpty(ratesRawJson))
+                @if (applicableRates.Count > 0)
                 {
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-sm table-striped">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Valid From</th>
+                                    <th>Valid To</th>
+                                    <th class="text-end">Rate (p/kWh)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var rate in applicableRates)
+                                {
+                                    <tr>
+                                        <td>@rate.ValidFrom</td>
+                                        <td>@rate.ValidTo</td>
+                                        <td class="text-end">@rate.Value.ToString("F4")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else if (!string.IsNullOrEmpty(ratesRawJson))
+                {
+                    <p class="text-muted small">Could not parse rates into table. Raw response:</p>
                     <pre class="small bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto;">@ratesRawJson</pre>
                 }
                 else
@@ -193,6 +218,7 @@ else
     // Rate breakdown
     private List<CostRatePoint> costRates = [];
     private string? ratesRawJson;
+    private List<TariffRatePoint> applicableRates = [];
 
     private sealed class CostRatePoint
     {
@@ -200,6 +226,13 @@ else
         public double CostInclTax { get; set; }
         public double UsageKwh { get; set; }
         public double UnitRate { get; set; }
+    }
+
+    private sealed class TariffRatePoint
+    {
+        public string ValidFrom { get; set; } = "";
+        public string ValidTo { get; set; } = "";
+        public double Value { get; set; }
     }
 
     protected override async Task OnInitializedAsync()
@@ -314,8 +347,34 @@ else
     {
         try
         {
-            var raw = await Api.GetApplicableRatesRawAsync(accountNumber!);
+            var raw = await Api.GetApplicableRatesRawAsync(accountNumber!, fromDate, toDate);
             ratesRawJson = FormatJson(raw);
+
+            // Parse Relay connection response
+            applicableRates.Clear();
+            var doc = System.Text.Json.JsonDocument.Parse(raw);
+            if (doc.RootElement.TryGetProperty("data", out var dataEl)
+                && dataEl.TryGetProperty("applicableRates", out var ratesEl)
+                && ratesEl.TryGetProperty("edges", out var edgesEl)
+                && edgesEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var edge in edgesEl.EnumerateArray())
+                {
+                    if (!edge.TryGetProperty("node", out var node)) continue;
+
+                    var validFrom = node.TryGetProperty("validFrom", out var vf) ? vf.GetString() ?? "" : "";
+                    var validTo = node.TryGetProperty("validTo", out var vt) ? vt.GetString() ?? "" : "";
+                    var value = GetDoubleValue(node, "value");
+
+                    applicableRates.Add(new TariffRatePoint
+                    {
+                        ValidFrom = FormatIsoDateTime(validFrom),
+                        ValidTo = FormatIsoDateTime(validTo),
+                        Value = value
+                    });
+                }
+            }
+
             ratesLoaded = true;
         }
         catch (Exception ex)
@@ -323,6 +382,14 @@ else
             ratesRawJson = $"Could not load rates: {ex.Message}";
             ratesLoaded = true;
         }
+    }
+
+    private static string FormatIsoDateTime(string iso)
+    {
+        if (DateTime.TryParse(iso, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var dt))
+            return dt.ToLocalTime().ToString("dd MMM HH:mm");
+        return iso;
     }
 
     private static double GetDoubleValue(System.Text.Json.JsonElement el, string property)

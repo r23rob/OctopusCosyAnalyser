@@ -175,9 +175,13 @@ public class HeatPumpApiClient
 
     // ── Applicable Rates (Tariff) ─────────────────────────────────
 
-    public async Task<string> GetApplicableRatesRawAsync(string accountNumber)
+    public async Task<string> GetApplicableRatesRawAsync(string accountNumber, DateTime? from = null, DateTime? to = null)
     {
-        var response = await _http.GetAsync($"/api/heatpump/rates/{accountNumber}");
+        var fromStr = (from ?? DateTime.UtcNow.AddDays(-1)).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+        var toStr = (to ?? DateTime.UtcNow).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+
+        var response = await _http.GetAsync(
+            $"/api/heatpump/rates/{accountNumber}?from={Uri.EscapeDataString(fromStr)}&to={Uri.EscapeDataString(toStr)}");
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
     }

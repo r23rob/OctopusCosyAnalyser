@@ -368,18 +368,52 @@ public class OctopusEnergyClient
     // ── Tariff Rates ───────────────────────────────────────────────
 
     /// <summary>
-    /// Gets applicable tariff rates for an account.
-    /// Returns rate periods with unit rates and standing charges.
+    /// Gets applicable tariff rates for an account and meter point.
+    /// Returns rate periods via Relay connection (edges/node pattern).
     /// </summary>
-    public async Task<JsonDocument> GetApplicableRatesAsync(string apiKey, string accountNumber)
+    public async Task<JsonDocument> GetApplicableRatesAsync(string apiKey, string accountNumber, string mpxn, DateTime startAt, DateTime endAt)
     {
-        var query = $$"""
-        {
-            "query": "query { applicableRates(accountNumber: \"{{accountNumber}}\") { tariffCode unitRates { validFrom validTo value } standingCharges { validFrom validTo value } } }"
+        var startAtStr = startAt.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+        var endAtStr = endAt.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+
+        var query = """
+        query ApplicableRates(
+          $accountNumber: String!,
+          $mpxn: String!,
+          $startAt: DateTime!,
+          $endAt: DateTime!
+        ) {
+          applicableRates(
+            accountNumber: $accountNumber,
+            mpxn: $mpxn,
+            startAt: $startAt,
+            endAt: $endAt,
+            first: 500
+          ) {
+            edges {
+              node {
+                validFrom
+                validTo
+                value
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
         }
         """;
 
-        return await ExecuteQueryAsync(apiKey, query);
+        var variables = new
+        {
+            accountNumber,
+            mpxn,
+            startAt = startAtStr,
+            endAt = endAtStr
+        };
+
+        return await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(variables));
     }
 
     // ── Cost of Usage ──────────────────────────────────────────────
