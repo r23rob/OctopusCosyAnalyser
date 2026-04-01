@@ -514,6 +514,132 @@ public static class HeatPumpEndpoints
             });
         }).WithName("GetHeatPumpTimeSeriesPerformance");
 
+        // ── Time Series – Persisted (DB) ──────────────────────────────
+
+        group.MapGet("/timeseries/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, CosyDbContext db) =>
+        {
+            from ??= DateTime.UtcNow.AddDays(-7);
+            to ??= DateTime.UtcNow;
+
+            var records = await db.HeatPumpTimeSeriesRecords
+                .AsNoTracking()
+                .Where(r => r.DeviceId == deviceId && r.StartAt >= from && r.StartAt <= to)
+                .OrderBy(r => r.StartAt)
+                .ToListAsync();
+
+            return Results.Ok(new
+            {
+                deviceId,
+                from,
+                to,
+                count = records.Count,
+                records = records.Select(r => new
+                {
+                    r.StartAt,
+                    r.EndAt,
+                    r.EnergyInputKwh,
+                    r.EnergyOutputKwh,
+                    r.OutdoorTemperatureCelsius
+                })
+            });
+        }).WithName("GetStoredTimeSeries");
+
+        group.MapPost("/sync-timeseries/{deviceId}", async (string deviceId, DateTime? from, DateTime? to,
+            OctopusEnergyClient client, CosyDbContext db, ILoggerFactory loggerFactory) =>
+        {
+            var (device, settings, error) = await GetDeviceAndSettingsAsync(db, deviceId);
+            if (error is not null)
+                return error;
+
+            if (string.IsNullOrWhiteSpace(device!.Euid))
+                return Results.BadRequest(new { error = "Device has no EUID. Run setup first." });
+
+            from ??= DateTime.UtcNow.AddMonths(-12);
+            to ??= DateTime.UtcNow;
+
+            // Load existing StartAt values for this device to skip duplicates
+            var existing = await db.HeatPumpTimeSeriesRecords
+                .Where(r => r.DeviceId == deviceId && r.StartAt >= from && r.StartAt <= to)
+                .Select(r => r.StartAt)
+                .ToListAsync();
+            var existingSet = new HashSet<DateTime>(existing);
+
+            var synced = 0;
+            var chunkStart = from.Value;
+            var chunkSize = TimeSpan.FromDays(2); // DAY grouping max span
+
+            while (chunkStart < to.Value)
+            {
+                var chunkEnd = chunkStart + chunkSize;
+                if (chunkEnd > to.Value)
+                    chunkEnd = to.Value;
+
+                try
+                {
+                    var data = await client.GetHeatPumpTimeSeriesPerformanceAsync(
+                        settings!.ApiKey, device.Euid, chunkStart, chunkEnd, "DAY");
+                    var root = data.RootElement.GetProperty("data");
+
+                    if (root.TryGetProperty("octoHeatPumpTimeSeriesPerformance", out var series)
+                        && series.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var item in series.EnumerateArray())
+                        {
+                            if (!item.TryGetProperty("startAt", out var startAtEl)
+                                || !DateTime.TryParse(startAtEl.GetString(), out var startAt))
+                                continue;
+
+                            // Normalise to UTC for consistent duplicate detection
+                            startAt = startAt.ToUniversalTime();
+
+                            if (existingSet.Contains(startAt))
+                                continue;
+
+                            var record = new HeatPumpTimeSeriesRecord
+                            {
+                                DeviceId = deviceId,
+                                StartAt = startAt,
+                                CreatedAt = DateTime.UtcNow
+                            };
+
+                            if (item.TryGetProperty("endAt", out var endAtEl)
+                                && DateTime.TryParse(endAtEl.GetString(), out var endAt))
+                                record.EndAt = endAt.ToUniversalTime();
+
+                            if (item.TryGetProperty("energyInput", out var ei) && ei.TryGetProperty("value", out var eiVal)
+                                && decimal.TryParse(eiVal.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var eiDec))
+                                record.EnergyInputKwh = eiDec;
+
+                            if (item.TryGetProperty("energyOutput", out var eo) && eo.TryGetProperty("value", out var eoVal)
+                                && decimal.TryParse(eoVal.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var eoDec))
+                                record.EnergyOutputKwh = eoDec;
+
+                            if (item.TryGetProperty("outdoorTemperature", out var ot) && ot.TryGetProperty("value", out var otVal)
+                                && decimal.TryParse(otVal.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var otDec))
+                                record.OutdoorTemperatureCelsius = otDec;
+
+                            db.HeatPumpTimeSeriesRecords.Add(record);
+                            existingSet.Add(startAt);
+                            synced++;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    var logger = loggerFactory.CreateLogger("TimeSeriesSync");
+                    logger.LogWarning(ex, "Failed to sync time-series chunk {From} to {To} for device {DeviceId}",
+                        chunkStart, chunkEnd, deviceId);
+                }
+
+                chunkStart = chunkEnd;
+            }
+
+            if (synced > 0)
+                await db.SaveChangesAsync();
+
+            return Results.Ok(new { synced, from, to });
+        }).WithName("SyncTimeSeries");
+
         // ── Controllers at Location (Multi-HP) ────────────────────────
 
         group.MapGet("/controllers-at-location/{accountNumber}/{propertyId:int}", async (string accountNumber, int propertyId, OctopusEnergyClient client, CosyDbContext db) =>

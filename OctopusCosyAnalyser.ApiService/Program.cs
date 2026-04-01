@@ -26,6 +26,9 @@ builder.Services.AddHttpClient<OctopusEnergyClient>()
 // Add Heat Pump Snapshot Worker
 builder.Services.AddHostedService<HeatPumpSnapshotWorker>();
 
+// Add Heat Pump Time Series Sync Worker (every 6 hours)
+builder.Services.AddHostedService<HeatPumpTimeSeriesSyncWorker>();
+
 // Add services to the container.
 builder.Services.AddProblemDetails();
 

@@ -132,6 +132,62 @@ public class HeatPumpApiClient
         return null;
     }
 
+    // ── Stored Time Series (from DB) ──────────────────────────────────
+
+    public async Task<TimeSeriesResult> GetStoredTimeSeriesAsync(string deviceId, DateTime from, DateTime to)
+    {
+        var fromStr = from.ToUniversalTime().ToString("o");
+        var toStr = to.ToUniversalTime().ToString("o");
+
+        var response = await _http.GetAsync(
+            $"/api/heatpump/timeseries/{deviceId}?from={Uri.EscapeDataString(fromStr)}&to={Uri.EscapeDataString(toStr)}");
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        if (root.TryGetProperty("records", out var records) && records.ValueKind == JsonValueKind.Array)
+        {
+            var points = new List<TimeSeriesChartPoint>();
+            foreach (var item in records.EnumerateArray())
+            {
+                var pt = new TimeSeriesChartPoint();
+
+                if (item.TryGetProperty("endAt", out var endAt) && DateTime.TryParse(endAt.GetString(), out var dt))
+                    pt.EndAt = dt;
+
+                if (item.TryGetProperty("energyOutputKwh", out var eoEl) && eoEl.ValueKind == JsonValueKind.Number)
+                    pt.EnergyOutputVal = eoEl.GetDouble();
+
+                if (item.TryGetProperty("energyInputKwh", out var eiEl) && eiEl.ValueKind == JsonValueKind.Number)
+                    pt.EnergyInputVal = eiEl.GetDouble();
+
+                if (item.TryGetProperty("outdoorTemperatureCelsius", out var otEl) && otEl.ValueKind == JsonValueKind.Number)
+                    pt.OutdoorTempVal = otEl.GetDouble();
+
+                pt.Cop = pt.EnergyInputVal > 0 ? pt.EnergyOutputVal / pt.EnergyInputVal : 0;
+
+                points.Add(pt);
+            }
+            return new TimeSeriesResult { Points = points, Status = points.Count > 0 ? TimeSeriesStatus.Ok : TimeSeriesStatus.NoData };
+        }
+
+        return new TimeSeriesResult { Points = [], Status = TimeSeriesStatus.NoData };
+    }
+
+    public async Task<SyncResult> SyncTimeSeriesAsync(string deviceId, DateTime? from = null, DateTime? to = null)
+    {
+        var fromStr = (from ?? DateTime.UtcNow.AddMonths(-12)).ToUniversalTime().ToString("o");
+        var toStr = (to ?? DateTime.UtcNow).ToUniversalTime().ToString("o");
+        var response = await _http.PostAsync(
+            $"/api/heatpump/sync-timeseries/{deviceId}?from={Uri.EscapeDataString(fromStr)}&to={Uri.EscapeDataString(toStr)}", null);
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        var synced = doc.RootElement.TryGetProperty("synced", out var s) ? s.GetInt32() : 0;
+        return new SyncResult { Synced = synced };
+    }
+
     // ── Time Ranged (Octopus API aggregated) ─────────────────────────
 
     public async Task<string> GetTimeRangedRawAsync(string accountNumber, string euid, DateTime from, DateTime to)
@@ -216,5 +272,10 @@ public sealed class TimeSeriesResult
 {
     public List<TimeSeriesChartPoint> Points { get; set; } = [];
     public TimeSeriesStatus Status { get; set; }
+}
+
+public sealed class SyncResult
+{
+    public int Synced { get; set; }
 }
 

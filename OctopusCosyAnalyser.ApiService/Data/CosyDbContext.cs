@@ -13,6 +13,7 @@ public class CosyDbContext : DbContext
     public DbSet<ConsumptionReading> ConsumptionReadings { get; set; }
     public DbSet<OctopusAccountSettings> OctopusAccountSettings { get; set; }
     public DbSet<HeatPumpSnapshot> HeatPumpSnapshots { get; set; }
+    public DbSet<HeatPumpTimeSeriesRecord> HeatPumpTimeSeriesRecords { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -65,6 +66,18 @@ public class CosyDbContext : DbContext
             entity.Property(e => e.HeatingZoneSetpointCelsius).HasPrecision(10, 2);
             entity.Property(e => e.RoomTemperatureCelsius).HasPrecision(10, 2);
             entity.Property(e => e.RoomHumidityPercentage).HasPrecision(10, 2);
+        });
+
+        modelBuilder.Entity<HeatPumpTimeSeriesRecord>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.DeviceId, e.StartAt }).IsUnique();
+            entity.Property(e => e.DeviceId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.StartAt).IsRequired();
+            entity.Property(e => e.EndAt).IsRequired();
+            entity.Property(e => e.EnergyInputKwh).HasPrecision(18, 6);
+            entity.Property(e => e.EnergyOutputKwh).HasPrecision(18, 6);
+            entity.Property(e => e.OutdoorTemperatureCelsius).HasPrecision(10, 2);
         });
 
     }
