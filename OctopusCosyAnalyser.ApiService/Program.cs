@@ -15,15 +15,13 @@ builder.AddNpgsqlDbContext<CosyDbContext>("cosydb");
 
 // Add Octopus Energy API client with extended timeouts for large queries
 builder.Services.AddHttpClient<OctopusEnergyClient>()
-    .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromMinutes(2));
-
-// Override the standard resilience handler timeouts for OctopusEnergyClient
-// (the handler itself is added globally by AddServiceDefaults)
-builder.Services.Configure<HttpStandardResilienceOptions>("OctopusEnergyClient-standard", options =>
-{
-    options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(2);
-    options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
-});
+    .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromMinutes(2))
+    .AddStandardResilienceHandler(options =>
+    {
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(2);
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
+        options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
+    });
 
 // Add Heat Pump Snapshot Worker
 builder.Services.AddHostedService<HeatPumpSnapshotWorker>();

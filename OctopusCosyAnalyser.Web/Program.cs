@@ -23,21 +23,20 @@ builder.Services.AddHttpClient<WeatherApiClient>(client =>
         // This URL uses "https+http://" to indicate HTTPS is preferred over HTTP.
         // Learn more about service discovery scheme resolution at https://aka.ms/dotnet/sdschemes.
         client.BaseAddress = new("https+http://apiservice");
-    });
+    })
+    .AddStandardResilienceHandler();
 
 builder.Services.AddHttpClient<HeatPumpApiClient>(client =>
     {
         client.BaseAddress = new("https+http://apiservice");
         client.Timeout = TimeSpan.FromMinutes(2);
+    })
+    .AddStandardResilienceHandler(options =>
+    {
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(2);
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
+        options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
     });
-
-// Override the standard resilience handler timeouts for the HeatPumpApiClient
-// (the handler itself is added globally by AddServiceDefaults)
-builder.Services.Configure<HttpStandardResilienceOptions>("HeatPumpApiClient-standard", options =>
-{
-    options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(2);
-    options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
-});
 
 var app = builder.Build();
 
