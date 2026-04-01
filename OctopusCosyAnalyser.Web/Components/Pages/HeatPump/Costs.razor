@@ -386,9 +386,9 @@ else
 
     private static string FormatIsoDateTime(string iso)
     {
-        if (DateTime.TryParse(iso, System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.None, out var dt))
-            return dt.ToLocalTime().ToString("dd MMM HH:mm");
+        if (System.DateTimeOffset.TryParse(iso, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind, out var dto))
+            return dto.ToLocalTime().ToString("dd MMM HH:mm");
         return iso;
     }
 
