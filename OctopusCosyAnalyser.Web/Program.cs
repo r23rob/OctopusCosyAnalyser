@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Http.Resilience;
 using OctopusCosyAnalyser.Web;
 using OctopusCosyAnalyser.Web.Components;
 using OctopusCosyAnalyser.Web.Services;
@@ -27,7 +28,16 @@ builder.Services.AddHttpClient<WeatherApiClient>(client =>
 builder.Services.AddHttpClient<HeatPumpApiClient>(client =>
     {
         client.BaseAddress = new("https+http://apiservice");
+        client.Timeout = TimeSpan.FromMinutes(2);
     });
+
+// Override the standard resilience handler timeouts for the HeatPumpApiClient
+// (the handler itself is added globally by AddServiceDefaults)
+builder.Services.Configure<HttpStandardResilienceOptions>("HeatPumpApiClient-standard", options =>
+{
+    options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(2);
+    options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
+});
 
 var app = builder.Build();
 
