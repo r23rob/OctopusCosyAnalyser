@@ -242,7 +242,9 @@ public class HeatPumpSnapshotWorker : BackgroundService
                 // Find zones from config, look them up in status zones
                 if (root.TryGetProperty("octoHeatPumpControllerStatus", out var statusForZone)
                     && config.TryGetProperty("zones", out var configZones)
-                    && statusForZone.TryGetProperty("zones", out var statusZones))
+                    && statusForZone.TryGetProperty("zones", out var statusZones)
+                    && configZones.ValueKind == JsonValueKind.Array
+                    && statusZones.ValueKind == JsonValueKind.Array)
                 {
                     string? heatingZoneCode = null;
                     string? hotWaterZoneCode = null;
@@ -292,7 +294,8 @@ public class HeatPumpSnapshotWorker : BackgroundService
 
             // Serialize all sensor readings to JSONB
             if (root.TryGetProperty("octoHeatPumpControllerStatus", out var statusForSensors)
-                && statusForSensors.TryGetProperty("sensors", out var allSensorsForJson))
+                && statusForSensors.TryGetProperty("sensors", out var allSensorsForJson)
+                && allSensorsForJson.ValueKind == JsonValueKind.Array)
             {
                 var sensorList = new List<object>();
                 foreach (var sensor in allSensorsForJson.EnumerateArray())
@@ -304,10 +307,10 @@ public class HeatPumpSnapshotWorker : BackgroundService
                         entry["online"] = online.ValueKind == JsonValueKind.True;
                     if (sensor.TryGetProperty("telemetry", out var tel))
                     {
-                        if (tel.TryGetProperty("temperatureInCelsius", out var t) && t.ValueKind == JsonValueKind.Number)
-                            entry["tempC"] = t.GetDecimal();
-                        if (tel.TryGetProperty("humidityPercentage", out var h) && h.ValueKind == JsonValueKind.Number)
-                            entry["humidity"] = h.GetDecimal();
+                        if (tel.TryGetProperty("temperatureInCelsius", out var t) && t.ValueKind == JsonValueKind.Number && t.TryGetDecimal(out var tempC))
+                            entry["tempC"] = tempC;
+                        if (tel.TryGetProperty("humidityPercentage", out var h) && h.ValueKind == JsonValueKind.Number && h.TryGetDecimal(out var humidity))
+                            entry["humidity"] = humidity;
                     }
                     sensorList.Add(entry);
                 }

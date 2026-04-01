@@ -243,13 +243,14 @@ public static class HeatPumpEndpoints
         {
             from ??= DateTime.UtcNow.AddDays(-7);
             to ??= DateTime.UtcNow;
-            var actualTake = Math.Min(take ?? 10000, 50000);
+            var safeSkip = Math.Max(skip ?? 0, 0);
+            var actualTake = Math.Clamp(take ?? 10000, 1, 50000);
 
             var readings = await db.ConsumptionReadings
                 .AsNoTracking()
                 .Where(r => r.DeviceId == deviceId && r.ReadAt >= from && r.ReadAt <= to)
                 .OrderBy(r => r.ReadAt)
-                .Skip(skip ?? 0)
+                .Skip(safeSkip)
                 .Take(actualTake)
                 .ToListAsync();
 
@@ -412,13 +413,14 @@ public static class HeatPumpEndpoints
         {
             from ??= DateTime.UtcNow.AddDays(-7);
             to ??= DateTime.UtcNow;
-            var actualTake = Math.Min(take ?? 10000, 50000);
+            var safeSkip = Math.Max(skip ?? 0, 0);
+            var actualTake = Math.Clamp(take ?? 10000, 1, 50000);
 
             var snapshots = await db.HeatPumpSnapshots
                 .AsNoTracking()
                 .Where(s => s.DeviceId == deviceId && s.SnapshotTakenAt >= from && s.SnapshotTakenAt <= to)
                 .OrderBy(s => s.SnapshotTakenAt)
-                .Skip(skip ?? 0)
+                .Skip(safeSkip)
                 .Take(actualTake)
                 .ToListAsync();
 
