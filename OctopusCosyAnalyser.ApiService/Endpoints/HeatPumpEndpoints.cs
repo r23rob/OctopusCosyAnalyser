@@ -545,13 +545,17 @@ public static class HeatPumpEndpoints
             var data = await client.GetApplicableRatesAsync(settings!.ApiKey, accountNumber, device.Mpan!, from.Value, to.Value);
             var root = data.RootElement.GetProperty("data");
 
+            // Surface any GraphQL errors so the UI can display them
+            JsonElement? errors = data.RootElement.TryGetProperty("errors", out var errEl) ? errEl : null;
+
             return Results.Ok(new
             {
                 accountNumber,
                 mpan = device.Mpan,
                 from,
                 to,
-                data = root
+                data = root,
+                errors
             });
         }).WithName("GetApplicableRates");
 

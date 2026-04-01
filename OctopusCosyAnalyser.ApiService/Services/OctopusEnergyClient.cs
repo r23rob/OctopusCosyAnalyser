@@ -428,14 +428,17 @@ public class OctopusEnergyClient
           $accountNumber: String!,
           $mpxn: String!,
           $startAt: DateTime!,
-          $endAt: DateTime!
+          $endAt: DateTime!,
+          $first: Int!,
+          $after: String
         ) {
           applicableRates(
             accountNumber: $accountNumber,
             mpxn: $mpxn,
             startAt: $startAt,
             endAt: $endAt,
-            first: 500
+            first: $first,
+            after: $after
           ) {
             edges {
               node {
@@ -452,15 +455,69 @@ public class OctopusEnergyClient
         }
         """;
 
-        var variables = new
-        {
-            accountNumber,
-            mpxn,
-            startAt = startAtStr,
-            endAt = endAtStr
-        };
+        // Paginate through all results (API limits first to 100)
+        var allEdges = new List<JsonElement>();
+        string? cursor = null;
 
-        return await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(variables));
+        while (true)
+        {
+            var variables = new Dictionary<string, object?>
+            {
+                ["accountNumber"] = accountNumber,
+                ["mpxn"] = mpxn,
+                ["startAt"] = startAtStr,
+                ["endAt"] = endAtStr,
+                ["first"] = 100,
+                ["after"] = cursor
+            };
+
+            var result = await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(variables));
+            var root = result.RootElement;
+
+            // If there are errors, return the result as-is
+            if (root.TryGetProperty("errors", out _))
+                return result;
+
+            var data = root.GetProperty("data");
+            var applicableRates = data.GetProperty("applicableRates");
+
+            if (applicableRates.ValueKind == JsonValueKind.Null)
+                return result;
+
+            var edges = applicableRates.GetProperty("edges");
+            foreach (var edge in edges.EnumerateArray())
+                allEdges.Add(edge.Clone());
+
+            var pageInfo = applicableRates.GetProperty("pageInfo");
+            var hasNextPage = pageInfo.GetProperty("hasNextPage").GetBoolean();
+
+            if (!hasNextPage)
+                break;
+
+            cursor = pageInfo.GetProperty("endCursor").GetString();
+            result.Dispose();
+        }
+
+        // Build a combined response document preserving original JSON types
+        using var ms = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(ms))
+        {
+            writer.WriteStartObject();                          // {
+            writer.WritePropertyName("data");
+            writer.WriteStartObject();                          //   "data": {
+            writer.WritePropertyName("applicableRates");
+            writer.WriteStartObject();                          //     "applicableRates": {
+            writer.WritePropertyName("edges");
+            writer.WriteStartArray();                           //       "edges": [
+            foreach (var edge in allEdges)
+                edge.WriteTo(writer);                           //         { "node": { ... } }
+            writer.WriteEndArray();                             //       ]
+            writer.WriteEndObject();                            //     }
+            writer.WriteEndObject();                            //   }
+            writer.WriteEndObject();                            // }
+        }
+
+        return JsonDocument.Parse(ms.ToArray());
     }
 
     // ── Cost of Usage ──────────────────────────────────────────────
