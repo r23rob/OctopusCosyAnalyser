@@ -36,6 +36,45 @@ else
         </div>
     </div>
 
+    <!-- Data Source & Sync Controls -->
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-center">
+                <div class="col-auto">
+                    <label class="form-label mb-0 fw-bold">Data Source:</label>
+                </div>
+                <div class="col-auto">
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn @(useStoredData ? "btn-primary" : "btn-outline-primary")" @onclick="() => SetDataSource(true)">
+                            Stored (DB)
+                        </button>
+                        <button class="btn @(!useStoredData ? "btn-primary" : "btn-outline-primary")" @onclick="() => SetDataSource(false)">
+                            Live API
+                        </button>
+                    </div>
+                </div>
+                <div class="col-auto ms-auto">
+                    <button class="btn btn-outline-success btn-sm" @onclick="SyncHistory" disabled="@isSyncing">
+                        @if (isSyncing)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            <span>Syncing...</span>
+                        }
+                        else
+                        {
+                            <span>Sync History (12 months)</span>
+                        }
+                    </button>
+                </div>
+            </div>
+            @if (!string.IsNullOrEmpty(syncMessage))
+            {
+                var syncClass = syncMessage.Contains("Synced") ? "alert-success" : "alert-danger";
+                <div class="alert @syncClass mt-2 mb-0 py-1 small">@syncMessage</div>
+            }
+        </div>
+    </div>
+
     <!-- Date Range Controls -->
     <div class="card">
         <div class="card-body">
@@ -48,17 +87,20 @@ else
                     <label class="form-label">To</label>
                     <input @bind="toDate" type="datetime-local" class="form-control form-control-sm" />
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label">Grouping</label>
-                    <select @bind="grouping" class="form-select form-select-sm">
-                        <option value="">Auto</option>
-                        <option value="@GroupingLive">Live (min-by-min, max 1 hr)</option>
-                        <option value="@GroupingDay">Day (hour-by-hour, max 2 days)</option>
-                        <option value="@GroupingWeek">Week (day-by-day, max 14 days)</option>
-                        <option value="@GroupingMonth">Month (day-by-day, max 60 days)</option>
-                        <option value="@GroupingYear">Year (day-by-day, max 13 months)</option>
-                    </select>
-                </div>
+                @if (!useStoredData)
+                {
+                    <div class="col-md-2">
+                        <label class="form-label">Grouping</label>
+                        <select @bind="grouping" class="form-select form-select-sm">
+                            <option value="">Auto</option>
+                            <option value="@GroupingLive">Live (min-by-min, max 1 hr)</option>
+                            <option value="@GroupingDay">Day (hour-by-hour, max 2 days)</option>
+                            <option value="@GroupingWeek">Week (day-by-day, max 14 days)</option>
+                            <option value="@GroupingMonth">Month (day-by-day, max 60 days)</option>
+                            <option value="@GroupingYear">Year (day-by-day, max 13 months)</option>
+                        </select>
+                    </div>
+                }
                 <div class="col-md-2">
                     <button class="btn btn-primary btn-sm w-100" @onclick="LoadTimeSeries" disabled="@isLoading">
                         @if (isLoading)
@@ -257,11 +299,15 @@ else
     private const string GroupingYear = "YEAR";
 
     private string accountNumber = "";
+    private string? deviceId;
     private string? euid;
     private bool isLoading;
+    private bool isSyncing;
     private string? errorMessage;
     private string? statusMessage;
+    private string? syncMessage;
     private string? rangeValidationMessage;
+    private bool useStoredData = true;
 
     private DateTime fromDate = DateTime.UtcNow.AddDays(-7);
     private DateTime toDate = DateTime.UtcNow;
@@ -315,6 +361,7 @@ else
             if (devices.Length > 0)
             {
                 accountNumber = devices[0].AccountNumber;
+                deviceId = devices[0].DeviceId;
                 euid = devices[0].Euid;
             }
         }
@@ -328,7 +375,83 @@ else
         rangeValidationMessage = ValidateDateRange();
     }
 
+    private void SetDataSource(bool stored)
+    {
+        useStoredData = stored;
+        rangeValidationMessage = null;
+    }
+
+    private async Task SyncHistory()
+    {
+        if (string.IsNullOrEmpty(deviceId))
+        { syncMessage = "No device set up."; return; }
+
+        isSyncing = true;
+        syncMessage = "Syncing up to 12 months of hourly data... this may take a few minutes.";
+        StateHasChanged();
+
+        try
+        {
+            var result = await Api.SyncTimeSeriesAsync(deviceId);
+            syncMessage = $"Synced {result.Synced} new hourly records.";
+        }
+        catch (Exception ex)
+        {
+            syncMessage = $"Sync error: {ex.Message}";
+        }
+        finally
+        {
+            isSyncing = false;
+        }
+    }
+
     private async Task LoadTimeSeries()
+    {
+        if (useStoredData)
+        {
+            await LoadStoredTimeSeries();
+        }
+        else
+        {
+            await LoadLiveTimeSeries();
+        }
+    }
+
+    private async Task LoadStoredTimeSeries()
+    {
+        if (string.IsNullOrEmpty(deviceId))
+        { statusMessage = "No device set up."; return; }
+
+        if (fromDate > toDate)
+        { statusMessage = "'From' date must be before 'To' date."; return; }
+
+        isLoading = true;
+        statusMessage = "Loading from database...";
+        timeSeriesData.Clear();
+
+        try
+        {
+            var result = await Api.GetStoredTimeSeriesAsync(deviceId, fromDate, toDate);
+            timeSeriesData = result.Points;
+
+            statusMessage = result.Status switch
+            {
+                TimeSeriesStatus.Ok => $"Loaded {timeSeriesData.Count} stored data points.",
+                TimeSeriesStatus.NoData => "No stored data for this range. Click 'Sync History' to pull data from Octopus.",
+                _ => "No stored data found."
+            };
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadLiveTimeSeries()
     {
         if (string.IsNullOrEmpty(accountNumber) || string.IsNullOrEmpty(euid))
         { statusMessage = "Account or EUID not set."; return; }
@@ -338,7 +461,7 @@ else
         { statusMessage = rangeValidationMessage; return; }
 
         isLoading = true;
-        statusMessage = "Loading...";
+        statusMessage = "Loading from Octopus API...";
         timeSeriesData.Clear();
 
         try
@@ -350,7 +473,7 @@ else
 
             statusMessage = result.Status switch
             {
-                TimeSeriesStatus.Ok => $"Loaded {timeSeriesData.Count} data points.",
+                TimeSeriesStatus.Ok => $"Loaded {timeSeriesData.Count} data points from Octopus API.",
                 TimeSeriesStatus.NoData => "No data for this date range. Try a different period.",
                 _ => "Unexpected response format from the API."
             };

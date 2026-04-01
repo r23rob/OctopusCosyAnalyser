@@ -514,6 +514,152 @@ public static class HeatPumpEndpoints
             });
         }).WithName("GetHeatPumpTimeSeriesPerformance");
 
+        // ── Time Series – Persisted (DB) ──────────────────────────────
+
+        group.MapGet("/timeseries/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, CosyDbContext db) =>
+        {
+            from ??= DateTime.UtcNow.AddDays(-7);
+            to ??= DateTime.UtcNow;
+
+            if (from > to)
+                return Results.BadRequest(new { error = "'from' must be before 'to'." });
+
+            // Normalise to UTC for consistent querying
+            var fromUtc = DateTime.SpecifyKind(from.Value, DateTimeKind.Utc);
+            var toUtc = DateTime.SpecifyKind(to.Value, DateTimeKind.Utc);
+
+            var records = await db.HeatPumpTimeSeriesRecords
+                .AsNoTracking()
+                .Where(r => r.DeviceId == deviceId && r.StartAt >= fromUtc && r.StartAt <= toUtc)
+                .OrderBy(r => r.StartAt)
+                .Take(50000)
+                .ToListAsync();
+
+            return Results.Ok(new
+            {
+                deviceId,
+                from = fromUtc,
+                to = toUtc,
+                count = records.Count,
+                records = records.Select(r => new
+                {
+                    r.StartAt,
+                    r.EndAt,
+                    r.EnergyInputKwh,
+                    r.EnergyOutputKwh,
+                    r.OutdoorTemperatureCelsius
+                })
+            });
+        }).WithName("GetStoredTimeSeries");
+
+        group.MapPost("/sync-timeseries/{deviceId}", async (string deviceId, DateTime? from, DateTime? to,
+            OctopusEnergyClient client, CosyDbContext db, ILoggerFactory loggerFactory) =>
+        {
+            var (device, settings, error) = await GetDeviceAndSettingsAsync(db, deviceId);
+            if (error is not null)
+                return error;
+
+            if (string.IsNullOrWhiteSpace(device!.Euid))
+                return Results.BadRequest(new { error = "Device has no EUID. Run setup first." });
+
+            from ??= DateTime.UtcNow.AddMonths(-12);
+            to ??= DateTime.UtcNow;
+
+            if (from > to)
+                return Results.BadRequest(new { error = "'from' must be before 'to'." });
+
+            if ((to.Value - from.Value).TotalDays > 400)
+                return Results.BadRequest(new { error = "Maximum sync range is 400 days." });
+
+            var synced = 0;
+            var chunkStart = from.Value;
+            var chunkSize = TimeSpan.FromDays(2); // DAY grouping max span
+            var logger = loggerFactory.CreateLogger("TimeSeriesSync");
+
+            while (chunkStart < to.Value)
+            {
+                var chunkEnd = chunkStart + chunkSize;
+                if (chunkEnd > to.Value)
+                    chunkEnd = to.Value;
+
+                try
+                {
+                    var data = await client.GetHeatPumpTimeSeriesPerformanceAsync(
+                        settings!.ApiKey, device.Euid, chunkStart, chunkEnd, "DAY");
+                    var root = data.RootElement.GetProperty("data");
+
+                    var chunkSynced = 0;
+                    if (root.TryGetProperty("octoHeatPumpTimeSeriesPerformance", out var series)
+                        && series.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var item in series.EnumerateArray())
+                        {
+                            if (!item.TryGetProperty("startAt", out var startAtEl)
+                                || !DateTimeOffset.TryParse(startAtEl.GetString(), System.Globalization.CultureInfo.InvariantCulture,
+                                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var startAtDto))
+                                continue;
+
+                            var startAt = startAtDto.UtcDateTime;
+
+                            var endAtUtc = startAt.AddHours(1); // default for hourly buckets
+                            if (item.TryGetProperty("endAt", out var endAtEl)
+                                && DateTimeOffset.TryParse(endAtEl.GetString(), System.Globalization.CultureInfo.InvariantCulture,
+                                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var endAtDto))
+                                endAtUtc = endAtDto.UtcDateTime;
+
+                            var record = new HeatPumpTimeSeriesRecord
+                            {
+                                DeviceId = deviceId,
+                                StartAt = startAt,
+                                EndAt = endAtUtc,
+                                CreatedAt = DateTime.UtcNow
+                            };
+
+                            if (item.TryGetProperty("energyInput", out var ei) && ei.TryGetProperty("value", out var eiVal)
+                                && decimal.TryParse(eiVal.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var eiDec))
+                                record.EnergyInputKwh = eiDec;
+
+                            if (item.TryGetProperty("energyOutput", out var eo) && eo.TryGetProperty("value", out var eoVal)
+                                && decimal.TryParse(eoVal.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var eoDec))
+                                record.EnergyOutputKwh = eoDec;
+
+                            if (item.TryGetProperty("outdoorTemperature", out var ot) && ot.TryGetProperty("value", out var otVal)
+                                && decimal.TryParse(otVal.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var otDec))
+                                record.OutdoorTemperatureCelsius = otDec;
+
+                            db.HeatPumpTimeSeriesRecords.Add(record);
+                            chunkSynced++;
+                        }
+                    }
+
+                    // Save per chunk to bound memory and make partial progress durable
+                    if (chunkSynced > 0)
+                    {
+                        try
+                        {
+                            await db.SaveChangesAsync();
+                        }
+                        catch (DbUpdateException)
+                        {
+                            // Unique constraint violation — some records already exist, skip
+                            db.ChangeTracker.Clear();
+                        }
+                        db.ChangeTracker.Clear();
+                        synced += chunkSynced;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to sync time-series chunk {From} to {To} for device {DeviceId}",
+                        chunkStart, chunkEnd, deviceId);
+                }
+
+                chunkStart = chunkEnd;
+            }
+
+            return Results.Ok(new { synced, from, to });
+        }).WithName("SyncTimeSeries");
+
         // ── Controllers at Location (Multi-HP) ────────────────────────
 
         group.MapGet("/controllers-at-location/{accountNumber}/{propertyId:int}", async (string accountNumber, int propertyId, OctopusEnergyClient client, CosyDbContext db) =>
