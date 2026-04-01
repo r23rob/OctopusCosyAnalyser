@@ -61,6 +61,8 @@ public class CosyDbContext : DbContext
             entity.Property(e => e.HeatingFlowTemperatureCelsius).HasPrecision(10, 2);
             entity.Property(e => e.HeatingFlowTempAllowableMinCelsius).HasPrecision(10, 2);
             entity.Property(e => e.HeatingFlowTempAllowableMaxCelsius).HasPrecision(10, 2);
+            entity.Property(e => e.HotWaterZoneSetpointCelsius).HasPrecision(10, 2);
+            entity.Property(e => e.SensorReadingsJson).HasColumnType("jsonb");
             entity.Property(e => e.HeatingZoneSetpointCelsius).HasPrecision(10, 2);
             entity.Property(e => e.RoomTemperatureCelsius).HasPrecision(10, 2);
             entity.Property(e => e.RoomHumidityPercentage).HasPrecision(10, 2);

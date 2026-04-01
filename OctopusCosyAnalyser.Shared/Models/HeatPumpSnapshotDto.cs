@@ -46,6 +46,17 @@ public sealed class HeatPumpSnapshotDto
     public decimal? HeatingFlowTempAllowableMinCelsius { get; set; }
     public decimal? HeatingFlowTempAllowableMaxCelsius { get; set; }
 
+    // Controller State
+    public string? ControllerState { get; set; }
+
+    // Hot Water Zone (first zone with zoneType == "HOT_WATER")
+    public decimal? HotWaterZoneSetpointCelsius { get; set; }
+    public string? HotWaterZoneMode { get; set; }
+    public bool? HotWaterZoneHeatDemand { get; set; }
+
+    // All sensor readings as JSONB
+    public string? SensorReadingsJson { get; set; }
+
     // Metadata
     public DateTime SnapshotTakenAt { get; set; }
     public DateTime CreatedAt { get; set; }

@@ -240,14 +240,19 @@ public static class HeatPumpEndpoints
         }).WithName("SyncConsumption");
 
         // Get consumption data
-        group.MapGet("/consumption/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, CosyDbContext db) =>
+        group.MapGet("/consumption/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, int? skip, int? take, CosyDbContext db) =>
         {
             from ??= DateTime.UtcNow.AddDays(-7);
             to ??= DateTime.UtcNow;
+            var safeSkip = Math.Max(skip ?? 0, 0);
+            var actualTake = Math.Clamp(take ?? 10000, 1, 50000);
 
             var readings = await db.ConsumptionReadings
+                .AsNoTracking()
                 .Where(r => r.DeviceId == deviceId && r.ReadAt >= from && r.ReadAt <= to)
                 .OrderBy(r => r.ReadAt)
+                .Skip(safeSkip)
+                .Take(actualTake)
                 .ToListAsync();
 
             return Results.Ok(readings);
@@ -256,7 +261,7 @@ public static class HeatPumpEndpoints
         // Get devices
         group.MapGet("/devices", async (CosyDbContext db) =>
         {
-            var devices = await db.HeatPumpDevices.Where(d => d.IsActive).ToListAsync();
+            var devices = await db.HeatPumpDevices.AsNoTracking().Where(d => d.IsActive).ToListAsync();
             return Results.Ok(devices);
         }).WithName("GetDevices");
 
@@ -349,32 +354,35 @@ public static class HeatPumpEndpoints
             return Results.Ok(data);
         }).WithName("GetHeatPumpCompleteData");
 
-        group.MapGet("/introspect/{typeName}", async (string typeName, string accountNumber, OctopusEnergyClient client, CosyDbContext db) =>
+        if (app.Environment.IsDevelopment())
         {
-            var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
-            if (error is not null)
-                return error;
+            group.MapGet("/introspect/{typeName}", async (string typeName, string accountNumber, OctopusEnergyClient client, CosyDbContext db) =>
+            {
+                var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
+                if (error is not null)
+                    return error;
 
-            var introspectionQuery = $"{{ __type(name: \"{typeName}\") {{ name kind fields {{ name args {{ name type {{ name kind ofType {{ name kind ofType {{ name kind }} }} }} defaultValue }} type {{ name kind ofType {{ name kind ofType {{ name kind }} }} }} }} }} }}";
-            var result = await client.ExecuteRawQueryAsync(settings!.ApiKey, introspectionQuery);
-            return Results.Ok(result);
-        }).WithName("IntrospectType");
+                var introspectionQuery = $"{{ __type(name: \"{typeName}\") {{ name kind fields {{ name args {{ name type {{ name kind ofType {{ name kind ofType {{ name kind }} }} }} defaultValue }} type {{ name kind ofType {{ name kind ofType {{ name kind }} }} }} }} }} }}";
+                var result = await client.ExecuteRawQueryAsync(settings!.ApiKey, introspectionQuery);
+                return Results.Ok(result);
+            }).WithName("IntrospectType");
 
-        group.MapPost("/graphql", async (GraphqlQueryRequest request, OctopusEnergyClient client, CosyDbContext db) =>
-        {
-            if (string.IsNullOrWhiteSpace(request.AccountNumber))
-                return Results.BadRequest("Account number is required.");
+            group.MapPost("/graphql", async (GraphqlQueryRequest request, OctopusEnergyClient client, CosyDbContext db) =>
+            {
+                if (string.IsNullOrWhiteSpace(request.AccountNumber))
+                    return Results.BadRequest("Account number is required.");
 
-            if (string.IsNullOrWhiteSpace(request.Query))
-                return Results.BadRequest("Query is required.");
+                if (string.IsNullOrWhiteSpace(request.Query))
+                    return Results.BadRequest("Query is required.");
 
-            var (settings, error) = await GetSettingsForAccountAsync(db, request.AccountNumber);
-            if (error is not null)
-                return error;
+                var (settings, error) = await GetSettingsForAccountAsync(db, request.AccountNumber);
+                if (error is not null)
+                    return error;
 
-            var result = await client.ExecuteRawQueryAsync(settings!.ApiKey, request.Query, request.Variables);
-            return Results.Ok(result);
-        }).WithName("RunGraphqlQuery");
+                var result = await client.ExecuteRawQueryAsync(settings!.ApiKey, request.Query, request.Variables);
+                return Results.Ok(result);
+            }).WithName("RunGraphqlQuery");
+        }
 
         group.MapGet("/controller-euids/{accountNumber}", async (string accountNumber, OctopusEnergyClient client, CosyDbContext db) =>
         {
@@ -402,14 +410,19 @@ public static class HeatPumpEndpoints
             return Results.Ok(summary);
         }).WithName("GetHeatPumpSummary");
 
-        group.MapGet("/snapshots/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, CosyDbContext db) =>
+        group.MapGet("/snapshots/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, int? skip, int? take, CosyDbContext db) =>
         {
             from ??= DateTime.UtcNow.AddDays(-7);
             to ??= DateTime.UtcNow;
+            var safeSkip = Math.Max(skip ?? 0, 0);
+            var actualTake = Math.Clamp(take ?? 10000, 1, 50000);
 
             var snapshots = await db.HeatPumpSnapshots
+                .AsNoTracking()
                 .Where(s => s.DeviceId == deviceId && s.SnapshotTakenAt >= from && s.SnapshotTakenAt <= to)
                 .OrderBy(s => s.SnapshotTakenAt)
+                .Skip(safeSkip)
+                .Take(actualTake)
                 .ToListAsync();
 
             return Results.Ok(new

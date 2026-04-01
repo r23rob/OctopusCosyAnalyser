@@ -15,7 +15,7 @@ public static class EfficiencyEndpoints
         // GET /api/efficiency/records — list all records (optionally filtered by date range)
         group.MapGet("/records", async (DateOnly? from, DateOnly? to, CosyDbContext db) =>
         {
-            var query = db.HeatPumpEfficiencyRecords.AsQueryable();
+            var query = db.HeatPumpEfficiencyRecords.AsNoTracking().AsQueryable();
 
             if (from.HasValue) query = query.Where(r => r.Date >= from.Value);
             if (to.HasValue) query = query.Where(r => r.Date <= to.Value);
@@ -74,7 +74,7 @@ public static class EfficiencyEndpoints
         // GET /api/efficiency/comparison — before vs after comparison
         group.MapGet("/comparison", async (DateOnly? from, DateOnly? to, CosyDbContext db) =>
         {
-            var query = db.HeatPumpEfficiencyRecords.AsQueryable();
+            var query = db.HeatPumpEfficiencyRecords.AsNoTracking().AsQueryable();
             if (from.HasValue) query = query.Where(r => r.Date >= from.Value);
             if (to.HasValue) query = query.Where(r => r.Date <= to.Value);
 
@@ -91,7 +91,7 @@ public static class EfficiencyEndpoints
         // GET /api/efficiency/groups — records grouped by ChangeDescription
         group.MapGet("/groups", async (DateOnly? from, DateOnly? to, CosyDbContext db) =>
         {
-            var query = db.HeatPumpEfficiencyRecords.AsQueryable();
+            var query = db.HeatPumpEfficiencyRecords.AsNoTracking().AsQueryable();
             if (from.HasValue) query = query.Where(r => r.Date >= from.Value);
             if (to.HasValue) query = query.Where(r => r.Date <= to.Value);
 
@@ -105,7 +105,7 @@ public static class EfficiencyEndpoints
         // GET /api/efficiency/filter — filter by outdoor temperature range
         group.MapGet("/filter", async (decimal minOutdoorC, decimal maxOutdoorC, DateOnly? from, DateOnly? to, CosyDbContext db) =>
         {
-            var query = db.HeatPumpEfficiencyRecords.AsQueryable();
+            var query = db.HeatPumpEfficiencyRecords.AsNoTracking().AsQueryable();
             if (from.HasValue) query = query.Where(r => r.Date >= from.Value);
             if (to.HasValue) query = query.Where(r => r.Date <= to.Value);
 

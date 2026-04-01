@@ -175,8 +175,25 @@ public class HeatPumpSnapshotWorker : BackgroundService
             // Extract controller configuration
             if (root.TryGetProperty("octoHeatPumpControllerConfiguration", out var config))
             {
-                if (config.TryGetProperty("controller", out var controller) && controller.TryGetProperty("connected", out var connected))
-                    snapshot.ControllerConnected = connected.ValueKind == JsonValueKind.True;
+                if (config.TryGetProperty("controller", out var controller))
+                {
+                    if (controller.TryGetProperty("connected", out var connected))
+                        snapshot.ControllerConnected = connected.ValueKind == JsonValueKind.True;
+
+                    // Controller state (e.g. "HEATING", "IDLE")
+                    if (controller.TryGetProperty("state", out var stateArray) && stateArray.ValueKind == JsonValueKind.Array)
+                    {
+                        var states = new List<string>();
+                        foreach (var s in stateArray.EnumerateArray())
+                        {
+                            var str = s.GetString();
+                            if (!string.IsNullOrWhiteSpace(str))
+                                states.Add(str);
+                        }
+                        if (states.Count > 0)
+                            snapshot.ControllerState = string.Join(",", states);
+                    }
+                }
 
                 // Extract weather compensation & flow temperature from heatPump config
                 if (config.TryGetProperty("heatPump", out var heatPump))
@@ -220,42 +237,83 @@ public class HeatPumpSnapshotWorker : BackgroundService
                     }
                 }
 
-                // Find the first HEAT zone from config zones, then look it up in status zones
+                // Find zones from config, look them up in status zones
                 if (root.TryGetProperty("octoHeatPumpControllerStatus", out var statusForZone)
                     && config.TryGetProperty("zones", out var configZones)
-                    && statusForZone.TryGetProperty("zones", out var statusZones))
+                    && statusForZone.TryGetProperty("zones", out var statusZones)
+                    && configZones.ValueKind == JsonValueKind.Array
+                    && statusZones.ValueKind == JsonValueKind.Array)
                 {
                     string? heatingZoneCode = null;
+                    string? hotWaterZoneCode = null;
+
                     foreach (var cz in configZones.EnumerateArray())
                     {
                         if (cz.TryGetProperty("configuration", out var czConfig)
                             && czConfig.TryGetProperty("zoneType", out var zt)
-                            && zt.GetString() == "HEAT"
                             && czConfig.TryGetProperty("code", out var czCode))
                         {
-                            heatingZoneCode = czCode.GetString();
-                            break;
+                            var zoneType = zt.GetString();
+                            if (zoneType == "HEAT" && heatingZoneCode is null)
+                                heatingZoneCode = czCode.GetString();
+                            else if (zoneType == "HOT_WATER" && hotWaterZoneCode is null)
+                                hotWaterZoneCode = czCode.GetString();
                         }
                     }
 
-                    if (heatingZoneCode is not null)
+                    foreach (var sz in statusZones.EnumerateArray())
                     {
-                        foreach (var sz in statusZones.EnumerateArray())
+                        if (!sz.TryGetProperty("zone", out var szZone) || !sz.TryGetProperty("telemetry", out var szTelemetry))
+                            continue;
+
+                        var zoneCode = szZone.GetString();
+
+                        if (zoneCode == heatingZoneCode)
                         {
-                            if (sz.TryGetProperty("zone", out var szZone) && szZone.GetString() == heatingZoneCode
-                                && sz.TryGetProperty("telemetry", out var szTelemetry))
-                            {
-                                if (szTelemetry.TryGetProperty("setpointInCelsius", out var hzSetpoint) && hzSetpoint.ValueKind == JsonValueKind.Number && hzSetpoint.TryGetDecimal(out var hzSetpointDec))
-                                    snapshot.HeatingZoneSetpointCelsius = hzSetpointDec;
-                                if (szTelemetry.TryGetProperty("mode", out var hzMode))
-                                    snapshot.HeatingZoneMode = hzMode.GetString();
-                                if (szTelemetry.TryGetProperty("heatDemand", out var hzHeatDemand))
-                                    snapshot.HeatingZoneHeatDemand = hzHeatDemand.ValueKind == JsonValueKind.True;
-                                break;
-                            }
+                            if (szTelemetry.TryGetProperty("setpointInCelsius", out var hzSetpoint) && hzSetpoint.ValueKind == JsonValueKind.Number && hzSetpoint.TryGetDecimal(out var hzSetpointDec))
+                                snapshot.HeatingZoneSetpointCelsius = hzSetpointDec;
+                            if (szTelemetry.TryGetProperty("mode", out var hzMode))
+                                snapshot.HeatingZoneMode = hzMode.GetString();
+                            if (szTelemetry.TryGetProperty("heatDemand", out var hzHeatDemand))
+                                snapshot.HeatingZoneHeatDemand = hzHeatDemand.ValueKind == JsonValueKind.True;
+                        }
+                        else if (zoneCode == hotWaterZoneCode)
+                        {
+                            if (szTelemetry.TryGetProperty("setpointInCelsius", out var hwSetpoint) && hwSetpoint.ValueKind == JsonValueKind.Number && hwSetpoint.TryGetDecimal(out var hwSetpointDec))
+                                snapshot.HotWaterZoneSetpointCelsius = hwSetpointDec;
+                            if (szTelemetry.TryGetProperty("mode", out var hwMode))
+                                snapshot.HotWaterZoneMode = hwMode.GetString();
+                            if (szTelemetry.TryGetProperty("heatDemand", out var hwHeatDemand))
+                                snapshot.HotWaterZoneHeatDemand = hwHeatDemand.ValueKind == JsonValueKind.True;
                         }
                     }
                 }
+            }
+
+            // Serialize all sensor readings to JSONB
+            if (root.TryGetProperty("octoHeatPumpControllerStatus", out var statusForSensors)
+                && statusForSensors.TryGetProperty("sensors", out var allSensorsForJson)
+                && allSensorsForJson.ValueKind == JsonValueKind.Array)
+            {
+                var sensorList = new List<object>();
+                foreach (var sensor in allSensorsForJson.EnumerateArray())
+                {
+                    var entry = new Dictionary<string, object?>();
+                    if (sensor.TryGetProperty("code", out var code))
+                        entry["code"] = code.GetString();
+                    if (sensor.TryGetProperty("connectivity", out var conn) && conn.TryGetProperty("online", out var online))
+                        entry["online"] = online.ValueKind == JsonValueKind.True;
+                    if (sensor.TryGetProperty("telemetry", out var tel))
+                    {
+                        if (tel.TryGetProperty("temperatureInCelsius", out var t) && t.ValueKind == JsonValueKind.Number && t.TryGetDecimal(out var tempC))
+                            entry["tempC"] = tempC;
+                        if (tel.TryGetProperty("humidityPercentage", out var h) && h.ValueKind == JsonValueKind.Number && h.TryGetDecimal(out var humidity))
+                            entry["humidity"] = humidity;
+                    }
+                    sensorList.Add(entry);
+                }
+                if (sensorList.Count > 0)
+                    snapshot.SensorReadingsJson = JsonSerializer.Serialize(sensorList);
             }
 
             db.HeatPumpSnapshots.Add(snapshot);

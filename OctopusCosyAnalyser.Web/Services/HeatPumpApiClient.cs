@@ -195,33 +195,6 @@ public class HeatPumpApiClient
         return await response.Content.ReadAsStringAsync();
     }
 
-    // ── Tado Settings ─────────────────────────────────────────────────
-
-    public async Task<TadoSettingsDto?> GetTadoSettingsAsync()
-    {
-        var response = await _http.GetAsync("/api/tado/settings");
-        response.EnsureSuccessStatusCode();
-        if (response.StatusCode == System.Net.HttpStatusCode.NoContent)
-            return null;
-        return await response.Content.ReadFromJsonAsync<TadoSettingsDto>();
-    }
-
-    public async Task<TadoSettingsDto?> UpsertTadoSettingsAsync(TadoSettingsRequestDto request)
-    {
-        var response = await _http.PutAsJsonAsync("/api/tado/settings", request);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<TadoSettingsDto>();
-    }
-
-    // ── Tado Homes ────────────────────────────────────────────────────
-
-    public async Task<TadoHomeDto[]> GetTadoHomesAsync()
-        => await _http.GetFromJsonAsync<TadoHomeDto[]>("/api/tado/homes") ?? [];
-
-    // ── Tado Zones ────────────────────────────────────────────────────
-
-    public async Task<TadoZoneDto[]> GetTadoZonesAsync()
-        => await _http.GetFromJsonAsync<TadoZoneDto[]>("/api/tado/zones") ?? [];
     // ── Efficiency Records ────────────────────────────────────────────
 
     public async Task<HeatPumpEfficiencyRecordDto[]> GetEfficiencyRecordsAsync(DateOnly? from = null, DateOnly? to = null)
