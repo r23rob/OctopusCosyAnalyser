@@ -107,6 +107,11 @@ namespace OctopusCosyAnalyser.ApiService.Migrations
                     HeatingFlowTemperatureCelsius = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: true),
                     HeatingFlowTempAllowableMinCelsius = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: true),
                     HeatingFlowTempAllowableMaxCelsius = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: true),
+                    ControllerState = table.Column<string>(type: "text", nullable: true),
+                    HotWaterZoneSetpointCelsius = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: true),
+                    HotWaterZoneMode = table.Column<string>(type: "text", nullable: true),
+                    HotWaterZoneHeatDemand = table.Column<bool>(type: "boolean", nullable: true),
+                    SensorReadingsJson = table.Column<string>(type: "jsonb", nullable: true),
                     SnapshotTakenAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
