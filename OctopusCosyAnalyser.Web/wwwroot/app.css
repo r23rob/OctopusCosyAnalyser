@@ -54,3 +54,86 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+/* ── Compare Page ─────────────────────────────────────────────── */
+
+.compare-card {
+    transition: box-shadow 0.2s;
+}
+
+.compare-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.compare-card-a {
+    border-left: 4px solid rgba(59,130,246,0.7);
+}
+
+.compare-card-b {
+    border-left: 4px solid rgba(239,68,68,0.7);
+}
+
+.compare-header-a {
+    background: linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(59,130,246,0.02) 100%);
+    border-bottom: 1px solid rgba(59,130,246,0.15);
+}
+
+.compare-header-b {
+    background: linear-gradient(135deg, rgba(239,68,68,0.08) 0%, rgba(239,68,68,0.02) 100%);
+    border-bottom: 1px solid rgba(239,68,68,0.15);
+}
+
+.compare-value-a {
+    color: rgba(59,130,246,0.85);
+    font-weight: 600;
+}
+
+.compare-value-b {
+    color: rgba(239,68,68,0.85);
+    font-weight: 600;
+}
+
+.compare-col-a {
+    background: rgba(59,130,246,0.04);
+}
+
+.compare-col-b {
+    background: rgba(239,68,68,0.04);
+}
+
+.delta-card {
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.delta-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.delta-positive {
+    border-color: rgba(34,197,94,0.4);
+    background: linear-gradient(180deg, rgba(34,197,94,0.04) 0%, transparent 100%);
+}
+
+.delta-negative {
+    border-color: rgba(239,68,68,0.4);
+    background: linear-gradient(180deg, rgba(239,68,68,0.04) 0%, transparent 100%);
+}
+
+.delta-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+/* ── Sensors Page ─────────────────────────────────────────────── */
+
+.sensor-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+}

@@ -1,0 +1,467 @@
+@page "/heatpump/sensors"
+@inject HeatPumpApiClient Api
+@rendermode InteractiveServer
+@using System.Text.Json
+
+<PageTitle>Heat Pump – Sensors &amp; Schedules</PageTitle>
+
+<h1>Sensors &amp; Schedules</h1>
+<p class="text-muted">Per-sensor temperature history, heating and hot water schedules, and cumulative energy profile.</p>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (string.IsNullOrEmpty(deviceId))
+{
+    <div class="alert alert-warning">No device set up. Go to the <a href="/heatpump">Dashboard</a> to run setup.</div>
+}
+else
+{
+    <!-- Date Range Controls -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label">From</label>
+                    <input @bind="fromDate" type="datetime-local" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">To</label>
+                    <input @bind="toDate" type="datetime-local" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary btn-sm w-100" @onclick="LoadData" disabled="@isLoading">
+                        @if (isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            <span>Loading...</span>
+                        }
+                        else
+                        {
+                            <span>Load Data</span>
+                        }
+                    </button>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Quick Range</label>
+                    <div class="btn-group btn-group-sm w-100">
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(1)">1 Day</button>
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(3)">3 Days</button>
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(7)">7 Days</button>
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(30)">30 Days</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        var alertClass = statusMessage.Contains("Loaded") ? "alert-success" : "alert-info";
+        <div class="alert @alertClass">@statusMessage</div>
+    }
+
+    @if (snapshots.Count > 0)
+    {
+        <!-- Cosy Pod Temperature Charts -->
+        @if (sensorTimeSeries.Count > 0)
+        {
+            <div class="card mb-3">
+                <div class="card-header"><strong>Cosy Pod Temperatures</strong></div>
+                <div class="card-body">
+                    <RadzenChart Style="height: 340px;">
+                        @foreach (var sensor in sensorTimeSeries.Where(s => s.Value.Count > 0))
+                        {
+                            <RadzenLineSeries Data="@sensor.Value" CategoryProperty="Time" ValueProperty="Value"
+                                             Title="@sensor.Key" Stroke="@GetSensorColor(sensor.Key)" StrokeWidth="2" />
+                        }
+                        <RadzenCategoryAxis FormatString="{0:dd MMM HH:mm}" />
+                        <RadzenValueAxis>
+                            <RadzenGridLines Visible="true" />
+                        </RadzenValueAxis>
+                        <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                    </RadzenChart>
+                </div>
+            </div>
+
+            <!-- Per-Sensor Summary Table -->
+            <div class="card mb-3">
+                <div class="card-header"><strong>Sensor Statistics</strong></div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Sensor</th>
+                                <th class="text-center">Avg (°C)</th>
+                                <th class="text-center">Min (°C)</th>
+                                <th class="text-center">Max (°C)</th>
+                                <th class="text-center">Range (°C)</th>
+                                <th class="text-center">Data Points</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var sensor in sensorTimeSeries.Where(s => s.Value.Count > 0).OrderBy(s => s.Key))
+                            {
+                                var temps = sensor.Value.Select(p => p.Value).ToList();
+                                <tr>
+                                    <td class="fw-semibold">
+                                        <span class="sensor-dot" style="background-color: @GetSensorColor(sensor.Key)"></span>
+                                        @sensor.Key
+                                    </td>
+                                    <td class="text-center">@temps.Average().ToString("F1")</td>
+                                    <td class="text-center">@temps.Min().ToString("F1")</td>
+                                    <td class="text-center">@temps.Max().ToString("F1")</td>
+                                    <td class="text-center">@((temps.Max() - temps.Min()).ToString("F1"))</td>
+                                    <td class="text-center">@temps.Count</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        <!-- Water Tank / ADC Sensor Temperature Chart -->
+        @if (waterTankSeries.Count > 0)
+        {
+            <div class="card mb-3">
+                <div class="card-header"><strong>Water Tank Temperature</strong></div>
+                <div class="card-body">
+                    <RadzenChart Style="height: 300px;">
+                        @foreach (var sensor in waterTankSeries.Where(s => s.Value.Count > 0))
+                        {
+                            <RadzenLineSeries Data="@sensor.Value" CategoryProperty="Time" ValueProperty="Value"
+                                             Title="@sensor.Key" Stroke="@GetWaterColor(sensor.Key)" StrokeWidth="2" />
+                        }
+                        @if (hotWaterSetpointSeries.Count > 0)
+                        {
+                            <RadzenLineSeries Data="@hotWaterSetpointSeries" CategoryProperty="Time" ValueProperty="Value"
+                                             Title="HW Setpoint" Stroke="rgb(255,193,7)" StrokeWidth="2" LineType="LineType.Dashed" />
+                        }
+                        <RadzenCategoryAxis FormatString="{0:dd MMM HH:mm}" />
+                        <RadzenValueAxis>
+                            <RadzenGridLines Visible="true" />
+                        </RadzenValueAxis>
+                        <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                    </RadzenChart>
+                </div>
+            </div>
+        }
+
+        <!-- Heating Schedule -->
+        <div class="card mb-3">
+            <div class="card-header"><strong>Heating Schedule</strong></div>
+            <div class="card-body">
+                <RadzenChart Style="height: 300px;">
+                    <RadzenLineSeries Data="@heatingSetpointSeries" CategoryProperty="Time" ValueProperty="Value"
+                                     Title="Setpoint (°C)" Stroke="rgb(111,66,193)" StrokeWidth="2" />
+                    @if (roomTempSeries.Count > 0)
+                    {
+                        <RadzenLineSeries Data="@roomTempSeries" CategoryProperty="Time" ValueProperty="Value"
+                                         Title="Room Temp (°C)" Stroke="rgb(40,167,69)" StrokeWidth="2" />
+                    }
+                    <RadzenColumnSeries Data="@heatingDemandSeries" CategoryProperty="Time" ValueProperty="Value"
+                                        Title="Heat Demand Active" Fill="rgba(220,53,69,0.2)" />
+                    <RadzenCategoryAxis FormatString="{0:dd MMM HH:mm}" />
+                    <RadzenValueAxis>
+                        <RadzenGridLines Visible="true" />
+                    </RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+            </div>
+        </div>
+
+        <!-- Hot Water Schedule -->
+        <div class="card mb-3">
+            <div class="card-header"><strong>Hot Water Schedule</strong></div>
+            <div class="card-body">
+                <RadzenChart Style="height: 280px;">
+                    @if (hotWaterSetpointSeries.Count > 0)
+                    {
+                        <RadzenLineSeries Data="@hotWaterSetpointSeries" CategoryProperty="Time" ValueProperty="Value"
+                                         Title="HW Setpoint (°C)" Stroke="rgb(255,133,27)" StrokeWidth="2" />
+                    }
+                    <RadzenColumnSeries Data="@hotWaterDemandSeries" CategoryProperty="Time" ValueProperty="Value"
+                                        Title="HW Demand Active" Fill="rgba(59,130,246,0.2)" />
+                    <RadzenCategoryAxis FormatString="{0:dd MMM HH:mm}" />
+                    <RadzenValueAxis Min="0">
+                        <RadzenGridLines Visible="true" />
+                    </RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+            </div>
+        </div>
+
+        <!-- Cumulative Energy Chart -->
+        <div class="card mb-3">
+            <div class="card-header"><strong>Cumulative Energy</strong> <small class="text-muted">(running total over period)</small></div>
+            <div class="card-body">
+                <RadzenChart Style="height: 320px;">
+                    <RadzenLineSeries Data="@cumulativeHeatOut" CategoryProperty="Time" ValueProperty="Value"
+                                     Title="Heat Output (kWh)" Stroke="rgb(220,53,69)" StrokeWidth="2" />
+                    <RadzenLineSeries Data="@cumulativeElecIn" CategoryProperty="Time" ValueProperty="Value"
+                                     Title="Electricity In (kWh)" Stroke="rgb(59,130,246)" StrokeWidth="2" />
+                    <RadzenCategoryAxis FormatString="{0:dd MMM HH:mm}" />
+                    <RadzenValueAxis Min="0">
+                        <RadzenGridLines Visible="true" />
+                    </RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+
+                <!-- Energy Summary Cards -->
+                <div class="row g-2 mt-3 text-center">
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded p-2">
+                            <div class="small text-muted">Total Electricity In</div>
+                            <div class="fw-bold text-primary">@totalElecIn.ToString("F1") kWh</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded p-2">
+                            <div class="small text-muted">Total Heat Out</div>
+                            <div class="fw-bold text-danger">@totalHeatOut.ToString("F1") kWh</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded p-2">
+                            <div class="small text-muted">Period COP</div>
+                            <div class="fw-bold text-success">@(totalElecIn > 0 ? (totalHeatOut / totalElecIn).ToString("F2") : "—")</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded p-2">
+                            <div class="small text-muted">Multiplier</div>
+                            <div class="fw-bold">@(totalElecIn > 0 ? $"{(totalHeatOut / totalElecIn):F1}x" : "—")</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private string? deviceId;
+    private bool isLoading;
+    private string? errorMessage;
+    private string? statusMessage;
+
+    private DateTime fromDate = DateTime.UtcNow.AddDays(-1);
+    private DateTime toDate = DateTime.UtcNow;
+
+    private List<HeatPumpSnapshotDto> snapshots = [];
+
+    // Sensor time series (Cosy Pods)
+    private Dictionary<string, List<SensorPoint>> sensorTimeSeries = new();
+    // Water tank / ADC sensors
+    private Dictionary<string, List<SensorPoint>> waterTankSeries = new();
+
+    // Schedules
+    private List<SensorPoint> heatingSetpointSeries = [];
+    private List<SensorPoint> heatingDemandSeries = [];
+    private List<SensorPoint> roomTempSeries = [];
+    private List<SensorPoint> hotWaterSetpointSeries = [];
+    private List<SensorPoint> hotWaterDemandSeries = [];
+
+    // Cumulative energy
+    private List<SensorPoint> cumulativeElecIn = [];
+    private List<SensorPoint> cumulativeHeatOut = [];
+    private double totalElecIn;
+    private double totalHeatOut;
+
+    // Sensor colors
+    private readonly string[] _sensorColors =
+    [
+        "rgb(59,130,246)", "rgb(239,68,68)", "rgb(34,197,94)", "rgb(168,85,247)",
+        "rgb(249,115,22)", "rgb(14,165,233)", "rgb(236,72,153)", "rgb(132,204,22)"
+    ];
+
+    private readonly string[] _waterColors =
+    [
+        "rgb(239,68,68)", "rgb(249,115,22)", "rgb(220,53,69)"
+    ];
+
+    private int _sensorColorIdx;
+    private int _waterColorIdx;
+    private readonly Dictionary<string, string> _assignedColors = new();
+    private readonly Dictionary<string, string> _assignedWaterColors = new();
+
+    private string GetSensorColor(string name)
+    {
+        if (!_assignedColors.TryGetValue(name, out var color))
+        {
+            color = _sensorColors[_sensorColorIdx % _sensorColors.Length];
+            _assignedColors[name] = color;
+            _sensorColorIdx++;
+        }
+        return color;
+    }
+
+    private string GetWaterColor(string name)
+    {
+        if (!_assignedWaterColors.TryGetValue(name, out var color))
+        {
+            color = _waterColors[_waterColorIdx % _waterColors.Length];
+            _assignedWaterColors[name] = color;
+            _waterColorIdx++;
+        }
+        return color;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var devices = await Api.GetDevicesAsync();
+            if (devices.Length > 0)
+            {
+                deviceId = devices[0].DeviceId;
+                await LoadData();
+            }
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+
+    private void SetRange(int days)
+    {
+        toDate = DateTime.UtcNow;
+        fromDate = DateTime.UtcNow.AddDays(-days);
+    }
+
+    private async Task LoadData()
+    {
+        if (string.IsNullOrEmpty(deviceId)) return;
+
+        isLoading = true;
+        statusMessage = null;
+        snapshots.Clear();
+
+        try
+        {
+            var result = await Api.GetSnapshotsAsync(deviceId, fromDate, toDate);
+            snapshots = result?.Snapshots?.OrderBy(s => s.SnapshotTakenAt).ToList() ?? [];
+            statusMessage = snapshots.Count > 0 ? $"Loaded {snapshots.Count} snapshots." : "No data for this period.";
+
+            _sensorColorIdx = 0;
+            _waterColorIdx = 0;
+            _assignedColors.Clear();
+            _assignedWaterColors.Clear();
+
+            ParseSensorTimeSeries();
+            BuildScheduleData();
+            BuildCumulativeEnergy();
+        }
+        catch (Exception ex) { statusMessage = $"Error: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+
+    private void ParseSensorTimeSeries()
+    {
+        sensorTimeSeries = new Dictionary<string, List<SensorPoint>>();
+        waterTankSeries = new Dictionary<string, List<SensorPoint>>();
+
+        foreach (var snap in snapshots)
+        {
+            if (string.IsNullOrEmpty(snap.SensorReadingsJson)) continue;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(snap.SensorReadingsJson);
+                foreach (var sensor in doc.RootElement.EnumerateArray())
+                {
+                    var code = sensor.TryGetProperty("code", out var c) ? c.GetString() ?? "" : "";
+                    if (!sensor.TryGetProperty("tempC", out var tempEl) || !tempEl.TryGetDouble(out var temp))
+                        continue;
+
+                    var hasHumidity = sensor.TryGetProperty("humidity", out var humEl) &&
+                                     humEl.TryGetDouble(out var hum) && hum > 0;
+
+                    var point = new SensorPoint { Time = snap.SnapshotTakenAt, Value = temp };
+
+                    // Sensors with humidity are Cosy Pods; without are ADC (water tank) sensors
+                    if (hasHumidity)
+                    {
+                        if (!sensorTimeSeries.ContainsKey(code)) sensorTimeSeries[code] = [];
+                        sensorTimeSeries[code].Add(point);
+                    }
+                    else
+                    {
+                        if (!waterTankSeries.ContainsKey(code)) waterTankSeries[code] = [];
+                        waterTankSeries[code].Add(point);
+                    }
+                }
+            }
+            catch { }
+        }
+    }
+
+    private void BuildScheduleData()
+    {
+        heatingSetpointSeries = snapshots
+            .Where(s => s.HeatingZoneSetpointCelsius.HasValue)
+            .Select(s => new SensorPoint { Time = s.SnapshotTakenAt, Value = (double)s.HeatingZoneSetpointCelsius!.Value })
+            .ToList();
+
+        heatingDemandSeries = snapshots
+            .Select(s => new SensorPoint
+            {
+                Time = s.SnapshotTakenAt,
+                Value = s.HeatingZoneHeatDemand == true
+                    ? (s.HeatingZoneSetpointCelsius.HasValue ? (double)s.HeatingZoneSetpointCelsius.Value : 20)
+                    : 0
+            })
+            .ToList();
+
+        roomTempSeries = snapshots
+            .Where(s => s.RoomTemperatureCelsius.HasValue)
+            .Select(s => new SensorPoint { Time = s.SnapshotTakenAt, Value = (double)s.RoomTemperatureCelsius!.Value })
+            .ToList();
+
+        hotWaterSetpointSeries = snapshots
+            .Where(s => s.HotWaterZoneSetpointCelsius.HasValue)
+            .Select(s => new SensorPoint { Time = s.SnapshotTakenAt, Value = (double)s.HotWaterZoneSetpointCelsius!.Value })
+            .ToList();
+
+        hotWaterDemandSeries = snapshots
+            .Select(s => new SensorPoint
+            {
+                Time = s.SnapshotTakenAt,
+                Value = s.HotWaterZoneHeatDemand == true
+                    ? (s.HotWaterZoneSetpointCelsius.HasValue ? (double)s.HotWaterZoneSetpointCelsius.Value : 50)
+                    : 0
+            })
+            .ToList();
+    }
+
+    private void BuildCumulativeEnergy()
+    {
+        double cumIn = 0, cumOut = 0;
+        cumulativeElecIn = [];
+        cumulativeHeatOut = [];
+
+        foreach (var s in snapshots)
+        {
+            if (s.PowerInputKilowatt.HasValue)
+            {
+                cumIn += (double)s.PowerInputKilowatt.Value * 0.25;
+                cumulativeElecIn.Add(new SensorPoint { Time = s.SnapshotTakenAt, Value = Math.Round(cumIn, 2) });
+            }
+            if (s.HeatOutputKilowatt.HasValue)
+            {
+                cumOut += (double)s.HeatOutputKilowatt.Value * 0.25;
+                cumulativeHeatOut.Add(new SensorPoint { Time = s.SnapshotTakenAt, Value = Math.Round(cumOut, 2) });
+            }
+        }
+
+        totalElecIn = cumIn;
+        totalHeatOut = cumOut;
+    }
+
+    private sealed class SensorPoint
+    {
+        public DateTime Time { get; set; }
+        public double Value { get; set; }
+    }
+}

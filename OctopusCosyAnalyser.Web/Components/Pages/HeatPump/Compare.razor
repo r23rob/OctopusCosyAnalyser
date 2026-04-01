@@ -1,0 +1,536 @@
+@page "/heatpump/compare"
+@inject HeatPumpApiClient Api
+@rendermode InteractiveServer
+@using OctopusCosyAnalyser.Web.Services
+
+<PageTitle>Heat Pump – Compare Periods</PageTitle>
+
+<h1>Compare Periods</h1>
+<p class="text-muted">Compare two time periods side-by-side to see the impact of settings changes.</p>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (string.IsNullOrEmpty(deviceId))
+{
+    <div class="alert alert-warning">No device set up. Go to the <a href="/heatpump">Dashboard</a> to run setup.</div>
+}
+else
+{
+    <!-- Side-by-Side Date Range Selectors -->
+    <div class="row g-3 mb-3">
+        <!-- Period A -->
+        <div class="col-md-6">
+            <div class="card compare-card compare-card-a">
+                <div class="card-header compare-header-a">
+                    <strong>Period A — Baseline</strong>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-6">
+                            <label class="form-label small">From</label>
+                            <input @bind="fromA" type="datetime-local" class="form-control form-control-sm" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">To</label>
+                            <input @bind="toA" type="datetime-local" class="form-control form-control-sm" />
+                        </div>
+                    </div>
+                    <div class="btn-group btn-group-sm w-100 mt-2">
+                        <button class="btn btn-outline-primary" @onclick="() => SetRangeA(1)">1 Day</button>
+                        <button class="btn btn-outline-primary" @onclick="() => SetRangeA(7)">7 Days</button>
+                        <button class="btn btn-outline-primary" @onclick="() => SetRangeA(30)">30 Days</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Period B -->
+        <div class="col-md-6">
+            <div class="card compare-card compare-card-b">
+                <div class="card-header compare-header-b">
+                    <strong>Period B — After Change</strong>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-6">
+                            <label class="form-label small">From</label>
+                            <input @bind="fromB" type="datetime-local" class="form-control form-control-sm" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">To</label>
+                            <input @bind="toB" type="datetime-local" class="form-control form-control-sm" />
+                        </div>
+                    </div>
+                    <div class="btn-group btn-group-sm w-100 mt-2">
+                        <button class="btn btn-outline-danger" @onclick="() => SetRangeB(1)">1 Day</button>
+                        <button class="btn btn-outline-danger" @onclick="() => SetRangeB(7)">7 Days</button>
+                        <button class="btn btn-outline-danger" @onclick="() => SetRangeB(30)">30 Days</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Button -->
+    <div class="text-center mb-4">
+        <button class="btn btn-primary px-4" @onclick="LoadComparison" disabled="@isLoading">
+            @if (isLoading)
+            {
+                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                <span>Comparing...</span>
+            }
+            else
+            {
+                <span>Compare Periods</span>
+            }
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        var alertClass = statusMessage.Contains("Loaded") ? "alert-success" : "alert-danger";
+        <div class="alert @alertClass">@statusMessage</div>
+    }
+
+    @if (hasData)
+    {
+        <!-- Delta Summary Cards -->
+        <div class="row g-3 mb-4">
+            @foreach (var metric in deltaMetrics)
+            {
+                <div class="col-6 col-md-4 col-lg-2">
+                    <div class="card h-100 delta-card @(metric.IsImprovement ? "delta-positive" : metric.IsNeutral ? "" : "delta-negative")">
+                        <div class="card-body text-center p-2">
+                            <div class="small text-muted mb-1">@metric.Label</div>
+                            <div class="d-flex justify-content-between px-1">
+                                <span class="compare-value-a small">@metric.ValueA</span>
+                                <span class="compare-value-b small">@metric.ValueB</span>
+                            </div>
+                            <div class="delta-value mt-1">
+                                @if (!metric.IsNeutral)
+                                {
+                                    <span class="@(metric.IsImprovement ? "text-success" : "text-danger")">
+                                        @(metric.DeltaValue > 0 ? "+" : "")@metric.DeltaFormatted @metric.Unit
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </div>
+                            @if (metric.DeltaPercent.HasValue && !metric.IsNeutral)
+                            {
+                                <div class="small @(metric.IsImprovement ? "text-success" : "text-danger")">
+                                    @(metric.DeltaPercent > 0 ? "+" : "")@metric.DeltaPercent?.ToString("F1")%
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Per-Sensor Breakdown -->
+        @if (sensorComparisonRows.Count > 0)
+        {
+            <div class="card mb-4">
+                <div class="card-header"><strong>Per-Sensor Breakdown</strong></div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Sensor</th>
+                                <th class="text-center compare-col-a">A — Avg</th>
+                                <th class="text-center compare-col-a">A — Min</th>
+                                <th class="text-center compare-col-a">A — Max</th>
+                                <th class="text-center compare-col-b">B — Avg</th>
+                                <th class="text-center compare-col-b">B — Min</th>
+                                <th class="text-center compare-col-b">B — Max</th>
+                                <th class="text-center">Delta Avg</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in sensorComparisonRows)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">@row.Name</td>
+                                    <td class="text-center">@row.AvgA?.ToString("F1")</td>
+                                    <td class="text-center">@row.MinA?.ToString("F1")</td>
+                                    <td class="text-center">@row.MaxA?.ToString("F1")</td>
+                                    <td class="text-center">@row.AvgB?.ToString("F1")</td>
+                                    <td class="text-center">@row.MinB?.ToString("F1")</td>
+                                    <td class="text-center">@row.MaxB?.ToString("F1")</td>
+                                    <td class="text-center">
+                                        @if (row.AvgA.HasValue && row.AvgB.HasValue)
+                                        {
+                                            var d = row.AvgB.Value - row.AvgA.Value;
+                                            <span class="@(d > 0.2 ? "text-danger" : d < -0.2 ? "text-success" : "text-muted")">
+                                                @(d > 0 ? "+" : "")@d.ToString("F1") °C
+                                            </span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        <!-- COP Overlay Chart -->
+        <div class="card mb-3">
+            <div class="card-header"><strong>COP Comparison</strong> <small class="text-muted">(normalised to elapsed time)</small></div>
+            <div class="card-body">
+                <RadzenChart Style="height: 320px;">
+                    <RadzenLineSeries Data="@copChartA" CategoryProperty="ElapsedHours" ValueProperty="Value"
+                                     Title="Period A" Stroke="rgba(59,130,246,0.8)" StrokeWidth="2" />
+                    <RadzenLineSeries Data="@copChartB" CategoryProperty="ElapsedHours" ValueProperty="Value"
+                                     Title="Period B" Stroke="rgba(239,68,68,0.8)" StrokeWidth="2" />
+                    <RadzenCategoryAxis FormatString="{0:F0}h" />
+                    <RadzenValueAxis Min="0">
+                        <RadzenGridLines Visible="true" />
+                    </RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+            </div>
+        </div>
+
+        <!-- Energy Overlay Chart -->
+        <div class="card mb-3">
+            <div class="card-header"><strong>Energy Comparison</strong> <small class="text-muted">(cumulative kWh)</small></div>
+            <div class="card-body">
+                <RadzenChart Style="height: 320px;">
+                    <RadzenLineSeries Data="@energyOutChartA" CategoryProperty="ElapsedHours" ValueProperty="Value"
+                                     Title="Heat Out — A" Stroke="rgba(59,130,246,0.7)" StrokeWidth="2" />
+                    <RadzenLineSeries Data="@energyInChartA" CategoryProperty="ElapsedHours" ValueProperty="Value"
+                                     Title="Elec In — A" Stroke="rgba(59,130,246,0.4)" StrokeWidth="2" LineType="LineType.Dashed" />
+                    <RadzenLineSeries Data="@energyOutChartB" CategoryProperty="ElapsedHours" ValueProperty="Value"
+                                     Title="Heat Out — B" Stroke="rgba(239,68,68,0.7)" StrokeWidth="2" />
+                    <RadzenLineSeries Data="@energyInChartB" CategoryProperty="ElapsedHours" ValueProperty="Value"
+                                     Title="Elec In — B" Stroke="rgba(239,68,68,0.4)" StrokeWidth="2" LineType="LineType.Dashed" />
+                    <RadzenCategoryAxis FormatString="{0:F0}h" />
+                    <RadzenValueAxis Min="0">
+                        <RadzenGridLines Visible="true" />
+                    </RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+            </div>
+        </div>
+
+        <!-- Outdoor Temperature Overlay Chart -->
+        <div class="card mb-3">
+            <div class="card-header"><strong>Outdoor Temperature</strong></div>
+            <div class="card-body">
+                <RadzenChart Style="height: 280px;">
+                    <RadzenLineSeries Data="@outdoorChartA" CategoryProperty="ElapsedHours" ValueProperty="Value"
+                                     Title="Period A" Stroke="rgba(59,130,246,0.7)" StrokeWidth="2" />
+                    <RadzenLineSeries Data="@outdoorChartB" CategoryProperty="ElapsedHours" ValueProperty="Value"
+                                     Title="Period B" Stroke="rgba(239,68,68,0.7)" StrokeWidth="2" />
+                    <RadzenCategoryAxis FormatString="{0:F0}h" />
+                    <RadzenValueAxis>
+                        <RadzenGridLines Visible="true" />
+                    </RadzenValueAxis>
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+            </div>
+        </div>
+
+        <!-- Room Temperature Overlay Chart -->
+        @if (roomTempChartA.Count > 0 || roomTempChartB.Count > 0)
+        {
+            <div class="card mb-3">
+                <div class="card-header"><strong>Room Temperature vs Setpoint</strong></div>
+                <div class="card-body">
+                    <RadzenChart Style="height: 280px;">
+                        <RadzenLineSeries Data="@roomTempChartA" CategoryProperty="ElapsedHours" ValueProperty="Value"
+                                         Title="Room Temp — A" Stroke="rgba(59,130,246,0.7)" StrokeWidth="2" />
+                        <RadzenLineSeries Data="@setpointChartA" CategoryProperty="ElapsedHours" ValueProperty="Value"
+                                         Title="Setpoint — A" Stroke="rgba(59,130,246,0.4)" StrokeWidth="1" LineType="LineType.Dashed" />
+                        <RadzenLineSeries Data="@roomTempChartB" CategoryProperty="ElapsedHours" ValueProperty="Value"
+                                         Title="Room Temp — B" Stroke="rgba(239,68,68,0.7)" StrokeWidth="2" />
+                        <RadzenLineSeries Data="@setpointChartB" CategoryProperty="ElapsedHours" ValueProperty="Value"
+                                         Title="Setpoint — B" Stroke="rgba(239,68,68,0.4)" StrokeWidth="1" LineType="LineType.Dashed" />
+                        <RadzenCategoryAxis FormatString="{0:F0}h" />
+                        <RadzenValueAxis>
+                            <RadzenGridLines Visible="true" />
+                        </RadzenValueAxis>
+                        <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                    </RadzenChart>
+                </div>
+            </div>
+        }
+    }
+}
+
+@code {
+    private string? deviceId;
+    private bool isLoading;
+    private bool hasData;
+    private string? errorMessage;
+    private string? statusMessage;
+
+    private DateTime fromA = DateTime.UtcNow.AddDays(-14);
+    private DateTime toA = DateTime.UtcNow.AddDays(-7);
+    private DateTime fromB = DateTime.UtcNow.AddDays(-7);
+    private DateTime toB = DateTime.UtcNow;
+
+    private List<HeatPumpSnapshotDto> snapshotsA = [];
+    private List<HeatPumpSnapshotDto> snapshotsB = [];
+
+    // Delta metrics
+    private List<DeltaMetric> deltaMetrics = [];
+
+    // Chart data
+    private List<ElapsedPoint> copChartA = [], copChartB = [];
+    private List<ElapsedPoint> energyInChartA = [], energyInChartB = [];
+    private List<ElapsedPoint> energyOutChartA = [], energyOutChartB = [];
+    private List<ElapsedPoint> outdoorChartA = [], outdoorChartB = [];
+    private List<ElapsedPoint> roomTempChartA = [], roomTempChartB = [];
+    private List<ElapsedPoint> setpointChartA = [], setpointChartB = [];
+
+    // Sensor comparison
+    private List<SensorComparisonRow> sensorComparisonRows = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var devices = await Api.GetDevicesAsync();
+            if (devices.Length > 0) deviceId = devices[0].DeviceId;
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+
+    private void SetRangeA(int days) { toA = fromB; fromA = toA.AddDays(-days); }
+    private void SetRangeB(int days) { toB = DateTime.UtcNow; fromB = toB.AddDays(-days); }
+
+    private async Task LoadComparison()
+    {
+        if (string.IsNullOrEmpty(deviceId)) { statusMessage = "No device available."; return; }
+
+        isLoading = true;
+        hasData = false;
+        statusMessage = null;
+
+        try
+        {
+            var taskA = Api.GetSnapshotsAsync(deviceId, fromA, toA);
+            var taskB = Api.GetSnapshotsAsync(deviceId, fromB, toB);
+            await Task.WhenAll(taskA, taskB);
+
+            snapshotsA = taskA.Result?.Snapshots ?? [];
+            snapshotsB = taskB.Result?.Snapshots ?? [];
+
+            if (snapshotsA.Count == 0 && snapshotsB.Count == 0)
+            {
+                statusMessage = "No snapshot data found for either period.";
+                return;
+            }
+
+            BuildDeltaMetrics();
+            BuildOverlayCharts();
+            BuildSensorComparison();
+            hasData = true;
+            statusMessage = $"Loaded {snapshotsA.Count} + {snapshotsB.Count} snapshots.";
+        }
+        catch (Exception ex) { statusMessage = $"Error: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+
+    private void BuildDeltaMetrics()
+    {
+        deltaMetrics =
+        [
+            BuildDelta("Avg COP", "","F2",
+                AvgDec(snapshotsA, s => s.CoefficientOfPerformance),
+                AvgDec(snapshotsB, s => s.CoefficientOfPerformance), higherIsBetter: true),
+            BuildDelta("Avg Outdoor", "°C","F1",
+                AvgDec(snapshotsA, s => s.OutdoorTemperatureCelsius),
+                AvgDec(snapshotsB, s => s.OutdoorTemperatureCelsius), higherIsBetter: false, neutralDelta: true),
+            BuildDelta("Avg Room Temp", "°C","F1",
+                AvgDec(snapshotsA, s => s.RoomTemperatureCelsius),
+                AvgDec(snapshotsB, s => s.RoomTemperatureCelsius), higherIsBetter: false, neutralDelta: true),
+            BuildDelta("Delta Temp", "°C","F1",
+                ComputeDeltaTemp(snapshotsA), ComputeDeltaTemp(snapshotsB), higherIsBetter: false, neutralDelta: true),
+            BuildDelta("Avg Power In", "kW","F2",
+                AvgDec(snapshotsA, s => s.PowerInputKilowatt),
+                AvgDec(snapshotsB, s => s.PowerInputKilowatt), higherIsBetter: false),
+            BuildDelta("Total Energy In", "kWh","F1",
+                TotalEnergy(snapshotsA, s => s.PowerInputKilowatt),
+                TotalEnergy(snapshotsB, s => s.PowerInputKilowatt), higherIsBetter: false),
+            BuildDelta("Total Heat Out", "kWh","F1",
+                TotalEnergy(snapshotsA, s => s.HeatOutputKilowatt),
+                TotalEnergy(snapshotsB, s => s.HeatOutputKilowatt), higherIsBetter: true),
+            BuildDelta("Avg Flow Temp", "°C","F1",
+                AvgDec(snapshotsA, s => s.HeatingFlowTemperatureCelsius),
+                AvgDec(snapshotsB, s => s.HeatingFlowTemperatureCelsius), higherIsBetter: false),
+        ];
+    }
+
+    private void BuildOverlayCharts()
+    {
+        copChartA = ToElapsedSeries(snapshotsA, fromA, s => s.CoefficientOfPerformance);
+        copChartB = ToElapsedSeries(snapshotsB, fromB, s => s.CoefficientOfPerformance);
+
+        energyInChartA = ToCumulativeElapsed(snapshotsA, fromA, s => s.PowerInputKilowatt);
+        energyInChartB = ToCumulativeElapsed(snapshotsB, fromB, s => s.PowerInputKilowatt);
+        energyOutChartA = ToCumulativeElapsed(snapshotsA, fromA, s => s.HeatOutputKilowatt);
+        energyOutChartB = ToCumulativeElapsed(snapshotsB, fromB, s => s.HeatOutputKilowatt);
+
+        outdoorChartA = ToElapsedSeries(snapshotsA, fromA, s => s.OutdoorTemperatureCelsius);
+        outdoorChartB = ToElapsedSeries(snapshotsB, fromB, s => s.OutdoorTemperatureCelsius);
+
+        roomTempChartA = ToElapsedSeries(snapshotsA, fromA, s => s.RoomTemperatureCelsius);
+        roomTempChartB = ToElapsedSeries(snapshotsB, fromB, s => s.RoomTemperatureCelsius);
+        setpointChartA = ToElapsedSeries(snapshotsA, fromA, s => s.HeatingZoneSetpointCelsius);
+        setpointChartB = ToElapsedSeries(snapshotsB, fromB, s => s.HeatingZoneSetpointCelsius);
+    }
+
+    private void BuildSensorComparison()
+    {
+        var sensorsA = ParseAllSensors(snapshotsA);
+        var sensorsB = ParseAllSensors(snapshotsB);
+        var allNames = sensorsA.Keys.Union(sensorsB.Keys).OrderBy(n => n).ToList();
+
+        sensorComparisonRows = allNames.Select(name =>
+        {
+            var hasA = sensorsA.TryGetValue(name, out var listA) && listA.Count > 0;
+            var hasB = sensorsB.TryGetValue(name, out var listB) && listB.Count > 0;
+            return new SensorComparisonRow
+            {
+                Name = name,
+                AvgA = hasA ? listA!.Average() : null,
+                MinA = hasA ? listA!.Min() : null,
+                MaxA = hasA ? listA!.Max() : null,
+                AvgB = hasB ? listB!.Average() : null,
+                MinB = hasB ? listB!.Min() : null,
+                MaxB = hasB ? listB!.Max() : null,
+            };
+        }).ToList();
+    }
+
+    private static Dictionary<string, List<double>> ParseAllSensors(List<HeatPumpSnapshotDto> snapshots)
+    {
+        var result = new Dictionary<string, List<double>>();
+        foreach (var snap in snapshots)
+        {
+            if (string.IsNullOrEmpty(snap.SensorReadingsJson)) continue;
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(snap.SensorReadingsJson);
+                foreach (var sensor in doc.RootElement.EnumerateArray())
+                {
+                    var code = sensor.TryGetProperty("code", out var c) ? c.GetString() ?? "" : "";
+                    if (sensor.TryGetProperty("tempC", out var tempEl) && tempEl.TryGetDouble(out var temp))
+                    {
+                        if (!result.ContainsKey(code)) result[code] = [];
+                        result[code].Add(temp);
+                    }
+                }
+            }
+            catch { }
+        }
+        return result;
+    }
+
+    private static List<ElapsedPoint> ToElapsedSeries(List<HeatPumpSnapshotDto> snapshots, DateTime rangeStart,
+        Func<HeatPumpSnapshotDto, decimal?> selector)
+    {
+        return snapshots
+            .Where(s => selector(s).HasValue)
+            .OrderBy(s => s.SnapshotTakenAt)
+            .Select(s => new ElapsedPoint
+            {
+                ElapsedHours = Math.Round((s.SnapshotTakenAt - rangeStart).TotalHours, 1),
+                Value = (double)selector(s)!.Value
+            })
+            .ToList();
+    }
+
+    private static List<ElapsedPoint> ToCumulativeElapsed(List<HeatPumpSnapshotDto> snapshots, DateTime rangeStart,
+        Func<HeatPumpSnapshotDto, decimal?> powerSelector)
+    {
+        double cumulative = 0;
+        return snapshots
+            .Where(s => powerSelector(s).HasValue)
+            .OrderBy(s => s.SnapshotTakenAt)
+            .Select(s =>
+            {
+                cumulative += (double)powerSelector(s)!.Value * 0.25; // 15-min interval = 0.25h
+                return new ElapsedPoint
+                {
+                    ElapsedHours = Math.Round((s.SnapshotTakenAt - rangeStart).TotalHours, 1),
+                    Value = Math.Round(cumulative, 2)
+                };
+            })
+            .ToList();
+    }
+
+    private static double? AvgDec(List<HeatPumpSnapshotDto> snaps, Func<HeatPumpSnapshotDto, decimal?> sel)
+    {
+        var vals = snaps.Where(s => sel(s).HasValue).Select(s => (double)sel(s)!.Value).ToList();
+        return vals.Count > 0 ? vals.Average() : null;
+    }
+
+    private static double? TotalEnergy(List<HeatPumpSnapshotDto> snaps, Func<HeatPumpSnapshotDto, decimal?> powerSel)
+    {
+        var vals = snaps.Where(s => powerSel(s).HasValue).Select(s => (double)powerSel(s)!.Value).ToList();
+        return vals.Count > 0 ? vals.Sum() * 0.25 : null; // kW * 0.25h = kWh per 15-min snapshot
+    }
+
+    private static double? ComputeDeltaTemp(List<HeatPumpSnapshotDto> snaps)
+    {
+        var avgRoom = AvgDec(snaps, s => s.RoomTemperatureCelsius);
+        var avgOutdoor = AvgDec(snaps, s => s.OutdoorTemperatureCelsius);
+        return avgRoom.HasValue && avgOutdoor.HasValue ? avgRoom.Value - avgOutdoor.Value : null;
+    }
+
+    private static DeltaMetric BuildDelta(string label, string unit, string format, double? valA, double? valB,
+        bool higherIsBetter, bool neutralDelta = false)
+    {
+        var delta = valA.HasValue && valB.HasValue ? valB.Value - valA.Value : (double?)null;
+        var pct = valA.HasValue && valB.HasValue && valA.Value != 0 ? delta / Math.Abs(valA.Value) * 100 : null;
+        var isImprovement = delta.HasValue && !neutralDelta &&
+            (higherIsBetter ? delta > 0 : delta < 0);
+
+        return new DeltaMetric
+        {
+            Label = label,
+            Unit = unit,
+            ValueA = valA?.ToString(format) ?? "—",
+            ValueB = valB?.ToString(format) ?? "—",
+            DeltaValue = delta ?? 0,
+            DeltaFormatted = delta?.ToString(format) ?? "—",
+            DeltaPercent = pct,
+            IsImprovement = isImprovement,
+            IsNeutral = neutralDelta || !delta.HasValue
+        };
+    }
+
+    private sealed class ElapsedPoint { public double ElapsedHours { get; set; } public double Value { get; set; } }
+    private sealed class DeltaMetric
+    {
+        public string Label { get; set; } = "";
+        public string Unit { get; set; } = "";
+        public string ValueA { get; set; } = "";
+        public string ValueB { get; set; } = "";
+        public double DeltaValue { get; set; }
+        public string DeltaFormatted { get; set; } = "";
+        public double? DeltaPercent { get; set; }
+        public bool IsImprovement { get; set; }
+        public bool IsNeutral { get; set; }
+    }
+    private sealed class SensorComparisonRow
+    {
+        public string Name { get; set; } = "";
+        public double? AvgA { get; set; }
+        public double? MinA { get; set; }
+        public double? MaxA { get; set; }
+        public double? AvgB { get; set; }
+        public double? MinB { get; set; }
+        public double? MaxB { get; set; }
+    }
+}
