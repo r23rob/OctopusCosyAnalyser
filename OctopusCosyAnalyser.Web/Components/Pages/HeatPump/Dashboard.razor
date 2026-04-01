@@ -197,9 +197,19 @@ else
     private HeatPumpSummaryDto? summary;
     private LatestSnapshotDto? latestSnapshot;
 
-    private string SnapshotHealthClass => latestSnapshot?.HasData == true && latestSnapshot.MinutesAgo < 20
-        ? "border-success" : latestSnapshot?.HasData == true && latestSnapshot.MinutesAgo < 60
-        ? "border-warning" : "border-danger";
+    private string SnapshotHealthClass
+    {
+        get
+        {
+            if (latestSnapshot?.HasData == true)
+            {
+                var minutesAgo = latestSnapshot.MinutesAgo ?? double.MaxValue;
+                if (minutesAgo < 20) return "border-success";
+                if (minutesAgo < 60) return "border-warning";
+            }
+            return "border-danger";
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
