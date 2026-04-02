@@ -23,6 +23,26 @@ builder.Services.AddHttpClient<OctopusEnergyClient>()
         options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
     });
 
+// Add AI Analysis Service (Anthropic API)
+var anthropicKey = builder.Configuration["Anthropic:ApiKey"]
+    ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+
+if (!string.IsNullOrEmpty(anthropicKey))
+{
+    builder.Services.AddHttpClient<AiAnalysisService>(client =>
+    {
+        client.BaseAddress = new Uri("https://api.anthropic.com/");
+        client.DefaultRequestHeaders.Add("x-api-key", anthropicKey);
+        client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+        client.Timeout = TimeSpan.FromMinutes(3);
+    });
+}
+else
+{
+    builder.Services.AddSingleton<AiAnalysisService>(sp =>
+        new AiAnalysisService(new HttpClient(), sp.GetRequiredService<ILogger<AiAnalysisService>>()));
+}
+
 // Add Heat Pump Snapshot Worker
 builder.Services.AddHostedService<HeatPumpSnapshotWorker>();
 

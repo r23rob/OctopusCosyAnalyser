@@ -186,6 +186,28 @@ public class HeatPumpApiClient
         return await response.Content.ReadAsStringAsync();
     }
 
+    // ── Daily Aggregates ───────────────────────────────────────────
+
+    public async Task<DailyAggregateDto[]> GetDailyAggregatesAsync(string deviceId, DateTime? from = null, DateTime? to = null)
+    {
+        var fromStr = (from ?? DateTime.UtcNow.AddDays(-30)).ToString("o");
+        var toStr = (to ?? DateTime.UtcNow).ToString("o");
+        var response = await _http.GetFromJsonAsync<JsonDocument>(
+            $"/api/heatpump/daily-aggregates/{deviceId}?from={Uri.EscapeDataString(fromStr)}&to={Uri.EscapeDataString(toStr)}");
+        if (response is null) return [];
+        var aggregates = response.RootElement.GetProperty("aggregates");
+        return JsonSerializer.Deserialize<DailyAggregateDto[]>(aggregates.GetRawText()) ?? [];
+    }
+
+    // ── AI Analysis ─────────────────────────────────────────────────
+
+    public async Task<AiAnalysisResponseDto?> GetAiAnalysisAsync(string deviceId, AiAnalysisRequestDto request)
+    {
+        var response = await _http.PostAsJsonAsync($"/api/heatpump/ai-analysis/{deviceId}", request);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AiAnalysisResponseDto>();
+    }
+
     // ── Cost of Usage ─────────────────────────────────────────────
 
     public async Task<string> GetCostOfUsageRawAsync(string accountNumber, DateTime? from = null, DateTime? to = null)

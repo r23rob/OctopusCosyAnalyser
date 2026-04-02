@@ -12,6 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Markdig" Version="1.1.2" />
     <PackageReference Include="Radzen.Blazor" Version="9.0.5" />
   </ItemGroup>
 
