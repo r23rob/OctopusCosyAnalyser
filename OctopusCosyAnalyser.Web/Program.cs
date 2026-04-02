@@ -29,13 +29,13 @@ builder.Services.AddHttpClient<WeatherApiClient>(client =>
 builder.Services.AddHttpClient<HeatPumpApiClient>(client =>
     {
         client.BaseAddress = new("https+http://apiservice");
-        client.Timeout = TimeSpan.FromMinutes(2);
+        client.Timeout = TimeSpan.FromMinutes(5);
     })
     .AddStandardResilienceHandler(options =>
     {
-        options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(2);
-        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
-        options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(5);
+        options.AttemptTimeout.Timeout = TimeSpan.FromMinutes(4);
+        options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(8);
     });
 
 var app = builder.Build();

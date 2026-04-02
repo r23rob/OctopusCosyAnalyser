@@ -572,9 +572,17 @@ public static class HeatPumpEndpoints
                 return Results.BadRequest(new { error = "Maximum sync range is 400 days." });
 
             var synced = 0;
+            var skipped = 0;
             var chunkStart = from.Value;
-            var chunkSize = TimeSpan.FromDays(2); // DAY grouping max span
+            var chunkSize = TimeSpan.FromDays(60); // MONTH grouping max span
             var logger = loggerFactory.CreateLogger("TimeSeriesSync");
+
+            // Load all existing timestamps for this device in the date range to avoid duplicates
+            var existingTimestamps = await db.HeatPumpTimeSeriesRecords
+                .Where(r => r.DeviceId == deviceId && r.StartAt >= from.Value && r.StartAt <= to.Value)
+                .Select(r => r.StartAt)
+                .ToListAsync();
+            var existingSet = new HashSet<DateTime>(existingTimestamps);
 
             while (chunkStart < to.Value)
             {
@@ -585,7 +593,7 @@ public static class HeatPumpEndpoints
                 try
                 {
                     var data = await client.GetHeatPumpTimeSeriesPerformanceAsync(
-                        settings!.ApiKey, device.Euid, chunkStart, chunkEnd, "DAY");
+                        settings!.ApiKey, device.Euid, chunkStart, chunkEnd, "MONTH");
                     var root = data.RootElement.GetProperty("data");
 
                     var chunkSynced = 0;
@@ -600,6 +608,13 @@ public static class HeatPumpEndpoints
                                 continue;
 
                             var startAt = startAtDto.UtcDateTime;
+
+                            // Skip records that already exist in the database
+                            if (existingSet.Contains(startAt))
+                            {
+                                skipped++;
+                                continue;
+                            }
 
                             var endAtUtc = startAt.AddHours(1); // default for hourly buckets
                             if (item.TryGetProperty("endAt", out var endAtEl)
@@ -628,6 +643,7 @@ public static class HeatPumpEndpoints
                                 record.OutdoorTemperatureCelsius = otDec;
 
                             db.HeatPumpTimeSeriesRecords.Add(record);
+                            existingSet.Add(startAt); // prevent duplicates within this sync run
                             chunkSynced++;
                         }
                     }
@@ -635,15 +651,7 @@ public static class HeatPumpEndpoints
                     // Save per chunk to bound memory and make partial progress durable
                     if (chunkSynced > 0)
                     {
-                        try
-                        {
-                            await db.SaveChangesAsync();
-                        }
-                        catch (DbUpdateException)
-                        {
-                            // Unique constraint violation — some records already exist, skip
-                            db.ChangeTracker.Clear();
-                        }
+                        await db.SaveChangesAsync();
                         db.ChangeTracker.Clear();
                         synced += chunkSynced;
                     }
@@ -657,7 +665,7 @@ public static class HeatPumpEndpoints
                 chunkStart = chunkEnd;
             }
 
-            return Results.Ok(new { synced, from, to });
+            return Results.Ok(new { synced, skipped, from, to });
         }).WithName("SyncTimeSeries");
 
         // ── Controllers at Location (Multi-HP) ────────────────────────
@@ -773,23 +781,40 @@ public static class HeatPumpEndpoints
             var from = request.From;
             var to = request.To;
 
+            // Load snapshots (for weather comp, flow temp, room temp, zones, COP, etc.)
             var snapshots = await db.HeatPumpSnapshots
                 .AsNoTracking()
                 .Where(s => s.DeviceId == deviceId && s.SnapshotTakenAt >= from && s.SnapshotTakenAt <= to)
                 .OrderBy(s => s.SnapshotTakenAt)
                 .ToListAsync();
 
-            if (snapshots.Count == 0)
+            // Load time series history (synced hourly energy data)
+            var timeSeriesRecords = await db.HeatPumpTimeSeriesRecords
+                .AsNoTracking()
+                .Where(r => r.DeviceId == deviceId && r.StartAt >= from && r.StartAt <= to)
+                .OrderBy(r => r.StartAt)
+                .ToListAsync();
+
+            if (snapshots.Count == 0 && timeSeriesRecords.Count == 0)
                 return Results.Ok(new AiAnalysisResponseDto
                 {
-                    Analysis = "No snapshot data found for the selected period. Try selecting a wider date range.",
+                    Analysis = "No data found for the selected period. Try selecting a wider date range, or sync history data first.",
                     From = from,
                     To = to,
                     DaysAnalysed = 0,
                     TotalSnapshots = 0
                 });
 
-            var aggregates = ComputeDailyAggregates(snapshots);
+            // Compute daily aggregates from snapshots (existing logic)
+            var aggregates = snapshots.Count > 0
+                ? ComputeDailyAggregates(snapshots)
+                : new List<DailyAggregateDto>();
+
+            // Enrich with time series data + weather comp from nearest snapshots
+            if (timeSeriesRecords.Count > 0)
+            {
+                EnrichAggregatesWithTimeSeries(aggregates, timeSeriesRecords, snapshots);
+            }
 
             // Merge cost data from Octopus API
             var settings = await db.OctopusAccountSettings
@@ -853,7 +878,7 @@ public static class HeatPumpEndpoints
                 }
             }
 
-            var analysis = await aiService.AnalyseAsync(aggregates, request.Question);
+            var analysis = await aiService.AnalyseAsync(aggregates, request.Question, settings?.AnthropicApiKey);
 
             return Results.Ok(new AiAnalysisResponseDto
             {
@@ -861,7 +886,8 @@ public static class HeatPumpEndpoints
                 From = from,
                 To = to,
                 DaysAnalysed = aggregates.Count,
-                TotalSnapshots = snapshots.Count
+                TotalSnapshots = snapshots.Count,
+                TotalTimeSeriesRecords = timeSeriesRecords.Count
             });
         }).WithName("GetAiAnalysis");
     }
@@ -964,6 +990,163 @@ public static class HeatPumpEndpoints
     {
         var values = snapshots.Where(s => selector(s).HasValue).Select(s => (double)selector(s)!.Value).ToList();
         return values.Count > 0 ? values.Average() : null;
+    }
+
+    /// <summary>
+    /// Enriches daily aggregates with time series history data.
+    /// For each time series record, finds the nearest snapshot within ±30 minutes
+    /// to correlate weather compensation settings with energy performance.
+    /// Creates new daily aggregates for dates that have time series data but no snapshots.
+    /// </summary>
+    internal static void EnrichAggregatesWithTimeSeries(
+        List<DailyAggregateDto> aggregates,
+        List<HeatPumpTimeSeriesRecord> timeSeriesRecords,
+        List<HeatPumpSnapshot> snapshots)
+    {
+        // Index snapshots by time for efficient nearest-neighbour lookup
+        var snapshotsByTime = snapshots
+            .OrderBy(s => s.SnapshotTakenAt)
+            .ToList();
+
+        // Group time series records by date
+        var tsByDate = timeSeriesRecords
+            .GroupBy(r => DateOnly.FromDateTime(r.StartAt))
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Index existing aggregates by date for merging
+        var aggByDate = aggregates.ToDictionary(a => a.Date);
+
+        foreach (var (date, records) in tsByDate)
+        {
+            // Sum energy from time series for the day
+            var tsEnergyIn = records
+                .Where(r => r.EnergyInputKwh.HasValue)
+                .Sum(r => (double)r.EnergyInputKwh!.Value);
+            var tsEnergyOut = records
+                .Where(r => r.EnergyOutputKwh.HasValue)
+                .Sum(r => (double)r.EnergyOutputKwh!.Value);
+            var tsOutdoorTemps = records
+                .Where(r => r.OutdoorTemperatureCelsius.HasValue)
+                .Select(r => (double)r.OutdoorTemperatureCelsius!.Value)
+                .ToList();
+
+            // Find weather comp settings from nearest snapshots (within 30 min window)
+            var wcValues = new List<(bool? enabled, decimal? min, decimal? max, decimal? flowTemp)>();
+            foreach (var rec in records)
+            {
+                var nearest = FindNearestSnapshot(snapshotsByTime, rec.StartAt, TimeSpan.FromMinutes(30));
+                if (nearest is not null)
+                {
+                    wcValues.Add((
+                        nearest.WeatherCompensationEnabled,
+                        nearest.WeatherCompensationMinCelsius,
+                        nearest.WeatherCompensationMaxCelsius,
+                        nearest.HeatingFlowTemperatureCelsius
+                    ));
+                }
+            }
+
+            // Compute weather comp mode values for the day from matched snapshots
+            var wcMinMode = wcValues
+                .Where(v => v.min.HasValue)
+                .GroupBy(v => v.min!.Value)
+                .OrderByDescending(g => g.Count())
+                .FirstOrDefault()?.Key;
+
+            var wcMaxMode = wcValues
+                .Where(v => v.max.HasValue)
+                .GroupBy(v => v.max!.Value)
+                .OrderByDescending(g => g.Count())
+                .FirstOrDefault()?.Key;
+
+            var avgFlowTemp = wcValues
+                .Where(v => v.flowTemp.HasValue)
+                .Select(v => (double)v.flowTemp!.Value)
+                .ToList();
+
+            if (aggByDate.TryGetValue(date, out var existing))
+            {
+                // Merge: prefer time series energy totals (more complete hourly data)
+                if (tsEnergyIn > 0)
+                    existing.TotalElectricityKwh = tsEnergyIn;
+                if (tsEnergyOut > 0)
+                    existing.TotalHeatOutputKwh = tsEnergyOut;
+
+                // Supplement outdoor temp from time series if snapshot data is missing
+                if (!existing.AvgOutdoorTemp.HasValue && tsOutdoorTemps.Count > 0)
+                    existing.AvgOutdoorTemp = tsOutdoorTemps.Average();
+                if (!existing.MinOutdoorTemp.HasValue && tsOutdoorTemps.Count > 0)
+                    existing.MinOutdoorTemp = tsOutdoorTemps.Min();
+                if (!existing.MaxOutdoorTemp.HasValue && tsOutdoorTemps.Count > 0)
+                    existing.MaxOutdoorTemp = tsOutdoorTemps.Max();
+
+                // Supplement weather comp from time-series-correlated snapshots if not already set
+                if (!existing.WeatherCompMin.HasValue && wcMinMode.HasValue)
+                    existing.WeatherCompMin = (double)wcMinMode.Value;
+                if (!existing.WeatherCompMax.HasValue && wcMaxMode.HasValue)
+                    existing.WeatherCompMax = (double)wcMaxMode.Value;
+                if (!existing.AvgFlowTemp.HasValue && avgFlowTemp.Count > 0)
+                    existing.AvgFlowTemp = avgFlowTemp.Average();
+
+                // Compute COP from time series energy data
+                if (tsEnergyIn > 0 && tsEnergyOut > 0)
+                    existing.AvgCopHeating ??= tsEnergyOut / tsEnergyIn;
+            }
+            else
+            {
+                // Create new aggregate from time series data for dates without snapshots
+                var newAgg = new DailyAggregateDto
+                {
+                    Date = date,
+                    SnapshotCount = 0,
+                    TotalElectricityKwh = tsEnergyIn,
+                    TotalHeatOutputKwh = tsEnergyOut,
+                    AvgOutdoorTemp = tsOutdoorTemps.Count > 0 ? tsOutdoorTemps.Average() : null,
+                    MinOutdoorTemp = tsOutdoorTemps.Count > 0 ? tsOutdoorTemps.Min() : null,
+                    MaxOutdoorTemp = tsOutdoorTemps.Count > 0 ? tsOutdoorTemps.Max() : null,
+                    AvgCopHeating = tsEnergyIn > 0 ? tsEnergyOut / tsEnergyIn : null,
+                    WeatherCompMin = wcMinMode.HasValue ? (double)wcMinMode.Value : null,
+                    WeatherCompMax = wcMaxMode.HasValue ? (double)wcMaxMode.Value : null,
+                    AvgFlowTemp = avgFlowTemp.Count > 0 ? avgFlowTemp.Average() : null,
+                };
+
+                aggregates.Add(newAgg);
+            }
+        }
+
+        // Re-sort by date after adding new entries
+        aggregates.Sort((a, b) => a.Date.CompareTo(b.Date));
+    }
+
+    /// <summary>
+    /// Finds the nearest snapshot to a given timestamp within a maximum time window.
+    /// Uses binary search for efficiency on sorted snapshot list.
+    /// </summary>
+    private static HeatPumpSnapshot? FindNearestSnapshot(List<HeatPumpSnapshot> sortedSnapshots, DateTime target, TimeSpan maxDistance)
+    {
+        if (sortedSnapshots.Count == 0) return null;
+
+        // Binary search for the insertion point
+        var idx = sortedSnapshots.BinarySearch(null!, Comparer<HeatPumpSnapshot>.Create(
+            (a, _) => a!.SnapshotTakenAt.CompareTo(target)));
+
+        if (idx < 0) idx = ~idx; // bitwise complement gives the insertion point
+
+        HeatPumpSnapshot? best = null;
+        var bestDistance = TimeSpan.MaxValue;
+
+        // Check the element at idx and idx-1 (the two nearest candidates)
+        for (var i = Math.Max(0, idx - 1); i <= Math.Min(sortedSnapshots.Count - 1, idx); i++)
+        {
+            var distance = (sortedSnapshots[i].SnapshotTakenAt - target).Duration();
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = sortedSnapshots[i];
+            }
+        }
+
+        return bestDistance <= maxDistance ? best : null;
     }
 
     private static double GetJsonDouble(JsonElement el, string property)

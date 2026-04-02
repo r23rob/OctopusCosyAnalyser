@@ -187,7 +187,8 @@ public class HeatPumpApiClient
         var json = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
         var synced = doc.RootElement.TryGetProperty("synced", out var s) ? s.GetInt32() : 0;
-        return new SyncResult { Synced = synced };
+        var skipped = doc.RootElement.TryGetProperty("skipped", out var sk) ? sk.GetInt32() : 0;
+        return new SyncResult { Synced = synced, Skipped = skipped };
     }
 
     // ── Time Ranged (Octopus API aggregated) ─────────────────────────
@@ -301,5 +302,6 @@ public sealed class TimeSeriesResult
 public sealed class SyncResult
 {
     public int Synced { get; set; }
+    public int Skipped { get; set; }
 }
 

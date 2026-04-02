@@ -14,6 +14,14 @@ public class AiAnalysisService
     private const string SystemPrompt = """
         You are a heat pump performance analyst specialising in the Octopus Energy Cosy heat pump system (Mitsubishi Ecodan under the hood). You analyse daily aggregated data from a UK residential air-source heat pump installation.
 
+        ## Data Sources
+
+        The CSV data is built from two sources:
+        1. **Snapshots** — periodic readings (every ~15 min) capturing live COP, power input, heat output, room temp, setpoint, zone demand, weather compensation settings, flow temperature, and controller state.
+        2. **Synced hourly history** — energy input/output and outdoor temperature from the Octopus `octoHeatPumpTimeSeriesPerformance` API, covering up to 12 months. Weather compensation values (WC_MinC, WC_MaxC) on history-only days are correlated from the nearest snapshot within a 30-minute window.
+
+        Days with `SnapshotCount=0` have data from history records only — they will have energy totals and outdoor temperature but may lack duty cycle, room temperature, and zone demand data. Treat these days as having less granular data but still useful for energy trends and WC analysis.
+
         ## Key Concepts
 
         **COP (Coefficient of Performance)**: heat output / electrical input. Higher is better.
@@ -75,11 +83,14 @@ public class AiAnalysisService
         _isConfigured = _httpClient.BaseAddress is not null;
     }
 
-    public async Task<string> AnalyseAsync(List<DailyAggregateDto> aggregates, string? userQuestion, CancellationToken ct = default)
+    public async Task<string> AnalyseAsync(List<DailyAggregateDto> aggregates, string? userQuestion, string? anthropicApiKey = null, CancellationToken ct = default)
     {
-        if (!_isConfigured)
+        // Determine which API key to use: DB-stored key takes priority, then startup-configured
+        var usePerRequestKey = !string.IsNullOrWhiteSpace(anthropicApiKey);
+
+        if (!usePerRequestKey && !_isConfigured)
         {
-            return "AI analysis is not configured. Set the `ANTHROPIC_API_KEY` environment variable and restart the application.";
+            return "AI analysis is not configured. Add your Anthropic API key in Account Settings, or set the `ANTHROPIC_API_KEY` environment variable and restart.";
         }
 
         var csv = BuildCsv(aggregates);
@@ -111,7 +122,22 @@ public class AiAnalysisService
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("v1/messages", requestBody, ct);
+            HttpResponseMessage response;
+
+            if (usePerRequestKey)
+            {
+                // Use per-request API key from DB — send directly to Anthropic
+                var requestMessage = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages");
+                requestMessage.Headers.Add("x-api-key", anthropicApiKey);
+                requestMessage.Headers.Add("anthropic-version", "2023-06-01");
+                requestMessage.Content = JsonContent.Create(requestBody);
+                response = await _httpClient.SendAsync(requestMessage, ct);
+            }
+            else
+            {
+                // Use startup-configured client (key already in default headers)
+                response = await _httpClient.PostAsJsonAsync("v1/messages", requestBody, ct);
+            }
 
             if (!response.IsSuccessStatusCode)
             {

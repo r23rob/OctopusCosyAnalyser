@@ -14,4 +14,5 @@ public sealed class AiAnalysisResponseDto
     public DateTime To { get; set; }
     public int DaysAnalysed { get; set; }
     public int TotalSnapshots { get; set; }
+    public int TotalTimeSeriesRecords { get; set; }
 }

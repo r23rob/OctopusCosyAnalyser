@@ -18,6 +18,7 @@ else
 {
     <div class="card mt-3">
         <div class="card-body">
+            <h5 class="card-title mb-3">Octopus Energy</h5>
             <div class="mb-3">
                 <label class="form-label">Account Number</label>
                 <input @bind="accountNumber" class="form-control" placeholder="A-1234-5678" />
@@ -25,8 +26,16 @@ else
             <div class="mb-3">
                 <label class="form-label">API Key</label>
                 <input @bind="apiKey" type="password" class="form-control" placeholder="sk_live_..." />
-                <div class="form-text">Stored in the database and used for Octopus API calls.</div>
+                <div class="form-text">Your Octopus Energy API key. Found at <a href="https://octopus.energy/dashboard/new/accounts/personal-details/api-access" target="_blank">octopus.energy/dashboard</a>.</div>
             </div>
+
+            <h5 class="card-title mb-3 mt-4">AI Analysis</h5>
+            <div class="mb-3">
+                <label class="form-label">Anthropic API Key <span class="text-muted">(optional)</span></label>
+                <input @bind="anthropicApiKey" type="password" class="form-control" placeholder="sk-ant-..." />
+                <div class="form-text">Required for the AI Analysis feature. Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a>.</div>
+            </div>
+
             <button @onclick="SaveSettings" class="btn btn-primary" disabled="@isSaving">
                 @if (isSaving)
                 {
@@ -50,6 +59,7 @@ else
 @code {
     private string accountNumber = string.Empty;
     private string apiKey = string.Empty;
+    private string anthropicApiKey = string.Empty;
     private bool isLoading = true;
     private bool isSaving = false;
     private string? statusMessage;
@@ -64,6 +74,7 @@ else
             {
                 accountNumber = current.AccountNumber;
                 apiKey = current.ApiKey;
+                anthropicApiKey = current.AnthropicApiKey ?? string.Empty;
             }
         }
         catch (Exception ex)
@@ -92,7 +103,8 @@ else
             var result = await Api.UpsertSettingsAsync(new AccountSettingsRequestDto
             {
                 AccountNumber = accountNumber.Trim(),
-                ApiKey = apiKey.Trim()
+                ApiKey = apiKey.Trim(),
+                AnthropicApiKey = string.IsNullOrWhiteSpace(anthropicApiKey) ? null : anthropicApiKey.Trim()
             });
 
             statusMessage = result != null ? "Settings saved." : "Save failed.";

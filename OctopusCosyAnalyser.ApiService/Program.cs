@@ -14,34 +14,32 @@ builder.AddServiceDefaults();
 builder.AddNpgsqlDbContext<CosyDbContext>("cosydb");
 
 // Add Octopus Energy API client with extended timeouts for large queries
+// Paginated queries (e.g. applicableRates, sync-timeseries) may make many sequential API calls
 builder.Services.AddHttpClient<OctopusEnergyClient>()
-    .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromMinutes(2))
+    .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromMinutes(5))
     .AddStandardResilienceHandler(options =>
     {
-        options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(2);
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(5);
         options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
         options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
     });
 
 // Add AI Analysis Service (Anthropic API)
+// API key can come from DB (Account Settings) or from env var / config as fallback
 var anthropicKey = builder.Configuration["Anthropic:ApiKey"]
     ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
 
-if (!string.IsNullOrEmpty(anthropicKey))
+builder.Services.AddHttpClient<AiAnalysisService>(client =>
 {
-    builder.Services.AddHttpClient<AiAnalysisService>(client =>
+    client.Timeout = TimeSpan.FromMinutes(3);
+    if (!string.IsNullOrEmpty(anthropicKey))
     {
+        // Pre-configure for env var key (fallback when no DB key is set)
         client.BaseAddress = new Uri("https://api.anthropic.com/");
         client.DefaultRequestHeaders.Add("x-api-key", anthropicKey);
         client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
-        client.Timeout = TimeSpan.FromMinutes(3);
-    });
-}
-else
-{
-    builder.Services.AddSingleton<AiAnalysisService>(sp =>
-        new AiAnalysisService(new HttpClient(), sp.GetRequiredService<ILogger<AiAnalysisService>>()));
-}
+    }
+});
 
 // Add Heat Pump Snapshot Worker
 builder.Services.AddHostedService<HeatPumpSnapshotWorker>();

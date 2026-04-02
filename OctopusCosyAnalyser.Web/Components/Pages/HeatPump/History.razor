@@ -69,7 +69,9 @@ else
             </div>
             @if (!string.IsNullOrEmpty(syncMessage))
             {
-                var syncClass = syncMessage.Contains("Synced") ? "alert-success" : "alert-danger";
+                var syncClass = syncMessage.Contains("Synced") ? "alert-success"
+                    : syncMessage.Contains("up to date") ? "alert-info"
+                    : "alert-danger";
                 <div class="alert @syncClass mt-2 mb-0 py-1 small">@syncMessage</div>
             }
         </div>
@@ -393,7 +395,12 @@ else
         try
         {
             var result = await Api.SyncTimeSeriesAsync(deviceId);
-            syncMessage = $"Synced {result.Synced} new hourly records.";
+            if (result.Synced > 0)
+                syncMessage = $"Synced {result.Synced} new records ({result.Skipped} already existed).";
+            else if (result.Skipped > 0)
+                syncMessage = $"Already up to date — {result.Skipped} records already in database.";
+            else
+                syncMessage = "No data returned from the Octopus API for this period.";
         }
         catch (Exception ex)
         {

@@ -46,6 +46,7 @@ public static class AccountSettingsEndpoints
                 {
                     AccountNumber = request.AccountNumber.Trim(),
                     ApiKey = request.ApiKey.Trim(),
+                    AnthropicApiKey = request.AnthropicApiKey?.Trim(),
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -55,6 +56,7 @@ public static class AccountSettingsEndpoints
             else
             {
                 settings.ApiKey = request.ApiKey.Trim();
+                settings.AnthropicApiKey = request.AnthropicApiKey?.Trim();
                 settings.UpdatedAt = DateTime.UtcNow;
             }
 
@@ -64,6 +66,6 @@ public static class AccountSettingsEndpoints
         }).WithName("UpsertAccountSettings");
     }
 
-    public sealed record AccountSettingsRequest(string AccountNumber, string ApiKey);
+    public sealed record AccountSettingsRequest(string AccountNumber, string ApiKey, string? AnthropicApiKey);
 }
 

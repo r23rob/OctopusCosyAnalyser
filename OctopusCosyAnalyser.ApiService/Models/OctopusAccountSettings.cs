@@ -5,6 +5,7 @@ public class OctopusAccountSettings
     public int Id { get; set; }
     public string AccountNumber { get; set; } = string.Empty;
     public string ApiKey { get; set; } = string.Empty;
+    public string? AnthropicApiKey { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

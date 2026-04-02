@@ -88,8 +88,16 @@ else
             <div class="col-md-3">
                 <div class="card text-center">
                     <div class="card-body py-2">
-                        <div class="small text-muted">Snapshots Processed</div>
+                        <div class="small text-muted">Snapshots</div>
                         <strong>@analysisResult.TotalSnapshots.ToString("N0")</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-2">
+                        <div class="small text-muted">History Records</div>
+                        <strong>@analysisResult.TotalTimeSeriesRecords.ToString("N0")</strong>
                     </div>
                 </div>
             </div>
