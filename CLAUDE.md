@@ -202,6 +202,22 @@ dotnet test
 dotnet run --project OctopusCosyAnalyser.AppHost
 dotnet ef migrations add <Name> --project OctopusCosyAnalyser.ApiService
 export PATH="$HOME/.dotnet:$PATH:/usr/local/share/dotnet"
+git status
+git diff
+git log
+git add
+git commit
+git push
+git pull
+git checkout
+git branch
+git merge
+git stash
+git fetch
+gh pr create
+gh pr view
+gh pr list
+gh pr merge
 ```
 
 ## Build & Run
