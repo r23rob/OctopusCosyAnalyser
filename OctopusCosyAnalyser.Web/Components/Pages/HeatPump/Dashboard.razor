@@ -1,13 +1,14 @@
 @page "/heatpump"
 @inject HeatPumpApiClient Api
+@implements IDisposable
 @rendermode InteractiveServer
+@using OctopusCosyAnalyser.Web.Components.Pages.HeatPump.Tabs
 
 <PageTitle>Heat Pump – Dashboard</PageTitle>
 
-<h1>🔥 Heat Pump Dashboard</h1>
-
 @if (!isSetup)
 {
+    <h1>Heat Pump Dashboard</h1>
     <div class="card mt-4">
         <div class="card-body">
             <h3>Initial Setup</h3>
@@ -32,158 +33,143 @@
 }
 else
 {
-    <div class="row mt-3">
-        <div class="col-md-12 d-flex justify-content-between align-items-center">
-            <div>
-                <span class="text-muted">Account:</span> <strong>@accountNumber</strong>
-                <span class="ms-3 text-muted">Device:</span> <strong>@deviceId</strong>
-            </div>
-            <button @onclick="RefreshDashboard" class="btn btn-outline-success btn-sm" disabled="@isLoading">
-                @if (isLoading)
-                {
-                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-                    <span>Refreshing...</span>
-                }
-                else
-                {
-                    <span>Refresh</span>
-                }
-            </button>
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger">@errorMessage</div>
+    }
+
+    <!-- ═══ HERO: COP Gauge ═══ -->
+    <div class="cop-hero">
+        <div class="cop-label">Live COP</div>
+        <div class="cop-value @CopColorClass">@CopDisplay</div>
+        <div>
+            <span class="cop-badge @CopColorClass">@CopRating</span>
+        </div>
+        <div class="cop-label mt-2">
+            Seasonal COP: <strong>@(summary?.LifetimePerformance?.SeasonalCoefficientOfPerformance ?? "—")</strong>
         </div>
     </div>
 
-    @if (!string.IsNullOrEmpty(statusMessage))
-    {
-        <div class="alert alert-info mt-2">@statusMessage</div>
-    }
-
-    @if (summary != null)
-    {
-        <div class="row mt-4 g-3">
-            <div class="col-md-3">
-                <div class="card text-center border-success">
-                    <div class="card-body">
-                        <h6 class="card-subtitle text-muted">Live COP</h6>
-                        <h2 class="card-title text-success mt-2">@(summary.LivePerformance?.CoefficientOfPerformance ?? "—")</h2>
-                        <small class="text-muted">Efficiency ratio</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card text-center border-primary">
-                    <div class="card-body">
-                        <h6 class="card-subtitle text-muted">Power Input</h6>
-                        <h2 class="card-title text-primary mt-2">@FormatValue(summary.LivePerformance?.PowerInput)</h2>
-                        <small class="text-muted">Electricity consumed</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card text-center border-danger">
-                    <div class="card-body">
-                        <h6 class="card-subtitle text-muted">Heat Output</h6>
-                        <h2 class="card-title text-danger mt-2">@FormatValue(summary.LivePerformance?.HeatOutput)</h2>
-                        <small class="text-muted">Heat delivered</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card text-center border-warning">
-                    <div class="card-body">
-                        <h6 class="card-subtitle text-muted">Outdoor Temp</h6>
-                        <h2 class="card-title text-warning mt-2">@FormatValue(summary.LivePerformance?.OutdoorTemperature)</h2>
-                        <small class="text-muted">Outside air</small>
-                    </div>
-                </div>
+    <!-- ═══ KEY METRICS ROW ═══ -->
+    <div class="row g-2 mb-2">
+        <div class="col-6 col-md">
+            <div class="metric-card">
+                <div class="metric-label">Power Input</div>
+                <div class="metric-value text-primary">@Fmt(summary?.LivePerformance?.PowerInput)</div>
             </div>
         </div>
-
-        <div class="row mt-4 g-3">
-            <div class="col-md-4">
-                <div class="card"><div class="card-body text-center">
-                    <h6 class="text-muted">Seasonal COP (Lifetime)</h6>
-                    <h3>@(summary.LifetimePerformance?.SeasonalCoefficientOfPerformance ?? "—")</h3>
-                </div></div>
-            </div>
-            <div class="col-md-4">
-                <div class="card"><div class="card-body text-center">
-                    <h6 class="text-muted">Lifetime Heat Output</h6>
-                    <h3>@FormatValue(summary.LifetimePerformance?.HeatOutput)</h3>
-                </div></div>
-            </div>
-            <div class="col-md-4">
-                <div class="card"><div class="card-body text-center">
-                    <h6 class="text-muted">Lifetime Energy Input</h6>
-                    <h3>@FormatValue(summary.LifetimePerformance?.EnergyInput)</h3>
-                </div></div>
+        <div class="col-6 col-md">
+            <div class="metric-card">
+                <div class="metric-label">Heat Output</div>
+                <div class="metric-value text-danger">@Fmt(summary?.LivePerformance?.HeatOutput)</div>
             </div>
         </div>
-
-        <div class="row mt-4 g-3">
-            <div class="col-md-6">
-                <div class="card h-100">
-                    <div class="card-header">Controller</div>
-                    <div class="card-body">
-                        <p><strong>Connected:</strong> @(summary.ControllerConfiguration?.Controller?.Connected == true ? "✅ Yes" : "❌ No")</p>
-                        <p><strong>Timezone:</strong> @(summary.ControllerConfiguration?.Controller?.HeatPumpTimezone ?? "—")</p>
-                        <p><strong>State:</strong> @string.Join(", ", summary.ControllerConfiguration?.Controller?.State ?? [])</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card h-100">
-                    <div class="card-header">Heat Pump Unit</div>
-                    <div class="card-body">
-                        <p><strong>Model:</strong> @(summary.ControllerConfiguration?.HeatPump?.Model ?? "—")</p>
-                        <p><strong>Serial:</strong> @(summary.ControllerConfiguration?.HeatPump?.SerialNumber ?? "—")</p>
-                        <p><strong>Hardware:</strong> @(summary.ControllerConfiguration?.HeatPump?.HardwareVersion ?? "—")</p>
-                    </div>
-                </div>
+        <div class="col-6 col-md">
+            <div class="metric-card">
+                <div class="metric-label">Outdoor</div>
+                <div class="metric-value text-warning">@Fmt(summary?.LivePerformance?.OutdoorTemperature)</div>
             </div>
         </div>
-
-        <div class="row mt-3">
-            <div class="col-12 text-muted">
-                <small>Live data read at: @(summary.LivePerformance?.ReadAt ?? "—")</small>
+        <div class="col-6 col-md">
+            <div class="metric-card">
+                <div class="metric-label">Room Temp</div>
+                <div class="metric-value">@RoomTempDisplay</div>
             </div>
         </div>
+        <div class="col-6 col-md">
+            <div class="metric-card">
+                <div class="metric-label">Flow Temp</div>
+                <div class="metric-value">@Fmt(summary?.ControllerConfiguration?.HeatPump?.HeatingFlowTemperature?.CurrentTemperature)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ STATUS BAR ═══ -->
+    <div class="status-bar">
+        @{ var controllerState = summary?.ControllerConfiguration?.Controller?.State; }
+        @if (controllerState?.Count > 0)
+        {
+            var isHeating = controllerState.Any(s => s.Contains("HEAT", StringComparison.OrdinalIgnoreCase));
+            <span class="badge @(isHeating ? "bg-danger" : "bg-info")">@(isHeating ? "HEATING" : "IDLE")</span>
+        }
+
+        @{ var wcEnabled = summary?.ControllerConfiguration?.HeatPump?.WeatherCompensation?.Enabled == true; }
+        <span class="badge @(wcEnabled ? "bg-success" : "bg-secondary")">WC: @(wcEnabled ? "ON" : "OFF")</span>
+
+        @if (summary?.ControllerStatus?.Zones != null)
+        {
+            @foreach (var zone in summary.ControllerStatus.Zones.Where(z => z.Telemetry?.HeatDemand == true))
+            {
+                <span class="badge bg-warning text-dark">@(zone.Zone ?? "Zone") demand</span>
+            }
+        }
 
         @if (latestSnapshot != null)
         {
-            <div class="row mt-3">
-                <div class="col-md-6">
-                    <div class="card @(SnapshotHealthClass)">
-                        <div class="card-body py-2">
-                            <small>
-                                @if (latestSnapshot.HasData)
-                                {
-                                    var mins = (int)(latestSnapshot.MinutesAgo ?? 0);
-                                    <strong>Snapshot Worker:</strong>
-                                    @if (mins < 20)
-                                    {
-                                        <span class="text-success">Healthy</span>
-                                    }
-                                    else if (mins < 60)
-                                    {
-                                        <span class="text-warning">Delayed (@mins min ago)</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-danger">Stale (@mins min ago)</span>
-                                    }
-                                    <span class="text-muted ms-2">Last: @latestSnapshot.SnapshotTakenAt?.ToString("dd MMM HH:mm")</span>
-                                }
-                                else
-                                {
-                                    <strong>Snapshot Worker:</strong> <span class="text-warning">No snapshots yet</span>
-                                }
-                            </small>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <span class="badge @SnapshotHealthBadge">
+                Worker: @SnapshotHealthText
+            </span>
         }
+
+        <span class="badge bg-light text-muted border ms-auto">
+            @(summary?.LivePerformance?.ReadAt ?? "—")
+            <button class="btn btn-link btn-sm p-0 ms-1" @onclick="RefreshDashboard" disabled="@isLoading" style="font-size: 0.75rem; text-decoration: none;">
+                @(isLoading ? "..." : "Refresh")
+            </button>
+        </span>
+    </div>
+
+    <!-- ═══ MINI COP TREND (24h) ═══ -->
+    @if (trendSnapshots.Count > 0)
+    {
+        <div class="mini-trend">
+            <div class="mini-trend-header">
+                <span class="title">COP — Last 24 Hours</span>
+                <span class="small text-muted">@trendSnapshots.Count data points</span>
+            </div>
+            <RadzenChart Style="height: 140px;">
+                <RadzenLineSeries Data="@trendSnapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="CoefficientOfPerformance"
+                                 Stroke="rgb(40,167,69)" StrokeWidth="2" />
+                <RadzenLineSeries Data="@cop3RefLine" CategoryProperty="Time" ValueProperty="Value"
+                                 Stroke="rgba(220,53,69,0.4)" StrokeWidth="1" LineType="LineType.Dashed" />
+                <RadzenCategoryAxis FormatString="{0:HH:mm}" Visible="true" />
+                <RadzenValueAxis Min="0" Visible="true">
+                    <RadzenGridLines Visible="true" />
+                </RadzenValueAxis>
+                <RadzenLegend Visible="false" />
+            </RadzenChart>
+        </div>
     }
+
+    <!-- ═══ TABBED DETAIL AREA ═══ -->
+    <RadzenTabs @bind-SelectedIndex="selectedTab" Style="margin-top: 0.5rem;">
+        <Tabs>
+            <RadzenTabsItem Text="Performance & History" Icon="show_chart">
+                @if (selectedTab == 0)
+                {
+                    <PerformanceTab DeviceId="@deviceId" AccountNumber="@accountNumber" Euid="@euid" />
+                }
+            </RadzenTabsItem>
+            <RadzenTabsItem Text="Comfort & System" Icon="home">
+                @if (selectedTab == 1)
+                {
+                    <ComfortTab Summary="@summary" />
+                }
+            </RadzenTabsItem>
+            <RadzenTabsItem Text="Analysis" Icon="insights">
+                @if (selectedTab == 2)
+                {
+                    <AnalysisTab DeviceId="@deviceId" />
+                }
+            </RadzenTabsItem>
+            <RadzenTabsItem Text="Costs" Icon="payments">
+                @if (selectedTab == 3)
+                {
+                    <CostsTab AccountNumber="@accountNumber" />
+                }
+            </RadzenTabsItem>
+        </Tabs>
+    </RadzenTabs>
 }
 
 @code {
@@ -193,28 +179,88 @@ else
     private bool isSetup;
     private bool isLoading;
     private string? errorMessage;
-    private string? statusMessage;
     private HeatPumpSummaryDto? summary;
     private LatestSnapshotDto? latestSnapshot;
+    private int selectedTab;
 
-    private string SnapshotHealthClass
+    // Mini trend
+    private List<HeatPumpSnapshotDto> trendSnapshots = [];
+    private List<RefPoint> cop3RefLine = [];
+
+    // Auto-refresh timer
+    private System.Threading.Timer? _refreshTimer;
+
+    // COP parsing
+    private double? _parsedCop;
+    private string CopDisplay => _parsedCop.HasValue ? _parsedCop.Value.ToString("F2") : (summary?.LivePerformance?.CoefficientOfPerformance ?? "—");
+    private string CopColorClass => _parsedCop switch
+    {
+        >= 3.5 => "cop-green",
+        >= 2.5 => "cop-amber",
+        _ when _parsedCop.HasValue => "cop-red",
+        _ => ""
+    };
+    private string CopRating => _parsedCop switch
+    {
+        >= 3.5 => "Excellent",
+        >= 2.5 => "OK",
+        _ when _parsedCop.HasValue => "Poor",
+        _ => "—"
+    };
+
+    private string RoomTempDisplay
     {
         get
         {
-            if (latestSnapshot?.HasData == true)
-            {
-                var minutesAgo = latestSnapshot.MinutesAgo ?? double.MaxValue;
-                if (minutesAgo < 20) return "border-success";
-                if (minutesAgo < 60) return "border-warning";
-            }
-            return "border-danger";
+            if (trendSnapshots.Count == 0) return "—";
+            var latest = trendSnapshots.LastOrDefault();
+            if (latest?.RoomTemperatureCelsius == null) return "—";
+            var temp = latest.RoomTemperatureCelsius.Value.ToString("F1");
+            var setpoint = latest.HeatingZoneSetpointCelsius?.ToString("F1");
+            return setpoint != null ? $"{temp} / {setpoint} °C" : $"{temp} °C";
+        }
+    }
+
+    private string SnapshotHealthBadge
+    {
+        get
+        {
+            if (latestSnapshot?.HasData != true) return "bg-warning text-dark";
+            var mins = latestSnapshot.MinutesAgo ?? double.MaxValue;
+            if (mins < 20) return "bg-success";
+            if (mins < 60) return "bg-warning text-dark";
+            return "bg-danger";
+        }
+    }
+
+    private string SnapshotHealthText
+    {
+        get
+        {
+            if (latestSnapshot?.HasData != true) return "No snapshots";
+            var mins = (int)(latestSnapshot.MinutesAgo ?? 0);
+            if (mins < 20) return "Healthy";
+            if (mins < 60) return $"Delayed ({mins}m)";
+            return $"Stale ({mins}m)";
         }
     }
 
     protected override async Task OnInitializedAsync()
     {
         await LoadSettingsAndDevice();
-        if (isSetup) await RefreshDashboard();
+        if (isSetup)
+        {
+            await RefreshDashboard();
+            _refreshTimer = new System.Threading.Timer(async _ =>
+            {
+                try
+                {
+                    await RefreshLiveData();
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch { }
+            }, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
+        }
     }
 
     private async Task LoadSettingsAndDevice()
@@ -256,17 +302,69 @@ else
     private async Task RefreshDashboard()
     {
         if (string.IsNullOrEmpty(deviceId)) return;
-        isLoading = true; statusMessage = null;
+        isLoading = true;
+        try
+        {
+            var summaryTask = Api.GetSummaryAsync(deviceId);
+            var latestTask = Api.GetLatestSnapshotAsync(deviceId);
+            var snapshotsTask = Api.GetSnapshotsAsync(deviceId, DateTime.UtcNow.AddHours(-24), DateTime.UtcNow);
+            await Task.WhenAll(summaryTask, latestTask, snapshotsTask);
+
+            summary = summaryTask.Result;
+            latestSnapshot = latestTask.Result;
+            trendSnapshots = snapshotsTask.Result?.Snapshots?.OrderBy(s => s.SnapshotTakenAt).ToList() ?? [];
+
+            ParseCop();
+            BuildCop3RefLine();
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+        finally { isLoading = false; }
+    }
+
+    private async Task RefreshLiveData()
+    {
+        if (string.IsNullOrEmpty(deviceId)) return;
         try
         {
             summary = await Api.GetSummaryAsync(deviceId);
             latestSnapshot = await Api.GetLatestSnapshotAsync(deviceId);
-            statusMessage = summary == null ? "No data returned." : null;
+            ParseCop();
         }
-        catch (Exception ex) { statusMessage = $"Failed: {ex.Message}"; }
-        finally { isLoading = false; }
+        catch { }
     }
 
-    private static string FormatValue(HeatPumpValueAndUnitDto? v)
+    private void ParseCop()
+    {
+        _parsedCop = null;
+        if (summary?.LivePerformance?.CoefficientOfPerformance != null
+            && double.TryParse(summary.LivePerformance.CoefficientOfPerformance, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var cop))
+        {
+            _parsedCop = cop;
+        }
+    }
+
+    private void BuildCop3RefLine()
+    {
+        if (trendSnapshots.Count < 2) { cop3RefLine = []; return; }
+        cop3RefLine =
+        [
+            new RefPoint { Time = trendSnapshots.First().SnapshotTakenAt, Value = 3.0m },
+            new RefPoint { Time = trendSnapshots.Last().SnapshotTakenAt, Value = 3.0m }
+        ];
+    }
+
+    private static string Fmt(HeatPumpValueAndUnitDto? v)
         => v == null ? "—" : string.IsNullOrWhiteSpace(v.Unit) ? (v.Value ?? "—") : $"{v.Value} {v.Unit}";
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+
+    private sealed class RefPoint
+    {
+        public DateTime Time { get; set; }
+        public decimal Value { get; set; }
+    }
 }
