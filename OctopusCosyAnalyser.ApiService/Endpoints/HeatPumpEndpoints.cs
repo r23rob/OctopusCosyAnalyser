@@ -727,6 +727,254 @@ public static class HeatPumpEndpoints
                 data = root
             });
         }).WithName("GetCostOfUsage");
+
+        // ── Daily Aggregates ─────────────────────────────────────────
+
+        group.MapGet("/daily-aggregates/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, CosyDbContext db) =>
+        {
+            from ??= DateTime.UtcNow.AddDays(-30);
+            to ??= DateTime.UtcNow;
+
+            var snapshots = await db.HeatPumpSnapshots
+                .AsNoTracking()
+                .Where(s => s.DeviceId == deviceId && s.SnapshotTakenAt >= from && s.SnapshotTakenAt <= to)
+                .OrderBy(s => s.SnapshotTakenAt)
+                .ToListAsync();
+
+            var aggregates = ComputeDailyAggregates(snapshots);
+
+            return Results.Ok(new
+            {
+                deviceId,
+                from,
+                to,
+                totalSnapshots = snapshots.Count,
+                days = aggregates.Count,
+                aggregates
+            });
+        }).WithName("GetDailyAggregates");
+
+        // ── AI Analysis ──────────────────────────────────────────────
+
+        group.MapPost("/ai-analysis/{deviceId}", async (string deviceId, AiAnalysisRequestDto request,
+            AiAnalysisService aiService, OctopusEnergyClient octopusClient, CosyDbContext db,
+            ILogger<AiAnalysisService> logger) =>
+        {
+            if (request.From >= request.To)
+                return Results.BadRequest(new { error = "From date must be before To date." });
+
+            if ((request.To - request.From).TotalDays > 365)
+                return Results.BadRequest(new { error = "Date range must not exceed 365 days." });
+
+            var device = await db.HeatPumpDevices.FirstOrDefaultAsync(d => d.DeviceId == deviceId);
+            if (device is null)
+                return Results.NotFound("Device not found");
+
+            var from = request.From;
+            var to = request.To;
+
+            var snapshots = await db.HeatPumpSnapshots
+                .AsNoTracking()
+                .Where(s => s.DeviceId == deviceId && s.SnapshotTakenAt >= from && s.SnapshotTakenAt <= to)
+                .OrderBy(s => s.SnapshotTakenAt)
+                .ToListAsync();
+
+            if (snapshots.Count == 0)
+                return Results.Ok(new AiAnalysisResponseDto
+                {
+                    Analysis = "No snapshot data found for the selected period. Try selecting a wider date range.",
+                    From = from,
+                    To = to,
+                    DaysAnalysed = 0,
+                    TotalSnapshots = 0
+                });
+
+            var aggregates = ComputeDailyAggregates(snapshots);
+
+            // Merge cost data from Octopus API
+            var settings = await db.OctopusAccountSettings
+                .FirstOrDefaultAsync(s => s.AccountNumber == device.AccountNumber);
+
+            if (settings is not null)
+            {
+                try
+                {
+                    var costData = await octopusClient.GetCostOfUsageAsync(settings.ApiKey, device.AccountNumber, from, to);
+                    var costRoot = costData.RootElement.GetProperty("data");
+
+                    if (costRoot.TryGetProperty("costOfUsage", out var costEl)
+                        && costEl.ValueKind != JsonValueKind.Null
+                        && costEl.TryGetProperty("edges", out var edges)
+                        && edges.ValueKind == JsonValueKind.Array)
+                    {
+                        var costByDate = new Dictionary<DateOnly, (double cost, double usage, double unitRate)>();
+                        foreach (var edge in edges.EnumerateArray())
+                        {
+                            if (!edge.TryGetProperty("node", out var node)) continue;
+                            var startAt = node.TryGetProperty("startAt", out var sa) ? sa.GetString() : null;
+                            if (startAt == null || !DateTime.TryParse(startAt, out var dt)) continue;
+
+                            var date = DateOnly.FromDateTime(dt);
+                            var cost = GetJsonDouble(node, "costInclTax");
+                            var usage = GetJsonDouble(node, "consumptionKwh");
+                            var unitRate = GetJsonDouble(node, "unitRateInclTax");
+
+                            if (costByDate.TryGetValue(date, out var existing))
+                            {
+                                var newCost = existing.cost + cost;
+                                var newUsage = existing.usage + usage;
+                                var newUnitRate = newUsage > 0 ? newCost / newUsage : existing.unitRate;
+                                costByDate[date] = (newCost, newUsage, newUnitRate);
+                            }
+                            else
+                            {
+                                costByDate[date] = (cost, usage, unitRate);
+                            }
+                        }
+
+                        foreach (var agg in aggregates)
+                        {
+                            if (costByDate.TryGetValue(agg.Date, out var costInfo))
+                            {
+                                agg.DailyCostPence = costInfo.cost;
+                                agg.DailyUsageKwh = costInfo.usage;
+                                agg.AvgUnitRatePence = costInfo.unitRate;
+                                agg.CostPerKwhHeatPence = agg.TotalHeatOutputKwh > 0
+                                    ? costInfo.cost / agg.TotalHeatOutputKwh
+                                    : null;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Cost data is optional; log warning and continue without it
+                    logger.LogWarning(ex, "Failed to merge Octopus cost data for device {DeviceId}", deviceId);
+                }
+            }
+
+            var analysis = await aiService.AnalyseAsync(aggregates, request.Question);
+
+            return Results.Ok(new AiAnalysisResponseDto
+            {
+                Analysis = analysis,
+                From = from,
+                To = to,
+                DaysAnalysed = aggregates.Count,
+                TotalSnapshots = snapshots.Count
+            });
+        }).WithName("GetAiAnalysis");
+    }
+
+    internal static List<DailyAggregateDto> ComputeDailyAggregates(List<HeatPumpSnapshot> snapshots)
+    {
+        return snapshots
+            .GroupBy(s => DateOnly.FromDateTime(s.SnapshotTakenAt))
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var day = g.ToList();
+                var heatingSnapshots = day.Where(s => s.HeatingZoneHeatDemand == true).ToList();
+                var hotWaterSnapshots = day.Where(s => s.HotWaterZoneHeatDemand == true).ToList();
+                var spaceHeatingOnly = day.Where(s => s.HeatingZoneHeatDemand == true && s.HotWaterZoneHeatDemand != true).ToList();
+
+                // Controller state transitions
+                var stateTransitions = 0;
+                string? prevState = null;
+                foreach (var s in day)
+                {
+                    if (prevState != null && s.ControllerState != prevState)
+                        stateTransitions++;
+                    prevState = s.ControllerState;
+                }
+
+                // Hot water run count (distinct periods of consecutive HW demand)
+                var hwRunCount = 0;
+                var hwTotalSnapshots = 0;
+                var prevHwDemand = false;
+                foreach (var s in day)
+                {
+                    var hwDemand = s.HotWaterZoneHeatDemand == true;
+                    if (hwDemand && !prevHwDemand)
+                        hwRunCount++;
+                    if (hwDemand)
+                        hwTotalSnapshots++;
+                    prevHwDemand = hwDemand;
+                }
+
+                // Weather compensation mode (most frequent non-null value)
+                var wcMinMode = day.Where(s => s.WeatherCompensationMinCelsius.HasValue)
+                    .GroupBy(s => s.WeatherCompensationMinCelsius!.Value)
+                    .OrderByDescending(g2 => g2.Count())
+                    .FirstOrDefault()?.Key;
+
+                var wcMaxMode = day.Where(s => s.WeatherCompensationMaxCelsius.HasValue)
+                    .GroupBy(s => s.WeatherCompensationMaxCelsius!.Value)
+                    .OrderByDescending(g2 => g2.Count())
+                    .FirstOrDefault()?.Key;
+
+                return new DailyAggregateDto
+                {
+                    Date = g.Key,
+                    SnapshotCount = day.Count,
+
+                    AvgCopHeating = AvgDecimal(heatingSnapshots, s => s.CoefficientOfPerformance),
+                    AvgCopHotWater = AvgDecimal(hotWaterSnapshots, s => s.CoefficientOfPerformance),
+                    AvgCopSpaceHeatingOnly = AvgDecimal(spaceHeatingOnly, s => s.CoefficientOfPerformance),
+
+                    TotalElectricityKwh = day.Where(s => s.PowerInputKilowatt.HasValue)
+                        .Sum(s => (double)s.PowerInputKilowatt!.Value * 0.25),
+                    TotalHeatOutputKwh = day.Where(s => s.HeatOutputKilowatt.HasValue)
+                        .Sum(s => (double)s.HeatOutputKilowatt!.Value * 0.25),
+
+                    AvgOutdoorTemp = AvgDecimal(day, s => s.OutdoorTemperatureCelsius),
+                    MinOutdoorTemp = day.Any(s => s.OutdoorTemperatureCelsius.HasValue)
+                        ? day.Where(s => s.OutdoorTemperatureCelsius.HasValue)
+                            .Select(s => (double)s.OutdoorTemperatureCelsius!.Value).Min()
+                        : null,
+                    MaxOutdoorTemp = day.Any(s => s.OutdoorTemperatureCelsius.HasValue)
+                        ? day.Where(s => s.OutdoorTemperatureCelsius.HasValue)
+                            .Select(s => (double)s.OutdoorTemperatureCelsius!.Value).Max()
+                        : null,
+                    AvgFlowTemp = AvgDecimal(heatingSnapshots, s => s.HeatingFlowTemperatureCelsius),
+                    AvgRoomTemp = AvgDecimal(day, s => s.RoomTemperatureCelsius),
+                    AvgSetpoint = AvgDecimal(day, s => s.HeatingZoneSetpointCelsius),
+
+                    HeatingDutyCyclePercent = day.Count > 0
+                        ? day.Count(s => s.HeatingZoneHeatDemand == true) * 100.0 / day.Count
+                        : 0,
+                    HotWaterDutyCyclePercent = day.Count > 0
+                        ? day.Count(s => s.HotWaterZoneHeatDemand == true) * 100.0 / day.Count
+                        : 0,
+
+                    WeatherCompMin = wcMinMode.HasValue ? (double)wcMinMode.Value : null,
+                    WeatherCompMax = wcMaxMode.HasValue ? (double)wcMaxMode.Value : null,
+
+                    ControllerStateTransitions = stateTransitions,
+
+                    HotWaterRunCount = hwRunCount,
+                    HotWaterTotalMinutes = hwTotalSnapshots * 15,
+                    AvgHotWaterSetpoint = AvgDecimal(hotWaterSnapshots, s => s.HotWaterZoneSetpointCelsius),
+                };
+            })
+            .ToList();
+    }
+
+    private static double? AvgDecimal(List<HeatPumpSnapshot> snapshots, Func<HeatPumpSnapshot, decimal?> selector)
+    {
+        var values = snapshots.Where(s => selector(s).HasValue).Select(s => (double)selector(s)!.Value).ToList();
+        return values.Count > 0 ? values.Average() : null;
+    }
+
+    private static double GetJsonDouble(JsonElement el, string property)
+    {
+        if (!el.TryGetProperty(property, out var val)) return 0;
+        if (val.ValueKind == JsonValueKind.Number && val.TryGetDouble(out var d)) return d;
+        if (val.ValueKind == JsonValueKind.String
+            && double.TryParse(val.GetString(), System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+            return parsed;
+        return 0;
     }
 
     private static HeatPumpSummary MapHeatPumpSummary(JsonElement data)

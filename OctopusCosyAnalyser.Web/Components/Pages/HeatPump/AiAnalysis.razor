@@ -1,0 +1,194 @@
+@page "/heatpump/ai-analysis"
+@inject HeatPumpApiClient Api
+@rendermode InteractiveServer
+@using Markdig
+@using OctopusCosyAnalyser.Web.Services
+
+<PageTitle>Heat Pump - AI Analysis</PageTitle>
+
+<h1>AI Analysis</h1>
+<p class="text-muted">Get AI-powered analysis of your heat pump performance, efficiency, costs, and actionable recommendations.</p>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (string.IsNullOrEmpty(deviceId))
+{
+    <div class="alert alert-warning">No device set up. Go to the <a href="/heatpump">Dashboard</a> to run setup.</div>
+}
+else
+{
+    <!-- Date Range Controls -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label">From</label>
+                    <input @bind="fromDate" type="datetime-local" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">To</label>
+                    <input @bind="toDate" type="datetime-local" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Quick Range</label>
+                    <div class="btn-group btn-group-sm w-100">
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(7)">7 Days</button>
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(30)">30 Days</button>
+                        <button class="btn btn-outline-secondary" @onclick="() => SetRange(90)">90 Days</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3 mt-1">
+                <div class="col-md-8">
+                    <label class="form-label">Question <span class="text-muted">(optional)</span></label>
+                    <textarea @bind="userQuestion" class="form-control form-control-sm" rows="2"
+                              placeholder="e.g. Is my weather compensation curve set correctly? Should I adjust my hot water schedule?"></textarea>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" @onclick="RunAnalysis" disabled="@isLoading">
+                        @if (isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            <span>Analysing...</span>
+                        }
+                        else
+                        {
+                            <span>Analyse</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="alert alert-info">
+            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+            Analysing your heat pump data... This may take up to 60 seconds.
+        </div>
+    }
+
+    @if (analysisResult is not null)
+    {
+        <!-- Stats Bar -->
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-2">
+                        <div class="small text-muted">Days Analysed</div>
+                        <strong>@analysisResult.DaysAnalysed</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-2">
+                        <div class="small text-muted">Snapshots Processed</div>
+                        <strong>@analysisResult.TotalSnapshots.ToString("N0")</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-2">
+                        <div class="small text-muted">Period</div>
+                        <strong>@analysisResult.From.ToString("dd MMM") - @analysisResult.To.ToString("dd MMM yyyy")</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analysis Result -->
+        <div class="card">
+            <div class="card-header"><strong>Analysis</strong></div>
+            <div class="card-body ai-analysis-content">
+                @((MarkupString)RenderMarkdown(analysisResult.Analysis))
+            </div>
+        </div>
+    }
+}
+
+<style>
+    .ai-analysis-content h1 { font-size: 1.4rem; margin-top: 1.2rem; }
+    .ai-analysis-content h2 { font-size: 1.2rem; margin-top: 1rem; }
+    .ai-analysis-content h3 { font-size: 1.05rem; margin-top: 0.8rem; }
+    .ai-analysis-content ul { margin-bottom: 0.5rem; }
+    .ai-analysis-content p { margin-bottom: 0.5rem; }
+    .ai-analysis-content table { width: 100%; margin-bottom: 1rem; }
+    .ai-analysis-content table th,
+    .ai-analysis-content table td { padding: 0.3rem 0.5rem; border: 1px solid #dee2e6; }
+    .ai-analysis-content table th { background: #f8f9fa; }
+</style>
+
+@code {
+    private string? deviceId;
+    private bool isLoading;
+    private string? errorMessage;
+    private string? userQuestion;
+
+    private DateTime fromDate = DateTime.UtcNow.AddDays(-30);
+    private DateTime toDate = DateTime.UtcNow;
+
+    private AiAnalysisResponseDto? analysisResult;
+
+    private static readonly MarkdownPipeline MarkdownPipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .DisableHtml()
+        .Build();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var devices = await Api.GetDevicesAsync();
+            if (devices.Length > 0)
+                deviceId = devices[0].DeviceId;
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+
+    private void SetRange(int days)
+    {
+        toDate = DateTime.UtcNow;
+        fromDate = DateTime.UtcNow.AddDays(-days);
+    }
+
+    private async Task RunAnalysis()
+    {
+        if (string.IsNullOrEmpty(deviceId)) return;
+
+        isLoading = true;
+        analysisResult = null;
+        errorMessage = null;
+
+        try
+        {
+            var request = new AiAnalysisRequestDto
+            {
+                From = DateTime.SpecifyKind(fromDate, DateTimeKind.Utc),
+                To = DateTime.SpecifyKind(toDate, DateTimeKind.Utc),
+                Question = string.IsNullOrWhiteSpace(userQuestion) ? null : userQuestion
+            };
+
+            analysisResult = await Api.GetAiAnalysisAsync(deviceId, request);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Analysis failed: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string RenderMarkdown(string markdown)
+    {
+        return Markdown.ToHtml(markdown, MarkdownPipeline);
+    }
+}
