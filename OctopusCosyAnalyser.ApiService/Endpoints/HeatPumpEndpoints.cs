@@ -721,18 +721,27 @@ public static class HeatPumpEndpoints
             if (error is not null)
                 return error;
 
+            var device = await db.HeatPumpDevices
+                .FirstOrDefaultAsync(d => d.AccountNumber == accountNumber && d.IsActive && d.Mpan != null);
+
             from ??= DateTime.UtcNow.AddDays(-7);
             to ??= DateTime.UtcNow;
 
-            var data = await client.GetCostOfUsageAsync(settings!.ApiKey, accountNumber, from.Value, to.Value);
-            var root = data.RootElement.GetProperty("data");
+            var data = await client.GetCostOfUsageAsync(settings!.ApiKey, accountNumber, from.Value, to.Value, propertyId: device?.PropertyId, mpxn: device?.Mpan);
+
+            // Surface any GraphQL errors so the UI can display them
+            JsonElement? errors = data.RootElement.TryGetProperty("errors", out var errEl) ? errEl : null;
+
+            // data property might be null/missing when errors occur
+            JsonElement? root = data.RootElement.TryGetProperty("data", out var dataEl) ? dataEl : null;
 
             return Results.Ok(new
             {
                 accountNumber,
                 from,
                 to,
-                data = root
+                data = root,
+                errors
             });
         }).WithName("GetCostOfUsage");
 
@@ -1092,7 +1101,7 @@ public static class HeatPumpEndpoints
                     logger.LogInformation("Fetching cost data for account {Account} (propertyId={PropertyId}) from {From} to {To}",
                         device.AccountNumber, device.PropertyId, from, to);
 
-                    var costData = await octopusClient.GetCostOfUsageAsync(settings.ApiKey, device.AccountNumber, from, to, propertyId: device.PropertyId);
+                    var costData = await octopusClient.GetCostOfUsageAsync(settings.ApiKey, device.AccountNumber, from, to, propertyId: device.PropertyId, mpxn: device.Mpan);
 
                     // Log raw response structure for debugging
                     if (costData.RootElement.TryGetProperty("data", out var costDataEl))

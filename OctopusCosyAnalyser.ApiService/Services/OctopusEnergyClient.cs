@@ -594,7 +594,8 @@ public class OctopusEnergyClient
         string ReturnTypeName,
         bool IsConnection,
         bool IsArray,
-        List<string> FieldNames);
+        List<string> FieldNames,
+        List<string> NodeFieldNames);
 
     /// <summary>
     /// Recursively unwraps NON_NULL / LIST wrappers to find the named inner type.
@@ -618,6 +619,78 @@ public class OctopusEnergyClient
 
         var isConnection = !string.IsNullOrEmpty(name) && name.Contains("Connection");
         return (name, false, isConnection);
+    }
+
+    /// <summary>
+    /// Introspects a connection type to discover the node type's field names.
+    /// Follows the chain: ConnectionType -> edges field -> EdgeType -> node field -> NodeType -> fields.
+    /// </summary>
+    private async Task<List<string>> DiscoverNodeTypeFieldsAsync(string apiKey, string connectionTypeName)
+    {
+        // Introspect the connection type to find the edges field's type
+        var connIntrospection = await ExecuteRawQueryAsync(apiKey, $$"""
+            { __type(name: "{{connectionTypeName}}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }
+        """);
+
+        var connData = connIntrospection.RootElement.GetProperty("data");
+        if (!connData.TryGetProperty("__type", out var connType) || connType.ValueKind == JsonValueKind.Null)
+            return [];
+
+        // Find the 'edges' field and get its inner type
+        string? edgeTypeName = null;
+        foreach (var field in connType.GetProperty("fields").EnumerateArray())
+        {
+            if (field.GetProperty("name").GetString() == "edges")
+            {
+                var (typeName, _, _) = UnwrapGraphQLType(field.GetProperty("type"));
+                edgeTypeName = typeName;
+                break;
+            }
+        }
+
+        if (string.IsNullOrEmpty(edgeTypeName))
+            return [];
+
+        // Introspect the edge type to find the 'node' field's type
+        var edgeIntrospection = await ExecuteRawQueryAsync(apiKey, $$"""
+            { __type(name: "{{edgeTypeName}}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }
+        """);
+
+        var edgeData = edgeIntrospection.RootElement.GetProperty("data");
+        if (!edgeData.TryGetProperty("__type", out var edgeType) || edgeType.ValueKind == JsonValueKind.Null)
+            return [];
+
+        string? nodeTypeName = null;
+        foreach (var field in edgeType.GetProperty("fields").EnumerateArray())
+        {
+            if (field.GetProperty("name").GetString() == "node")
+            {
+                var (typeName, _, _) = UnwrapGraphQLType(field.GetProperty("type"));
+                nodeTypeName = typeName;
+                break;
+            }
+        }
+
+        if (string.IsNullOrEmpty(nodeTypeName))
+            return [];
+
+        // Introspect the node type to get its field names
+        var nodeIntrospection = await ExecuteRawQueryAsync(apiKey, $$"""
+            { __type(name: "{{nodeTypeName}}") { fields { name } } }
+        """);
+
+        var nodeData = nodeIntrospection.RootElement.GetProperty("data");
+        if (!nodeData.TryGetProperty("__type", out var nodeType) || nodeType.ValueKind == JsonValueKind.Null)
+            return [];
+
+        var nodeFields = new List<string>();
+        foreach (var field in nodeType.GetProperty("fields").EnumerateArray())
+            nodeFields.Add(field.GetProperty("name").GetString()!);
+
+        _logger.LogInformation("Discovered node type {NodeType} with fields: [{Fields}]",
+            nodeTypeName, string.Join(", ", nodeFields));
+
+        return nodeFields;
     }
 
     private async Task<CostOfUsageSchema> DiscoverCostOfUsageSchemaAsync(string apiKey)
@@ -710,10 +783,36 @@ public class OctopusEnergyClient
         if (!isConnection)
             isConnection = fieldNames.Contains("edges") && fieldNames.Contains("pageInfo");
 
+        // Introspect node-level fields for connection types
+        var nodeFieldNames = fieldNames;
+        if (isConnection)
+        {
+            try
+            {
+                // Find the edges field's inner type from the connection type introspection
+                var edgesTypeName = await DiscoverNodeTypeFieldsAsync(apiKey, innerTypeName);
+                if (edgesTypeName.Count > 0)
+                    nodeFieldNames = edgesTypeName;
+                else
+                    _logger.LogWarning("Could not discover node fields for connection type {TypeName}, will use all requested fields", innerTypeName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to introspect node type for {TypeName}, will use all requested fields", innerTypeName);
+            }
+        }
+
+        _logger.LogInformation(
+            "Discovered costOfUsage schema: args=[{Args}], startArg={StartArg}, endArg={EndArg}, " +
+            "returnType={ReturnType}, isConnection={IsConnection}, fields=[{Fields}], nodeFields=[{NodeFields}]",
+            string.Join(", ", argNames), startArg, endArg,
+            innerTypeName, isConnection,
+            string.Join(", ", fieldNames), string.Join(", ", nodeFieldNames));
+
         _costOfUsageSchema = new CostOfUsageSchema(
             argNames, startArg, endArg,
             innerTypeName,
-            isConnection, isArray, fieldNames);
+            isConnection, isArray, fieldNames, nodeFieldNames);
 
         return _costOfUsageSchema;
     }
@@ -729,7 +828,7 @@ public class OctopusEnergyClient
     /// If the query fails with schema validation errors, the cache is cleared and retried.
     /// grouping: HALF_HOUR, DAY, WEEK, MONTH, QUARTER
     /// </summary>
-    public async Task<JsonDocument> GetCostOfUsageAsync(string apiKey, string accountNumber, DateTime from, DateTime to, string grouping = "DAY", int? propertyId = null)
+    public async Task<JsonDocument> GetCostOfUsageAsync(string apiKey, string accountNumber, DateTime from, DateTime to, string grouping = "DAY", int? propertyId = null, string? mpxn = null)
     {
         var fromStr = from.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
         var toStr = to.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
@@ -741,7 +840,7 @@ public class OctopusEnergyClient
         JsonDocument result;
         try
         {
-            result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema, propertyId);
+            result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn);
         }
         catch (HttpRequestException ex)
         {
@@ -749,9 +848,10 @@ public class OctopusEnergyClient
                 throw;
 
             // Schema may be stale - clear cache and retry with fresh introspection
+            _logger.LogWarning(ex, "costOfUsage query returned 400, clearing schema cache and retrying");
             InvalidateCostOfUsageSchemaCache();
             schema = await DiscoverCostOfUsageSchemaAsync(apiKey);
-            result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema, propertyId);
+            result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn);
         }
 
         // Also handle GraphQL-level errors (some servers return 200 with errors array)
@@ -762,10 +862,11 @@ public class OctopusEnergyClient
             var firstError = errors[0].TryGetProperty("message", out var msg) ? msg.GetString() ?? "" : "";
             if (firstError.Contains("Unknown argument") || firstError.Contains("Cannot query field"))
             {
+                _logger.LogWarning("costOfUsage query returned schema error: {Error}, clearing cache and retrying", firstError);
                 InvalidateCostOfUsageSchemaCache();
                 schema = await DiscoverCostOfUsageSchemaAsync(apiKey);
                 result.Dispose();
-                result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema, propertyId);
+                result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn);
             }
         }
 
@@ -773,7 +874,7 @@ public class OctopusEnergyClient
     }
 
     private async Task<JsonDocument> ExecuteCostOfUsageQueryAsync(
-        string apiKey, string accountNumber, string fromStr, string toStr, string grouping, CostOfUsageSchema schema, int? propertyId = null)
+        string apiKey, string accountNumber, string fromStr, string toStr, string grouping, CostOfUsageSchema schema, int? propertyId = null, string? mpxn = null)
     {
         var variables = new Dictionary<string, object?>();
         if (schema.ArgNames.Contains("accountNumber"))
@@ -786,6 +887,8 @@ public class OctopusEnergyClient
             variables["grouping"] = grouping;
         if (schema.ArgNames.Contains("propertyId") && propertyId.HasValue)
             variables["propertyId"] = propertyId.Value;
+        if (schema.ArgNames.Contains("mpxn") && mpxn is not null)
+            variables["mpxn"] = mpxn;
 
         var varDeclarations = new List<string>();
         if (variables.ContainsKey("accountNumber"))
@@ -798,16 +901,23 @@ public class OctopusEnergyClient
             varDeclarations.Add("$grouping: ConsumptionGroupings!");
         if (variables.ContainsKey("propertyId"))
             varDeclarations.Add("$propertyId: Int!");
+        if (variables.ContainsKey("mpxn"))
+            varDeclarations.Add("$mpxn: String!");
 
         string fieldSelection;
         if (schema.IsConnection && schema.FieldNames.Contains("edges"))
         {
-            // Build edge node fields from known field names
-            var nodeFields = new[] { "startAt", "endAt", "fromDatetime", "toDatetime",
+            // Build edge node fields, filtered against the discovered node schema
+            var wantedNodeFields = new[] { "startAt", "endAt", "fromDatetime", "toDatetime",
                 "costInclTax", "costExclTax", "consumptionKwh",
                 "unitRateInclTax", "unitRateExclTax", "unitRate",
                 "costCurrency", "standingCharge", "totalCost", "totalConsumption" };
-            var edgeNodeFields = string.Join(" ", nodeFields);
+            var availableNodeFields = schema.NodeFieldNames.Count > 0
+                ? schema.NodeFieldNames.Where(f => wantedNodeFields.Contains(f)).ToList()
+                : wantedNodeFields.ToList();
+            if (availableNodeFields.Count == 0)
+                availableNodeFields = schema.NodeFieldNames.Count > 0 ? schema.NodeFieldNames : wantedNodeFields.ToList();
+            var edgeNodeFields = string.Join(" ", availableNodeFields);
             fieldSelection = $"edges {{ node {{ {edgeNodeFields} }} }} pageInfo {{ hasNextPage endCursor }}";
 
             // Add pagination args to the query ONLY if the API supports them

@@ -127,14 +127,17 @@ else
     private async Task LoadData()
     {
         if (string.IsNullOrEmpty(AccountNumber)) return;
-        isLoading = true; statusMessage = "Loading cost data..."; costLoaded = false; ratesLoaded = false;
+        isLoading = true; errorMessage = null; statusMessage = "Loading cost data..."; costLoaded = false; ratesLoaded = false;
         try
         {
             await LoadCostOfUsage();
             await LoadApplicableRates();
-            statusMessage = costLoaded ? "Data loaded." : "Could not load cost data.";
+            if (errorMessage is null)
+                statusMessage = costLoaded ? "Data loaded." : "Could not load cost data.";
+            else
+                statusMessage = null;
         }
-        catch (Exception ex) { statusMessage = $"Error: {ex.Message}"; }
+        catch (Exception ex) { errorMessage = $"Error: {ex.Message}"; statusMessage = null; }
         finally { isLoading = false; }
     }
 
@@ -144,8 +147,25 @@ else
         {
             var raw = await Api.GetCostOfUsageRawAsync(AccountNumber!, fromDate, toDate);
             var doc = System.Text.Json.JsonDocument.Parse(raw);
-            var root = doc.RootElement.GetProperty("data");
-            if (root.TryGetProperty("costOfUsage", out var costEl) && costEl.ValueKind != System.Text.Json.JsonValueKind.Null
+
+            // Check for GraphQL errors surfaced by the endpoint
+            if (doc.RootElement.TryGetProperty("errors", out var errorsEl)
+                && errorsEl.ValueKind == System.Text.Json.JsonValueKind.Array
+                && errorsEl.GetArrayLength() > 0)
+            {
+                var firstMsg = errorsEl[0].TryGetProperty("message", out var msg)
+                    ? msg.GetString() ?? "Unknown API error" : "Unknown API error";
+                errorMessage = $"Cost API error: {firstMsg}";
+                return;
+            }
+
+            if (!doc.RootElement.TryGetProperty("data", out var dataRoot))
+            {
+                errorMessage = "Cost API returned no data";
+                return;
+            }
+
+            if (dataRoot.TryGetProperty("costOfUsage", out var costEl) && costEl.ValueKind != System.Text.Json.JsonValueKind.Null
                 && costEl.TryGetProperty("edges", out var edgesEl) && edgesEl.ValueKind == System.Text.Json.JsonValueKind.Array)
             {
                 costRates.Clear(); double totalCost = 0, totalUsage = 0; int idx = 0;
@@ -163,7 +183,10 @@ else
                 costLoaded = true;
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load cost data: {ex.Message}";
+        }
     }
 
     private async Task LoadApplicableRates()
@@ -173,6 +196,17 @@ else
             var raw = await Api.GetApplicableRatesRawAsync(AccountNumber!, fromDate, toDate);
             applicableRates.Clear();
             var doc = System.Text.Json.JsonDocument.Parse(raw);
+
+            // Check for GraphQL errors
+            if (doc.RootElement.TryGetProperty("errors", out var errorsEl)
+                && errorsEl.ValueKind == System.Text.Json.JsonValueKind.Array
+                && errorsEl.GetArrayLength() > 0)
+            {
+                var firstMsg = errorsEl[0].TryGetProperty("message", out var msg)
+                    ? msg.GetString() ?? "Unknown API error" : "Unknown API error";
+                errorMessage = (errorMessage is null ? "" : errorMessage + " | ") + $"Rates API error: {firstMsg}";
+            }
+
             if (doc.RootElement.TryGetProperty("data", out var dataEl) && dataEl.TryGetProperty("applicableRates", out var ratesEl)
                 && ratesEl.ValueKind == System.Text.Json.JsonValueKind.Object && ratesEl.TryGetProperty("edges", out var edgesEl))
             {
@@ -189,7 +223,11 @@ else
             }
             ratesLoaded = true;
         }
-        catch { ratesLoaded = true; }
+        catch (Exception ex)
+        {
+            errorMessage = (errorMessage is null ? "" : errorMessage + " | ") + $"Failed to load rates: {ex.Message}";
+            ratesLoaded = true;
+        }
     }
 
     private static double GetDouble(System.Text.Json.JsonElement el, string prop)
