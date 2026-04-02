@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using OctopusCosyAnalyser.Shared.Models;
@@ -152,30 +153,30 @@ public class AiAnalysisService
         foreach (var a in aggregates)
         {
             sb.AppendLine(string.Join(",",
-                a.Date.ToString("yyyy-MM-dd"),
-                a.SnapshotCount,
+                a.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                a.SnapshotCount.ToString(CultureInfo.InvariantCulture),
                 Fmt(a.AvgCopHeating),
                 Fmt(a.AvgCopHotWater),
                 Fmt(a.AvgCopSpaceHeatingOnly),
-                a.TotalElectricityKwh.ToString("F2"),
-                a.TotalHeatOutputKwh.ToString("F2"),
+                a.TotalElectricityKwh.ToString("F2", CultureInfo.InvariantCulture),
+                a.TotalHeatOutputKwh.ToString("F2", CultureInfo.InvariantCulture),
                 Fmt(a.AvgOutdoorTemp),
                 Fmt(a.MinOutdoorTemp),
                 Fmt(a.MaxOutdoorTemp),
                 Fmt(a.AvgFlowTemp),
                 Fmt(a.AvgRoomTemp),
                 Fmt(a.AvgSetpoint),
-                a.HeatingDutyCyclePercent.ToString("F1"),
-                a.HotWaterDutyCyclePercent.ToString("F1"),
+                a.HeatingDutyCyclePercent.ToString("F1", CultureInfo.InvariantCulture),
+                a.HotWaterDutyCyclePercent.ToString("F1", CultureInfo.InvariantCulture),
                 Fmt(a.WeatherCompMin),
                 Fmt(a.WeatherCompMax),
-                a.ControllerStateTransitions,
+                a.ControllerStateTransitions.ToString(CultureInfo.InvariantCulture),
                 Fmt(a.DailyCostPence),
                 Fmt(a.DailyUsageKwh),
                 Fmt(a.AvgUnitRatePence),
                 Fmt(a.CostPerKwhHeatPence),
-                a.HotWaterRunCount,
-                a.HotWaterTotalMinutes,
+                a.HotWaterRunCount.ToString(CultureInfo.InvariantCulture),
+                a.HotWaterTotalMinutes.ToString(CultureInfo.InvariantCulture),
                 Fmt(a.AvgHotWaterSetpoint)
             ));
         }
@@ -183,5 +184,5 @@ public class AiAnalysisService
         return sb.ToString();
     }
 
-    private static string Fmt(double? value) => value.HasValue ? value.Value.ToString("F2") : "";
+    private static string Fmt(double? value) => value.HasValue ? value.Value.ToString("F2", CultureInfo.InvariantCulture) : "";
 }

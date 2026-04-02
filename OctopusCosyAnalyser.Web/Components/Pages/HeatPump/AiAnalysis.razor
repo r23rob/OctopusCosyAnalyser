@@ -138,6 +138,7 @@ else
 
     private static readonly MarkdownPipeline MarkdownPipeline = new MarkdownPipelineBuilder()
         .UseAdvancedExtensions()
+        .DisableHtml()
         .Build();
 
     protected override async Task OnInitializedAsync()
@@ -169,8 +170,8 @@ else
         {
             var request = new AiAnalysisRequestDto
             {
-                From = fromDate,
-                To = toDate,
+                From = DateTime.SpecifyKind(fromDate, DateTimeKind.Utc),
+                To = DateTime.SpecifyKind(toDate, DateTimeKind.Utc),
                 Question = string.IsNullOrWhiteSpace(userQuestion) ? null : userQuestion
             };
 

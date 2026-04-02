@@ -611,8 +611,15 @@ public static class HeatPumpEndpoints
         // ── AI Analysis ──────────────────────────────────────────────
 
         group.MapPost("/ai-analysis/{deviceId}", async (string deviceId, AiAnalysisRequestDto request,
-            AiAnalysisService aiService, OctopusEnergyClient octopusClient, CosyDbContext db) =>
+            AiAnalysisService aiService, OctopusEnergyClient octopusClient, CosyDbContext db,
+            ILogger<AiAnalysisService> logger) =>
         {
+            if (request.From >= request.To)
+                return Results.BadRequest(new { error = "From date must be before To date." });
+
+            if ((request.To - request.From).TotalDays > 365)
+                return Results.BadRequest(new { error = "Date range must not exceed 365 days." });
+
             var device = await db.HeatPumpDevices.FirstOrDefaultAsync(d => d.DeviceId == deviceId);
             if (device is null)
                 return Results.NotFound("Device not found");
@@ -667,10 +674,16 @@ public static class HeatPumpEndpoints
                             var unitRate = GetJsonDouble(node, "unitRateInclTax");
 
                             if (costByDate.TryGetValue(date, out var existing))
-                                costByDate[date] = (existing.cost + cost, existing.usage + usage,
-                                    (existing.unitRate + unitRate) / 2);
+                            {
+                                var newCost = existing.cost + cost;
+                                var newUsage = existing.usage + usage;
+                                var newUnitRate = newUsage > 0 ? newCost / newUsage : existing.unitRate;
+                                costByDate[date] = (newCost, newUsage, newUnitRate);
+                            }
                             else
+                            {
                                 costByDate[date] = (cost, usage, unitRate);
+                            }
                         }
 
                         foreach (var agg in aggregates)
@@ -687,9 +700,10 @@ public static class HeatPumpEndpoints
                         }
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Cost data is optional; continue without it
+                    // Cost data is optional; log warning and continue without it
+                    logger.LogWarning(ex, "Failed to merge Octopus cost data for device {DeviceId}", deviceId);
                 }
             }
 
@@ -768,10 +782,14 @@ public static class HeatPumpEndpoints
                         .Sum(s => (double)s.HeatOutputKilowatt!.Value * 0.25),
 
                     AvgOutdoorTemp = AvgDecimal(day, s => s.OutdoorTemperatureCelsius),
-                    MinOutdoorTemp = day.Where(s => s.OutdoorTemperatureCelsius.HasValue)
-                        .Select(s => (double)s.OutdoorTemperatureCelsius!.Value).DefaultIfEmpty().Min(),
-                    MaxOutdoorTemp = day.Where(s => s.OutdoorTemperatureCelsius.HasValue)
-                        .Select(s => (double)s.OutdoorTemperatureCelsius!.Value).DefaultIfEmpty().Max(),
+                    MinOutdoorTemp = day.Any(s => s.OutdoorTemperatureCelsius.HasValue)
+                        ? day.Where(s => s.OutdoorTemperatureCelsius.HasValue)
+                            .Select(s => (double)s.OutdoorTemperatureCelsius!.Value).Min()
+                        : null,
+                    MaxOutdoorTemp = day.Any(s => s.OutdoorTemperatureCelsius.HasValue)
+                        ? day.Where(s => s.OutdoorTemperatureCelsius.HasValue)
+                            .Select(s => (double)s.OutdoorTemperatureCelsius!.Value).Max()
+                        : null,
                     AvgFlowTemp = AvgDecimal(heatingSnapshots, s => s.HeatingFlowTemperatureCelsius),
                     AvgRoomTemp = AvgDecimal(day, s => s.RoomTemperatureCelsius),
                     AvgSetpoint = AvgDecimal(day, s => s.HeatingZoneSetpointCelsius),
