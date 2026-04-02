@@ -141,6 +141,63 @@ else
         </div>
     }
 
+    <!-- ═══ AI SUMMARY ═══ -->
+    <div class="ai-summary-card">
+        <div class="ai-summary-header">
+            <span class="ai-summary-title">AI Performance Summary</span>
+            <div>
+                @if (aiSummary?.GeneratedAt != default)
+                {
+                    <span class="small text-muted me-2">@aiSummary.GeneratedAt.ToString("dd MMM HH:mm")</span>
+                }
+                <button class="btn btn-outline-secondary btn-sm" @onclick="RefreshAiSummary" disabled="@aiLoading">
+                    @(aiLoading ? "Generating..." : "Refresh")
+                </button>
+            </div>
+        </div>
+
+        @if (aiLoading && aiSummary == null)
+        {
+            <div class="d-flex align-items-center p-3">
+                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                <span class="text-muted">Generating AI summary...</span>
+            </div>
+        }
+        else if (aiSummary != null && !string.IsNullOrEmpty(aiSummary.WeekSummary))
+        {
+            <div class="ai-summary-body">
+                @if (!string.IsNullOrEmpty(aiSummary.WeekSummary))
+                {
+                    <div class="ai-section">
+                        <div class="ai-section-label">Last 7 Days</div>
+                        <div class="ai-section-text">@aiSummary.WeekSummary</div>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(aiSummary.MonthSummary))
+                {
+                    <div class="ai-section">
+                        <div class="ai-section-label">Last 30 Days</div>
+                        <div class="ai-section-text">@aiSummary.MonthSummary</div>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(aiSummary.YearSummary))
+                {
+                    <div class="ai-section">
+                        <div class="ai-section-label">Last 12 Months</div>
+                        <div class="ai-section-text">@aiSummary.YearSummary</div>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(aiSummary.Suggestions))
+                {
+                    <div class="ai-section ai-suggestions">
+                        <div class="ai-section-label">Suggestions</div>
+                        <div class="ai-section-text">@aiSummary.Suggestions</div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
     <!-- ═══ TABBED DETAIL AREA ═══ -->
     <RadzenTabs @bind-SelectedIndex="selectedTab" Style="margin-top: 0.5rem;">
         <Tabs>
@@ -182,6 +239,10 @@ else
     private HeatPumpSummaryDto? summary;
     private LatestSnapshotDto? latestSnapshot;
     private int selectedTab;
+
+    // AI Summary
+    private AiSummaryDto? aiSummary;
+    private bool aiLoading;
 
     // Mini trend
     private List<HeatPumpSnapshotDto> trendSnapshots = [];
@@ -314,6 +375,9 @@ else
             latestSnapshot = latestTask.Result;
             trendSnapshots = snapshotsTask.Result?.Snapshots?.OrderBy(s => s.SnapshotTakenAt).ToList() ?? [];
 
+            // Load AI summary in background (don't block dashboard)
+            _ = LoadAiSummaryAsync();
+
             ParseCop();
             BuildCop3RefLine();
         }
@@ -352,6 +416,25 @@ else
             new RefPoint { Time = trendSnapshots.First().SnapshotTakenAt, Value = 3.0m },
             new RefPoint { Time = trendSnapshots.Last().SnapshotTakenAt, Value = 3.0m }
         ];
+    }
+
+    private async Task LoadAiSummaryAsync()
+    {
+        if (string.IsNullOrEmpty(deviceId)) return;
+        aiLoading = true;
+        await InvokeAsync(StateHasChanged);
+        try { aiSummary = await Api.GetAiSummaryAsync(deviceId); }
+        catch { }
+        finally { aiLoading = false; await InvokeAsync(StateHasChanged); }
+    }
+
+    private async Task RefreshAiSummary()
+    {
+        if (string.IsNullOrEmpty(deviceId)) return;
+        aiLoading = true;
+        try { aiSummary = await Api.RefreshAiSummaryAsync(deviceId); }
+        catch (Exception ex) { errorMessage = $"AI refresh failed: {ex.Message}"; }
+        finally { aiLoading = false; }
     }
 
     private static string Fmt(HeatPumpValueAndUnitDto? v)

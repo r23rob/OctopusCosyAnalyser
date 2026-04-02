@@ -224,3 +224,65 @@ h1:focus {
     font-weight: 600;
     color: #6c757d;
 }
+
+/* ── AI Summary Card ─────────────────────────────────────────── */
+
+.ai-summary-card {
+    border: 1px solid #e0e4f0;
+    border-radius: 0.75rem;
+    background: linear-gradient(135deg, rgba(99,102,241,0.03) 0%, rgba(59,130,246,0.03) 100%);
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+
+.ai-summary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e0e4f0;
+    background: rgba(99,102,241,0.04);
+}
+
+.ai-summary-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #4338ca;
+}
+
+.ai-summary-body {
+    padding: 0.75rem 1rem;
+}
+
+.ai-section {
+    margin-bottom: 0.75rem;
+}
+
+.ai-section:last-child {
+    margin-bottom: 0;
+}
+
+.ai-section-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6366f1;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-bottom: 0.2rem;
+}
+
+.ai-section-text {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: #374151;
+}
+
+.ai-suggestions {
+    border-top: 1px solid #e0e4f0;
+    padding-top: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.ai-suggestions .ai-section-label {
+    color: #d97706;
+}
