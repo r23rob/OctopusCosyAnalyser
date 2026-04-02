@@ -218,6 +218,7 @@ gh pr create
 gh pr view
 gh pr list
 gh pr merge
+ls
 ```
 
 ## Build & Run
