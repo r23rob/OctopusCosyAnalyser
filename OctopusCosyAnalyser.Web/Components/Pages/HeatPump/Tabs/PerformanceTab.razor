@@ -53,7 +53,9 @@
                     }
                 </div>
 
+                @* Main performance chart — all series overlaid on a shared axis *@
                 <RadzenChart Style="height: 400px;">
+                    <RadzenChartTooltipOptions Visible="true" Shared="true" />
                     @if (showPowerInput)
                     {
                         <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="PowerInputKilowatt"
@@ -67,47 +69,45 @@
                     @if (showOutdoorTemp)
                     {
                         <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="OutdoorTemperatureCelsius"
-                                         Title="Outdoor Temp (\u00b0C)" Stroke="rgb(255,193,7)" StrokeWidth="2" ValueAxisName="temp" />
+                                         Title="Outdoor Temp (\u00b0C)" Stroke="rgb(255,193,7)" StrokeWidth="2" />
                     }
                     @if (showCop)
                     {
                         <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="CoefficientOfPerformance"
-                                         Title="COP" Stroke="rgb(40,167,69)" StrokeWidth="2" ValueAxisName="cop" />
+                                         Title="COP" Stroke="rgb(40,167,69)" StrokeWidth="2" />
                     }
                     @if (showCost && costSeries.Count > 0)
                     {
                         <RadzenLineSeries Data="@costSeries" CategoryProperty="Time" ValueProperty="Value"
-                                         Title="Est. Cost (p)" Stroke="rgb(255,133,27)" StrokeWidth="2" ValueAxisName="cost" />
+                                         Title="Est. Cost (p)" Stroke="rgb(255,133,27)" StrokeWidth="2" />
                     }
                     <RadzenCategoryAxis FormatString="{0:dd MMM HH:mm}" />
-                    <RadzenValueAxis Min="0">
+                    <RadzenValueAxis>
                         <RadzenGridLines Visible="true" />
-                        <RadzenAxisTitle Text="kW" />
                     </RadzenValueAxis>
-                    @if (showCop)
-                    {
-                        <RadzenValueAxis Name="cop" Min="0">
-                            <RadzenAxisTitle Text="COP" />
-                        </RadzenValueAxis>
-                    }
-                    @if (showOutdoorTemp)
-                    {
-                        <RadzenValueAxis Name="temp">
-                            <RadzenAxisTitle Text="\u00b0C" />
-                        </RadzenValueAxis>
-                    }
-                    @if (showCost && costSeries.Count > 0)
-                    {
-                        <RadzenValueAxis Name="cost" Min="0">
+                    <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
+                </RadzenChart>
+
+                @* Standalone cost chart (only when cost is the sole focus) *@
+                @if (showCost && costSeries.Count > 0 && !showPowerInput && !showHeatOutput && !showOutdoorTemp && !showCop)
+                {
+                    <RadzenChart Style="height: 250px;" class="mt-3">
+                        <RadzenChartTooltipOptions Visible="true" />
+                        <RadzenLineSeries Data="@costSeries" CategoryProperty="Time" ValueProperty="Value"
+                                         Title="Est. Cost (p)" Stroke="rgb(255,133,27)" StrokeWidth="2" />
+                        <RadzenCategoryAxis FormatString="{0:dd MMM HH:mm}" />
+                        <RadzenValueAxis Min="0">
+                            <RadzenGridLines Visible="true" />
                             <RadzenAxisTitle Text="p" />
                         </RadzenValueAxis>
-                    }
-                    <RadzenLegend Visible="false" />
-                </RadzenChart>
+                        <RadzenLegend Visible="false" />
+                    </RadzenChart>
+                }
 
                 <div class="row mt-3">
                     <div class="col-md-6">
                         <RadzenChart Style="height: 250px;">
+                            <RadzenChartTooltipOptions Visible="true" Shared="true" />
                             <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="WeatherCompensationMinCelsius"
                                              Title="WC Min (°C)" Stroke="rgb(23,162,184)" StrokeWidth="2" LineType="LineType.Dashed" />
                             <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="WeatherCompensationMaxCelsius"
@@ -121,6 +121,7 @@
                     </div>
                     <div class="col-md-6">
                         <RadzenChart Style="height: 250px;">
+                            <RadzenChartTooltipOptions Visible="true" Shared="true" />
                             <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="PrimaryZoneSetpointCelsius"
                                              Title="Zone Setpoint (°C)" Stroke="rgb(111,66,193)" StrokeWidth="2" />
                             <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="PrimarySensorTemperatureCelsius"
@@ -226,19 +227,14 @@
 
                 @if (timeSeriesData.Count > 0)
                 {
-                    <RadzenChart Style="height: 300px;">
-                        <RadzenLineSeries Data="@timeSeriesData" CategoryProperty="EndAt" ValueProperty="Cop"
-                                         Title="COP" Stroke="rgb(40,167,69)" StrokeWidth="2" />
-                        <RadzenCategoryAxis FormatString="{0:MMM dd HH:mm}" />
-                        <RadzenValueAxis Min="0"><RadzenGridLines Visible="true" /></RadzenValueAxis>
-                        <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
-                    </RadzenChart>
-
-                    <RadzenChart Style="height: 300px;" class="mt-3">
+                    <RadzenChart Style="height: 350px;">
+                        <RadzenChartTooltipOptions Visible="true" Shared="true" />
                         <RadzenColumnSeries Data="@timeSeriesData" CategoryProperty="EndAt" ValueProperty="EnergyOutputVal"
                                             Title="Energy Output (kWh)" Fill="rgb(220,53,69)" />
                         <RadzenColumnSeries Data="@timeSeriesData" CategoryProperty="EndAt" ValueProperty="EnergyInputVal"
                                             Title="Energy Input (kWh)" Fill="rgb(0,123,255)" />
+                        <RadzenLineSeries Data="@timeSeriesData" CategoryProperty="EndAt" ValueProperty="Cop"
+                                         Title="COP" Stroke="rgb(40,167,69)" StrokeWidth="2" />
                         <RadzenCategoryAxis FormatString="{0:MMM dd}" />
                         <RadzenValueAxis Min="0"><RadzenGridLines Visible="true" /></RadzenValueAxis>
                         <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
@@ -255,6 +251,7 @@
                     <div class="card-header"><strong>Cosy Pod Temperatures</strong></div>
                     <div class="card-body">
                         <RadzenChart Style="height: 340px;">
+                            <RadzenChartTooltipOptions Visible="true" Shared="true" />
                             @foreach (var sensor in sensorTimeSeries.Where(s => s.Value.Count > 0))
                             {
                                 <RadzenLineSeries Data="@sensor.Value" CategoryProperty="Time" ValueProperty="Value"
@@ -271,6 +268,7 @@
                     <div class="card-header"><strong>Heating Schedule</strong></div>
                     <div class="card-body">
                         <RadzenChart Style="height: 300px;">
+                            <RadzenChartTooltipOptions Visible="true" Shared="true" />
                             <RadzenLineSeries Data="@heatingSetpointSeries" CategoryProperty="Time" ValueProperty="Value"
                                              Title="Setpoint (°C)" Stroke="rgb(111,66,193)" StrokeWidth="2" />
                             @if (roomTempSeries.Count > 0)
@@ -291,6 +289,7 @@
                     <div class="card-header"><strong>Cumulative Energy</strong></div>
                     <div class="card-body">
                         <RadzenChart Style="height: 320px;">
+                            <RadzenChartTooltipOptions Visible="true" Shared="true" />
                             <RadzenLineSeries Data="@cumulativeHeatOut" CategoryProperty="Time" ValueProperty="Value"
                                              Title="Heat Output (kWh)" Stroke="rgb(220,53,69)" StrokeWidth="2" />
                             <RadzenLineSeries Data="@cumulativeElecIn" CategoryProperty="Time" ValueProperty="Value"
