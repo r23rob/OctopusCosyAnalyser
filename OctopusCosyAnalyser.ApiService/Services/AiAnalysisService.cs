@@ -1,6 +1,10 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using OctopusCosyAnalyser.ApiService.Data;
+using OctopusCosyAnalyser.ApiService.Endpoints;
 using OctopusCosyAnalyser.Shared.Models;
 
 namespace OctopusCosyAnalyser.ApiService.Services;
@@ -9,7 +13,12 @@ public class AiAnalysisService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<AiAnalysisService> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly bool _isConfigured;
+
+    // Dashboard summary cache (30-minute TTL)
+    private readonly ConcurrentDictionary<string, (AiSummaryDto Summary, DateTime CachedAt)> _summaryCache = new();
+    private static readonly TimeSpan SummaryCacheDuration = TimeSpan.FromMinutes(30);
 
     private const string SystemPrompt = """
         You are a heat pump performance analyst specialising in the Octopus Energy Cosy heat pump system (Mitsubishi Ecodan under the hood). You analyse daily aggregated data from a UK residential air-source heat pump installation.
@@ -83,10 +92,11 @@ public class AiAnalysisService
         Use markdown formatting with headers, bullet points, and bold for key figures. Be direct and specific — the user is technically competent.
         """;
 
-    public AiAnalysisService(HttpClient httpClient, ILogger<AiAnalysisService> logger)
+    public AiAnalysisService(HttpClient httpClient, ILogger<AiAnalysisService> logger, IServiceScopeFactory scopeFactory)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _scopeFactory = scopeFactory;
         _isConfigured = _httpClient.BaseAddress is not null;
     }
 
@@ -175,6 +185,181 @@ public class AiAnalysisService
         {
             _logger.LogError(ex, "AI analysis failed");
             return $"AI analysis failed: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Generates a cached dashboard summary using daily aggregates for 7/30/365 day periods.
+    /// Reuses the same rich system prompt and daily aggregate pipeline as the detailed analysis.
+    /// </summary>
+    public async Task<AiSummaryDto> GenerateDashboardSummaryAsync(string deviceId, bool forceRefresh = false, string? anthropicApiKey = null)
+    {
+        if (!forceRefresh && _summaryCache.TryGetValue(deviceId, out var cached) && DateTime.UtcNow - cached.CachedAt < SummaryCacheDuration)
+            return cached.Summary;
+
+        var usePerRequestKey = !string.IsNullOrWhiteSpace(anthropicApiKey);
+        if (!usePerRequestKey && !_isConfigured)
+        {
+            return new AiSummaryDto
+            {
+                WeekSummary = "AI summaries are not available. Add your Anthropic API key in Account Settings, or set the ANTHROPIC_API_KEY environment variable.",
+                GeneratedAt = DateTime.UtcNow
+            };
+        }
+
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
+
+            var now = DateTime.UtcNow;
+            var snapshots = await db.HeatPumpSnapshots
+                .AsNoTracking()
+                .Where(s => s.DeviceId == deviceId && s.SnapshotTakenAt >= now.AddDays(-365))
+                .OrderBy(s => s.SnapshotTakenAt)
+                .ToListAsync();
+
+            if (snapshots.Count == 0)
+            {
+                return new AiSummaryDto
+                {
+                    WeekSummary = "No snapshot data available yet. The background worker captures data every 15 minutes.",
+                    GeneratedAt = DateTime.UtcNow
+                };
+            }
+
+            // Build daily aggregates for each period using the same pipeline as detailed analysis
+            var weekSnapshots = snapshots.Where(s => s.SnapshotTakenAt >= now.AddDays(-7)).ToList();
+            var monthSnapshots = snapshots.Where(s => s.SnapshotTakenAt >= now.AddDays(-30)).ToList();
+
+            var weekAggs = HeatPumpEndpoints.ComputeDailyAggregates(weekSnapshots);
+            var monthAggs = HeatPumpEndpoints.ComputeDailyAggregates(monthSnapshots);
+            var yearAggs = HeatPumpEndpoints.ComputeDailyAggregates(snapshots);
+
+            var prompt = new StringBuilder();
+            prompt.AppendLine("Provide a BRIEF dashboard summary of this heat pump's performance across three time periods.");
+            prompt.AppendLine("Each section should be 2-3 sentences max. Be specific with numbers. Use plain English.");
+            prompt.AppendLine();
+            prompt.AppendLine("=== LAST 7 DAYS ===");
+            prompt.AppendLine("```csv");
+            prompt.AppendLine(BuildCsv(weekAggs));
+            prompt.AppendLine("```");
+            prompt.AppendLine();
+            prompt.AppendLine("=== LAST 30 DAYS ===");
+            prompt.AppendLine("```csv");
+            prompt.AppendLine(BuildCsv(monthAggs));
+            prompt.AppendLine("```");
+            prompt.AppendLine();
+            prompt.AppendLine("=== LAST 365 DAYS ===");
+            prompt.AppendLine("```csv");
+            prompt.AppendLine(BuildCsv(yearAggs));
+            prompt.AppendLine("```");
+            prompt.AppendLine();
+            prompt.AppendLine("Respond in EXACTLY this format with 4 sections:");
+            prompt.AppendLine();
+            prompt.AppendLine("[WEEK]");
+            prompt.AppendLine("Summary of last 7 days.");
+            prompt.AppendLine();
+            prompt.AppendLine("[MONTH]");
+            prompt.AppendLine("Summary of last 30 days.");
+            prompt.AppendLine();
+            prompt.AppendLine("[YEAR]");
+            prompt.AppendLine("Summary of last 365 days.");
+            prompt.AppendLine();
+            prompt.AppendLine("[SUGGESTIONS]");
+            prompt.AppendLine("Specific, actionable suggestions. If performance is good, say so.");
+
+            var requestBody = new
+            {
+                model = "claude-sonnet-4-20250514",
+                max_tokens = 1500,
+                system = SystemPrompt,
+                messages = new[] { new { role = "user", content = prompt.ToString() } }
+            };
+
+            HttpResponseMessage response;
+            if (usePerRequestKey)
+            {
+                var requestMessage = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages");
+                requestMessage.Headers.Add("x-api-key", anthropicApiKey);
+                requestMessage.Headers.Add("anthropic-version", "2023-06-01");
+                requestMessage.Content = JsonContent.Create(requestBody);
+                response = await _httpClient.SendAsync(requestMessage);
+            }
+            else
+            {
+                response = await _httpClient.PostAsJsonAsync("v1/messages", requestBody);
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                _logger.LogError("Dashboard summary API returned {StatusCode}: {Body}", response.StatusCode, errorBody);
+                return new AiSummaryDto
+                {
+                    WeekSummary = $"AI summary failed (HTTP {(int)response.StatusCode}). Check the API key.",
+                    GeneratedAt = DateTime.UtcNow
+                };
+            }
+
+            var responseJson = await response.Content.ReadFromJsonAsync<JsonDocument>();
+            var responseText = "";
+            if (responseJson is not null)
+            {
+                var content = responseJson.RootElement.GetProperty("content");
+                if (content.GetArrayLength() > 0 && content[0].TryGetProperty("text", out var text))
+                    responseText = text.GetString() ?? "";
+            }
+
+            var summary = ParseSummaryResponse(responseText);
+            summary.GeneratedAt = DateTime.UtcNow;
+            _summaryCache[deviceId] = (summary, DateTime.UtcNow);
+            return summary;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to generate dashboard summary for device {DeviceId}", deviceId);
+            return new AiSummaryDto
+            {
+                WeekSummary = $"Failed to generate AI summary: {ex.Message}",
+                GeneratedAt = DateTime.UtcNow
+            };
+        }
+    }
+
+    private static AiSummaryDto ParseSummaryResponse(string response)
+    {
+        var dto = new AiSummaryDto();
+        var sections = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string? currentSection = null;
+        var currentContent = new StringBuilder();
+
+        foreach (var line in response.Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith("[WEEK]", StringComparison.OrdinalIgnoreCase)) { SaveSection(); currentSection = "WEEK"; continue; }
+            if (trimmed.StartsWith("[MONTH]", StringComparison.OrdinalIgnoreCase)) { SaveSection(); currentSection = "MONTH"; continue; }
+            if (trimmed.StartsWith("[YEAR]", StringComparison.OrdinalIgnoreCase)) { SaveSection(); currentSection = "YEAR"; continue; }
+            if (trimmed.StartsWith("[SUGGESTIONS]", StringComparison.OrdinalIgnoreCase)) { SaveSection(); currentSection = "SUGGESTIONS"; continue; }
+            if (currentSection != null) currentContent.AppendLine(line);
+        }
+        SaveSection();
+
+        dto.WeekSummary = sections.GetValueOrDefault("WEEK", "").Trim();
+        dto.MonthSummary = sections.GetValueOrDefault("MONTH", "").Trim();
+        dto.YearSummary = sections.GetValueOrDefault("YEAR", "").Trim();
+        dto.Suggestions = sections.GetValueOrDefault("SUGGESTIONS", "").Trim();
+
+        if (string.IsNullOrEmpty(dto.WeekSummary) && string.IsNullOrEmpty(dto.MonthSummary))
+            dto.WeekSummary = response.Trim();
+
+        return dto;
+
+        void SaveSection()
+        {
+            if (currentSection != null)
+                sections[currentSection] = currentContent.ToString();
+            currentContent.Clear();
         }
     }
 

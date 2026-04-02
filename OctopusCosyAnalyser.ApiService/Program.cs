@@ -42,9 +42,6 @@ builder.Services.AddHttpClient<AiAnalysisService>(client =>
     }
 });
 
-// Dashboard AI summary service (official Anthropic SDK, auto-cached 30 min)
-builder.Services.AddSingleton<HeatPumpAiService>();
-
 // Add Heat Pump Snapshot Worker
 builder.Services.AddHostedService<HeatPumpSnapshotWorker>();
 

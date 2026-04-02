@@ -917,24 +917,26 @@ public static class HeatPumpEndpoints
             });
         }).WithName("GetAiAnalysis");
 
-        // AI Dashboard Summary (auto-cached, lightweight)
-        group.MapGet("/ai-summary/{deviceId}", async (string deviceId, HeatPumpAiService aiService, CosyDbContext db) =>
+        // AI Dashboard Summary (auto-cached 30 min, reuses daily aggregate pipeline)
+        group.MapGet("/ai-summary/{deviceId}", async (string deviceId, AiAnalysisService aiService, CosyDbContext db) =>
         {
-            var device = await db.HeatPumpDevices.FirstOrDefaultAsync(d => d.DeviceId == deviceId);
-            if (device is null)
-                return Results.NotFound("Device not found");
+            var (device, settings, error) = await GetDeviceAndSettingsAsync(db, deviceId);
+            if (error is not null)
+                return error;
 
-            var summary = await aiService.GenerateSummaryAsync(deviceId);
+            var anthropicKey = settings?.AnthropicApiKey;
+            var summary = await aiService.GenerateDashboardSummaryAsync(deviceId, anthropicApiKey: anthropicKey);
             return Results.Ok(summary);
         }).WithName("GetAiSummary");
 
-        group.MapGet("/ai-summary/{deviceId}/refresh", async (string deviceId, HeatPumpAiService aiService, CosyDbContext db) =>
+        group.MapGet("/ai-summary/{deviceId}/refresh", async (string deviceId, AiAnalysisService aiService, CosyDbContext db) =>
         {
-            var device = await db.HeatPumpDevices.FirstOrDefaultAsync(d => d.DeviceId == deviceId);
-            if (device is null)
-                return Results.NotFound("Device not found");
+            var (device, settings, error) = await GetDeviceAndSettingsAsync(db, deviceId);
+            if (error is not null)
+                return error;
 
-            var summary = await aiService.GenerateSummaryAsync(deviceId, forceRefresh: true);
+            var anthropicKey = settings?.AnthropicApiKey;
+            var summary = await aiService.GenerateDashboardSummaryAsync(deviceId, forceRefresh: true, anthropicApiKey: anthropicKey);
             return Results.Ok(summary);
         }).WithName("RefreshAiSummary");
     }

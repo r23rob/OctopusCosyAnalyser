@@ -12,7 +12,8 @@ public class OctopusEnergyClient
 
     private static readonly ConcurrentDictionary<string, TokenCacheEntry> TokenCache = new();
 
-    // Allowlist: alphanumeric, hyphens, underscores, dots — prevents injection via " or \ into embedded GraphQL strings
+    // Allowlist: alphanumeric, hyphens, underscores, dots — defence-in-depth input validation
+    // (no longer the primary injection guard; all queries now use parameterised GraphQL variables)
     private static readonly Regex SafeIdentifierRegex = new(@"^[A-Za-z0-9\-_.]{1,200}$", RegexOptions.Compiled);
 
     private static void ValidateIdentifier(string value, string paramName)
@@ -38,13 +39,14 @@ public class OctopusEnergyClient
         if (TokenCache.TryGetValue(apiKey, out var cached) && DateTime.UtcNow < cached.ExpiresAt)
             return cached.Token;
 
-        var mutation = $$"""
+        var query = "mutation ObtainToken($input: ObtainJSONWebTokenInput!) { obtainKrakenToken(input: $input) { token } }";
+        var payload = JsonSerializer.Serialize(new
         {
-            "query": "mutation { obtainKrakenToken(input: {APIKey: \"{{apiKey}}\"}) { token } }"
-        }
-        """;
+            query,
+            variables = new { input = new { APIKey = apiKey } }
+        });
 
-        var content = new StringContent(mutation, Encoding.UTF8, "application/json");
+        var content = new StringContent(payload, Encoding.UTF8, "application/json");
         var response = await _httpClient.PostAsync("", content);
         response.EnsureSuccessStatusCode();
 
@@ -71,13 +73,23 @@ public class OctopusEnergyClient
     {
         ValidateIdentifier(accountNumber, nameof(accountNumber));
 
-        var query = $$"""
-        {
-            "query": "query { account(accountNumber: \"{{accountNumber}}\") { electricityAgreements(active: true) { meterPoint { mpan meters(includeInactive: false) { serialNumber smartDevices { deviceId } } } } } }"
+        var query = """
+        query GetAccount($accountNumber: String!) {
+          account(accountNumber: $accountNumber) {
+            electricityAgreements(active: true) {
+              meterPoint {
+                mpan
+                meters(includeInactive: false) {
+                  serialNumber
+                  smartDevices { deviceId }
+                }
+              }
+            }
+          }
         }
         """;
 
-        return await ExecuteQueryAsync(apiKey, query);
+        return await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(new { accountNumber }));
     }
 
     /// <summary>
@@ -86,12 +98,17 @@ public class OctopusEnergyClient
     public async Task<JsonDocument> GetViewerPropertiesAsync(string apiKey)
     {
         var query = """
-        {
-            "query": "query { viewer { accounts { number properties { id occupierEuids } } } }"
+        query {
+          viewer {
+            accounts {
+              number
+              properties { id occupierEuids }
+            }
+          }
         }
         """;
 
-        return await ExecuteQueryAsync(apiKey, query);
+        return await ExecuteRawQueryAsync(apiKey, query);
     }
 
     /// <summary>
@@ -101,13 +118,13 @@ public class OctopusEnergyClient
     {
         ValidateIdentifier(accountNumber, nameof(accountNumber));
 
-        var query = $$"""
-        {
-            "query": "query { octoHeatPumpControllerEuids(accountNumber: \"{{accountNumber}}\") }"
+        var query = """
+        query GetEuids($accountNumber: String!) {
+          octoHeatPumpControllerEuids(accountNumber: $accountNumber)
         }
         """;
 
-        return await ExecuteQueryAsync(apiKey, query);
+        return await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(new { accountNumber }));
     }
 
     /// <summary>
@@ -117,13 +134,15 @@ public class OctopusEnergyClient
     {
         ValidateIdentifier(accountNumber, nameof(accountNumber));
 
-        var query = $$"""
-        {
-            "query": "query { heatPumpDevice(accountNumber: \"{{accountNumber}}\", propertyId: {{propertyId}}) { id serialNumber make model installationDate } }"
+        var query = """
+        query GetHeatPumpDevice($accountNumber: String!, $propertyId: Int!) {
+          heatPumpDevice(accountNumber: $accountNumber, propertyId: $propertyId) {
+            id serialNumber make model installationDate
+          }
         }
         """;
 
-        return await ExecuteQueryAsync(apiKey, query);
+        return await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(new { accountNumber, propertyId }));
     }
 
     /// <summary>
@@ -133,12 +152,21 @@ public class OctopusEnergyClient
     public async Task<JsonDocument> GetViewerPropertiesWithDevicesAsync(string apiKey)
     {
         var query = """
-        {
-            "query": "query { viewer { accounts { number properties { id heatPumpDevice { id serialNumber make model } occupierEuids } } } }"
+        query {
+          viewer {
+            accounts {
+              number
+              properties {
+                id
+                heatPumpDevice { id serialNumber make model }
+                occupierEuids
+              }
+            }
+          }
         }
         """;
 
-        return await ExecuteQueryAsync(apiKey, query);
+        return await ExecuteRawQueryAsync(apiKey, query);
     }
 
     // ── Smart Meter ──────────────────────────────────────────────────
@@ -150,13 +178,15 @@ public class OctopusEnergyClient
     {
         ValidateIdentifier(deviceId, nameof(deviceId));
 
-        var query = $$"""
-        {
-            "query": "query { smartMeterTelemetry(deviceId: \"{{deviceId}}\") { readAt consumption consumptionDelta demand } }"
+        var query = """
+        query GetSmartMeterTelemetry($deviceId: String!) {
+          smartMeterTelemetry(deviceId: $deviceId) {
+            readAt consumption consumptionDelta demand
+          }
         }
         """;
 
-        return await ExecuteQueryAsync(apiKey, query);
+        return await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(new { deviceId }));
     }
 
     /// <summary>
@@ -189,12 +219,24 @@ public class OctopusEnergyClient
     public async Task<JsonDocument> GetHeatPumpStatusAsync(string apiKey)
     {
         var query = """
-        {
-            "query": "query { heatPumpStatus { isConnected climateControlStatus { climateControlEnabled targetClimateControlTemperature currentClimateControlTemperature } waterTemperatureStatus { climateControlEnabled targetClimateControlTemperature currentClimateControlTemperature } } }"
+        query {
+          heatPumpStatus {
+            isConnected
+            climateControlStatus {
+              climateControlEnabled
+              targetClimateControlTemperature
+              currentClimateControlTemperature
+            }
+            waterTemperatureStatus {
+              climateControlEnabled
+              targetClimateControlTemperature
+              currentClimateControlTemperature
+            }
+          }
         }
         """;
 
-        return await ExecuteQueryAsync(apiKey, query);
+        return await ExecuteRawQueryAsync(apiKey, query);
     }
 
     /// <summary>
@@ -205,14 +247,32 @@ public class OctopusEnergyClient
         if (make != null)
             ValidateIdentifier(make, nameof(make));
 
-        var makeFilter = string.IsNullOrEmpty(make) ? "" : $"(make: \\\"{make}\\\")";
-        var query = $$"""
+        if (!string.IsNullOrEmpty(make))
         {
-            "query": "query { heatPumpVariants{{makeFilter}} { make models { model } } }"
-        }
-        """;
+            var query = """
+            query GetHeatPumpVariants($make: String!) {
+              heatPumpVariants(make: $make) {
+                make
+                models { model }
+              }
+            }
+            """;
 
-        return await ExecuteQueryAsync(apiKey, query);
+            return await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(new { make }));
+        }
+        else
+        {
+            var query = """
+            query {
+              heatPumpVariants {
+                make
+                models { model }
+              }
+            }
+            """;
+
+            return await ExecuteRawQueryAsync(apiKey, query);
+        }
     }
 
     // ── Heat Pump – Full Live Data (Primary Workhorse) ───────────────
@@ -403,13 +463,13 @@ public class OctopusEnergyClient
     /// </summary>
     public async Task<JsonDocument> GetHeatPumpControllersAtLocationAsync(string apiKey, string accountNumber, int propertyId)
     {
-        var query = $$"""
-        {
-            "query": "query { octoHeatPumpControllersAtLocation(accountNumber: \"{{accountNumber}}\", propertyId: {{propertyId}}) }"
+        var query = """
+        query GetControllersAtLocation($accountNumber: String!, $propertyId: Int!) {
+          octoHeatPumpControllersAtLocation(accountNumber: $accountNumber, propertyId: $propertyId)
         }
         """;
 
-        return await ExecuteQueryAsync(apiKey, query);
+        return await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(new { accountNumber, propertyId }));
     }
 
     // ── Tariff Rates ───────────────────────────────────────────────
@@ -534,19 +594,44 @@ public class OctopusEnergyClient
         bool IsArray,
         List<string> FieldNames);
 
+    /// <summary>
+    /// Recursively unwraps NON_NULL / LIST wrappers to find the named inner type.
+    /// </summary>
+    private static (string TypeName, bool IsArray, bool IsConnection) UnwrapGraphQLType(JsonElement typeEl)
+    {
+        var kind = typeEl.TryGetProperty("kind", out var k) ? k.GetString() ?? "" : "";
+        var name = typeEl.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String
+            ? n.GetString() ?? "" : "";
+
+        if (kind is "NON_NULL" or "LIST")
+        {
+            var isListLayer = kind == "LIST";
+            if (typeEl.TryGetProperty("ofType", out var ofType))
+            {
+                var (innerName, innerIsArray, innerIsConnection) = UnwrapGraphQLType(ofType);
+                return (innerName, innerIsArray || isListLayer, innerIsConnection);
+            }
+            return ("", isListLayer, false);
+        }
+
+        var isConnection = !string.IsNullOrEmpty(name) && name.Contains("Connection");
+        return (name, false, isConnection);
+    }
+
     private async Task<CostOfUsageSchema> DiscoverCostOfUsageSchemaAsync(string apiKey)
     {
         if (_costOfUsageSchema is not null)
             return _costOfUsageSchema;
 
+        // Use deeper ofType nesting to handle NON_NULL(LIST(NON_NULL(Type))) patterns
         var introspectionQuery = """
         {
           __schema {
             queryType {
               fields {
                 name
-                args { name type { name kind ofType { name } } }
-                type { name kind ofType { name kind fields { name } } }
+                args { name type { name kind ofType { name kind ofType { name kind } } } }
+                type { name kind ofType { name kind ofType { name kind ofType { name kind } } fields { name } } }
               }
             }
           }
@@ -577,31 +662,31 @@ public class OctopusEnergyClient
         foreach (var arg in costField.Value.GetProperty("args").EnumerateArray())
             argNames.Add(arg.GetProperty("name").GetString()!);
 
-        var startDateArgs = new[] { "startAt", "fromDatetime", "from" };
-        var endDateArgs = new[] { "endAt", "toDatetime", "to" };
+        // Match date arguments — try specific names first, then fall back to substring matching
+        var startDateArgs = new[] { "startAt", "fromDatetime", "from", "startDate", "periodFrom" };
+        var endDateArgs = new[] { "endAt", "toDatetime", "to", "endDate", "periodTo" };
         var startArg = argNames.FirstOrDefault(a => startDateArgs.Contains(a));
         var endArg = argNames.FirstOrDefault(a => endDateArgs.Contains(a));
 
+        // Fallback: look for any arg whose name contains start/from or end/to keywords
+        if (startArg is null)
+            startArg = argNames.FirstOrDefault(a =>
+                a.Contains("start", StringComparison.OrdinalIgnoreCase) ||
+                a.Contains("from", StringComparison.OrdinalIgnoreCase));
+        if (endArg is null)
+            endArg = argNames.FirstOrDefault(a =>
+                !a.Equals("accountNumber", StringComparison.OrdinalIgnoreCase) &&
+                (a.Contains("end", StringComparison.OrdinalIgnoreCase) ||
+                 a.Contains("to", StringComparison.OrdinalIgnoreCase)));
+
+        // Unwrap the return type (handles NON_NULL(LIST(NON_NULL(Type))) etc.)
         var typeEl = costField.Value.GetProperty("type");
-        var typeKind = typeEl.GetProperty("kind").GetString();
-        var typeName = typeEl.TryGetProperty("name", out var tn) && tn.ValueKind == JsonValueKind.String
-            ? tn.GetString() ?? "" : "";
-        var isArray = typeKind == "LIST";
-        var isConnection = typeName.Contains("Connection");
+        var (innerTypeName, isArray, isConnection) = UnwrapGraphQLType(typeEl);
 
-        var innerTypeName = typeName;
-        if (typeKind is "LIST" or "NON_NULL")
-        {
-            if (typeEl.TryGetProperty("ofType", out var ofType))
-            {
-                innerTypeName = ofType.TryGetProperty("name", out var otn) && otn.ValueKind == JsonValueKind.String
-                    ? otn.GetString() ?? "" : "";
-                var innerKind = ofType.TryGetProperty("kind", out var ok) ? ok.GetString() : "";
-                if (innerKind == "LIST") isArray = true;
-                if (innerTypeName.Contains("Connection")) isConnection = true;
-            }
-        }
+        if (string.IsNullOrEmpty(innerTypeName))
+            innerTypeName = "CostOfUsageType";
 
+        // Introspect the return type's fields
         var typeIntrospection = await ExecuteRawQueryAsync(apiKey, $$"""
             { __type(name: "{{innerTypeName}}") { name kind fields { name type { name kind ofType { name } } } } }
         """);
@@ -614,23 +699,32 @@ public class OctopusEnergyClient
         {
             foreach (var f in typeFields.EnumerateArray())
             {
-                var name = f.GetProperty("name").GetString()!;
-                fieldNames.Add(name);
-                if (name == "edges") isConnection = true;
+                var fieldName = f.GetProperty("name").GetString()!;
+                fieldNames.Add(fieldName);
             }
         }
 
+        // Only treat as a connection if the return type has BOTH edges AND pageInfo fields
+        if (!isConnection)
+            isConnection = fieldNames.Contains("edges") && fieldNames.Contains("pageInfo");
+
         _costOfUsageSchema = new CostOfUsageSchema(
             argNames, startArg, endArg,
-            innerTypeName ?? "CostOfUsageType",
+            innerTypeName,
             isConnection, isArray, fieldNames);
 
         return _costOfUsageSchema;
     }
 
     /// <summary>
+    /// Clears the cached costOfUsage schema so it will be re-discovered on next call.
+    /// </summary>
+    private static void InvalidateCostOfUsageSchemaCache() => _costOfUsageSchema = null;
+
+    /// <summary>
     /// Gets the actual cost of energy usage for a date range.
     /// Schema is auto-discovered via introspection on first call.
+    /// If the query fails with schema validation errors, the cache is cleared and retried.
     /// grouping: HALF_HOUR, DAY, WEEK, MONTH, QUARTER
     /// </summary>
     public async Task<JsonDocument> GetCostOfUsageAsync(string apiKey, string accountNumber, DateTime from, DateTime to, string grouping = "DAY")
@@ -640,6 +734,43 @@ public class OctopusEnergyClient
 
         var schema = await DiscoverCostOfUsageSchemaAsync(apiKey);
 
+        JsonDocument result;
+        try
+        {
+            result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema);
+        }
+        catch (HttpRequestException ex)
+        {
+            if (!ex.Message.Contains("400"))
+                throw;
+
+            // Schema may be stale - clear cache and retry with fresh introspection
+            InvalidateCostOfUsageSchemaCache();
+            schema = await DiscoverCostOfUsageSchemaAsync(apiKey);
+            result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema);
+        }
+
+        // Also handle GraphQL-level errors (some servers return 200 with errors array)
+        if (result.RootElement.TryGetProperty("errors", out var errors)
+            && errors.ValueKind == JsonValueKind.Array
+            && errors.GetArrayLength() > 0)
+        {
+            var firstError = errors[0].TryGetProperty("message", out var msg) ? msg.GetString() ?? "" : "";
+            if (firstError.Contains("Unknown argument") || firstError.Contains("Cannot query field"))
+            {
+                InvalidateCostOfUsageSchemaCache();
+                schema = await DiscoverCostOfUsageSchemaAsync(apiKey);
+                result.Dispose();
+                result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema);
+            }
+        }
+
+        return result;
+    }
+
+    private async Task<JsonDocument> ExecuteCostOfUsageQueryAsync(
+        string apiKey, string accountNumber, string fromStr, string toStr, string grouping, CostOfUsageSchema schema)
+    {
         var variables = new Dictionary<string, object?>();
         if (schema.ArgNames.Contains("accountNumber"))
             variables["accountNumber"] = accountNumber;
@@ -660,12 +791,28 @@ public class OctopusEnergyClient
         if (variables.ContainsKey("grouping"))
             varDeclarations.Add("$grouping: ConsumptionGroupings!");
 
-        var args = variables.Keys.Select(k => $"{k}: ${k}");
-
         string fieldSelection;
         if (schema.IsConnection && schema.FieldNames.Contains("edges"))
         {
-            fieldSelection = "edges { node { startAt endAt costInclTax costExclTax consumptionKwh unitRateInclTax unitRateExclTax } } pageInfo { hasNextPage endCursor }";
+            // Build edge node fields from known field names
+            var nodeFields = new[] { "startAt", "endAt", "fromDatetime", "toDatetime",
+                "costInclTax", "costExclTax", "consumptionKwh",
+                "unitRateInclTax", "unitRateExclTax", "unitRate",
+                "costCurrency", "standingCharge", "totalCost", "totalConsumption" };
+            var edgeNodeFields = string.Join(" ", nodeFields);
+            fieldSelection = $"edges {{ node {{ {edgeNodeFields} }} }} pageInfo {{ hasNextPage endCursor }}";
+
+            // Add pagination args to the query ONLY if the API supports them
+            if (schema.ArgNames.Contains("first"))
+            {
+                variables["first"] = 100;
+                varDeclarations.Add("$first: Int");
+            }
+            if (schema.ArgNames.Contains("after"))
+            {
+                variables["after"] = (string?)null;
+                varDeclarations.Add("$after: String");
+            }
         }
         else
         {
@@ -679,20 +826,21 @@ public class OctopusEnergyClient
             fieldSelection = string.Join(" ", availableFields);
         }
 
-        var query = $"""
-        query CostOfUsage({string.Join(", ", varDeclarations)}) {{
-          costOfUsage({string.Join(", ", args)}) {{
-            {fieldSelection}
-          }}
-        }}
+        // Build args from variables AFTER pagination args have been added
+        var args = variables.Keys.Select(k => $"{k}: ${k}");
+
+        var query = $$"""
+        query CostOfUsage({{string.Join(", ", varDeclarations)}}) {
+          costOfUsage({{string.Join(", ", args)}}) {
+            {{fieldSelection}}
+          }
+        }
         """;
 
         if (schema.IsConnection)
         {
             var allEdges = new List<JsonElement>();
             string? cursor = null;
-            if (schema.ArgNames.Contains("first"))
-                variables["first"] = 100;
 
             while (true)
             {
