@@ -936,6 +936,10 @@ public static class HeatPumpEndpoints
                 .OrderBy(r => r.StartAt)
                 .ToListAsync();
 
+            // Load account settings once — used by both auto-sync and cost data fetch
+            var settings = await db.OctopusAccountSettings
+                .FirstOrDefaultAsync(s => s.AccountNumber == device.AccountNumber);
+
             // Auto-sync time series if coverage is sparse (for new installs or first-time analysis)
             var requestedDays = (int)(to - from).TotalDays;
             var coveredDays = timeSeriesRecords
@@ -945,10 +949,7 @@ public static class HeatPumpEndpoints
 
             if (coveredDays < requestedDays * 0.5 && !string.IsNullOrWhiteSpace(device.Euid))
             {
-                var settings0 = await db.OctopusAccountSettings
-                    .FirstOrDefaultAsync(s => s.AccountNumber == device.AccountNumber);
-
-                if (settings0 is not null)
+                if (settings is not null)
                 {
                     var syncFrom = from;
                     var syncTo = to;
@@ -978,7 +979,7 @@ public static class HeatPumpEndpoints
                             try
                             {
                                 var tsData = await octopusClient.GetHeatPumpTimeSeriesPerformanceAsync(
-                                    settings0.ApiKey, device.Euid, chunkStart, chunkEnd, "MONTH");
+                                    settings.ApiKey, device.Euid, chunkStart, chunkEnd, "MONTH");
                                 var tsRoot = tsData.RootElement.GetProperty("data");
 
                                 if (tsRoot.TryGetProperty("octoHeatPumpTimeSeriesPerformance", out var tsSeries)
@@ -1083,9 +1084,6 @@ public static class HeatPumpEndpoints
             }
 
             // Merge cost data from Octopus API
-            var settings = await db.OctopusAccountSettings
-                .FirstOrDefaultAsync(s => s.AccountNumber == device.AccountNumber);
-
             var costDataStatus = "No account settings found";
             if (settings is not null)
             {

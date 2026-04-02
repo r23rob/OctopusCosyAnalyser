@@ -313,7 +313,7 @@ public class HeatPumpSnapshotWorker : BackgroundService
                                     snapshot.HotWaterZoneSetpointCelsius = opSetpointDec;
                                 if (czConfig.TryGetProperty("currentOperation", out var curOp2)
                                     && curOp2.TryGetProperty("mode", out var opMode)
-                                    && !string.IsNullOrEmpty(snapshot.HotWaterZoneMode))
+                                    && string.IsNullOrEmpty(snapshot.HotWaterZoneMode))
                                     snapshot.HotWaterZoneMode = opMode.GetString();
                                 break;
                             }
