@@ -31,6 +31,10 @@ public sealed class DailyAggregateDto
     public double? WeatherCompMin { get; set; }    // WC curve minimum flow temp (mild weather)
     public double? WeatherCompMax { get; set; }    // WC curve maximum flow temp (cold weather)
 
+    // Flow temperature allowable range (from heat pump configuration)
+    public double? FlowTempAllowableMin { get; set; }
+    public double? FlowTempAllowableMax { get; set; }
+
     // Cycling (controller state transitions)
     public int ControllerStateTransitions { get; set; }
 

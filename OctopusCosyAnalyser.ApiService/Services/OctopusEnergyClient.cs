@@ -828,17 +828,19 @@ public class OctopusEnergyClient
     /// If the query fails with schema validation errors, the cache is cleared and retried.
     /// grouping: HALF_HOUR, DAY, WEEK, MONTH, QUARTER
     /// </summary>
-    public async Task<JsonDocument> GetCostOfUsageAsync(string apiKey, string accountNumber, DateTime from, DateTime to, string grouping = "DAY", string? mpxn = null)
+    public async Task<JsonDocument> GetCostOfUsageAsync(string apiKey, string accountNumber, DateTime from, DateTime to, string grouping = "DAY", int? propertyId = null, string? mpxn = null)
     {
         var fromStr = from.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
         var toStr = to.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
 
         var schema = await DiscoverCostOfUsageSchemaAsync(apiKey);
+        _logger.LogDebug("Cost of usage schema: args=[{Args}], startArg={Start}, endArg={End}, isConnection={IsConn}",
+            string.Join(", ", schema.ArgNames), schema.StartArg, schema.EndArg, schema.IsConnection);
 
         JsonDocument result;
         try
         {
-            result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema, mpxn);
+            result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn);
         }
         catch (HttpRequestException ex)
         {
@@ -849,7 +851,7 @@ public class OctopusEnergyClient
             _logger.LogWarning(ex, "costOfUsage query returned 400, clearing schema cache and retrying");
             InvalidateCostOfUsageSchemaCache();
             schema = await DiscoverCostOfUsageSchemaAsync(apiKey);
-            result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema, mpxn);
+            result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn);
         }
 
         // Also handle GraphQL-level errors (some servers return 200 with errors array)
@@ -864,7 +866,7 @@ public class OctopusEnergyClient
                 InvalidateCostOfUsageSchemaCache();
                 schema = await DiscoverCostOfUsageSchemaAsync(apiKey);
                 result.Dispose();
-                result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema, mpxn);
+                result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn);
             }
         }
 
@@ -872,7 +874,7 @@ public class OctopusEnergyClient
     }
 
     private async Task<JsonDocument> ExecuteCostOfUsageQueryAsync(
-        string apiKey, string accountNumber, string fromStr, string toStr, string grouping, CostOfUsageSchema schema, string? mpxn = null)
+        string apiKey, string accountNumber, string fromStr, string toStr, string grouping, CostOfUsageSchema schema, int? propertyId = null, string? mpxn = null)
     {
         var variables = new Dictionary<string, object?>();
         if (schema.ArgNames.Contains("accountNumber"))
@@ -883,6 +885,8 @@ public class OctopusEnergyClient
             variables[schema.EndArg] = toStr;
         if (schema.ArgNames.Contains("grouping"))
             variables["grouping"] = grouping;
+        if (schema.ArgNames.Contains("propertyId") && propertyId.HasValue)
+            variables["propertyId"] = propertyId.Value;
         if (schema.ArgNames.Contains("mpxn") && mpxn is not null)
             variables["mpxn"] = mpxn;
 
@@ -895,6 +899,8 @@ public class OctopusEnergyClient
             varDeclarations.Add($"${schema.EndArg}: DateTime!");
         if (variables.ContainsKey("grouping"))
             varDeclarations.Add("$grouping: ConsumptionGroupings!");
+        if (variables.ContainsKey("propertyId"))
+            varDeclarations.Add("$propertyId: Int!");
         if (variables.ContainsKey("mpxn"))
             varDeclarations.Add("$mpxn: String!");
 

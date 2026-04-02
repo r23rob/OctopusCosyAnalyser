@@ -52,6 +52,7 @@ public class AiAnalysisService
         WC curve tuning guidelines:
         - WC Min: the flow temperature used in mild weather. Typical range: 25–35°C.
         - WC Max: the flow temperature used in cold weather. Typical range: 40–55°C.
+        - FlowTempAllowableMinC/MaxC: the heat pump's configured allowable flow temperature range — this defines the operating envelope. WC Min/Max must fall within this range.
         - If COP is poor on mild days (>5°C), WC max is likely too high — the system is sending water hotter than needed.
         - If the house can't maintain setpoint on cold days, WC max may need to increase — but try reducing setpoint or improving insulation first.
 
@@ -366,7 +367,7 @@ public class AiAnalysisService
     private static string BuildCsv(List<DailyAggregateDto> aggregates)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Date,Snapshots,AvgCOP_Heating,AvgCOP_HotWater,AvgCOP_SpaceHeatingOnly,ElecKwh,HeatKwh,AvgOutdoorC,MinOutdoorC,MaxOutdoorC,FixedFlowSetpointC,AvgRoomC,AvgSetpointC,HeatingDuty%,HotWaterDuty%,WC_Enabled,WC_MinC,WC_MaxC,StateTransitions,CostPence,UsageKwh,AvgUnitRateP,CostPerKwhHeatP,HW_RunCount,HW_TotalMins,AvgHW_SetpointC");
+        sb.AppendLine("Date,Snapshots,AvgCOP_Heating,AvgCOP_HotWater,AvgCOP_SpaceHeatingOnly,ElecKwh,HeatKwh,AvgOutdoorC,MinOutdoorC,MaxOutdoorC,FixedFlowSetpointC,AvgRoomC,AvgSetpointC,HeatingDuty%,HotWaterDuty%,WC_Enabled,WC_MinC,WC_MaxC,FlowTempAllowableMinC,FlowTempAllowableMaxC,StateTransitions,CostPence,UsageKwh,AvgUnitRateP,CostPerKwhHeatP,HW_RunCount,HW_TotalMins,AvgHW_SetpointC");
 
         foreach (var a in aggregates)
         {
@@ -389,6 +390,8 @@ public class AiAnalysisService
                 a.WeatherCompEnabled.HasValue ? (a.WeatherCompEnabled.Value ? "true" : "false") : "",
                 Fmt(a.WeatherCompMin),
                 Fmt(a.WeatherCompMax),
+                Fmt(a.FlowTempAllowableMin),
+                Fmt(a.FlowTempAllowableMax),
                 a.ControllerStateTransitions.ToString(CultureInfo.InvariantCulture),
                 Fmt(a.DailyCostPence),
                 Fmt(a.DailyUsageKwh),
