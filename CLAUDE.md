@@ -192,6 +192,18 @@ Unit tests in `OctopusCosyAnalyser.Tests/` (NUnit):
 - `EfficiencyAnalysisServiceTests` — summarise, compare, group, filter, warm day exclusion, warning generation
 - `WebTests` — Aspire integration test (requires Docker)
 
+## Allowed Commands
+
+The following commands are safe to run without confirmation:
+
+```bash
+dotnet build
+dotnet test
+dotnet run --project OctopusCosyAnalyser.AppHost
+dotnet ef migrations add <Name> --project OctopusCosyAnalyser.ApiService
+export PATH="$HOME/.dotnet:$PATH:/usr/local/share/dotnet"
+```
+
 ## Build & Run
 
 ### Local Development

@@ -138,63 +138,51 @@ h1:focus {
     vertical-align: middle;
 }
 
-/* ── Unified Dashboard Hero ──────────────────────────────────── */
+/* ── Dashboard Period Selector ──────────────────────────────── */
 
-.cop-hero {
-    text-align: center;
-    padding: 1.5rem 1rem 1rem;
-    background: linear-gradient(180deg, rgba(0,0,0,0.02) 0%, transparent 100%);
-    border-radius: 0.75rem;
-    border: 1px solid #e9ecef;
-    margin-bottom: 1rem;
+.period-selector {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.75rem;
 }
 
-.cop-value {
-    font-size: 4rem;
-    font-weight: 700;
-    line-height: 1;
-    transition: color 0.3s;
-}
+/* ── Dashboard Summary Cards ───────────────────────────────── */
 
-.cop-value.cop-green  { color: #28a745; }
-.cop-value.cop-amber  { color: #d39e00; }
-.cop-value.cop-red    { color: #dc3545; }
-
-.cop-label {
-    font-size: 0.85rem;
-    color: #6c757d;
-    margin-top: 0.25rem;
-}
-
-.cop-badge {
-    display: inline-block;
-    padding: 0.25rem 0.75rem;
-    border-radius: 1rem;
-    font-size: 0.8rem;
-    font-weight: 600;
-    margin-top: 0.5rem;
-}
-
-.cop-badge.cop-green  { background: rgba(40,167,69,0.12); color: #28a745; }
-.cop-badge.cop-amber  { background: rgba(255,193,7,0.15); color: #d39e00; }
-.cop-badge.cop-red    { background: rgba(220,53,69,0.12); color: #dc3545; }
-
-.metric-card {
+.summary-card {
     text-align: center;
     padding: 0.75rem 0.5rem;
     border-radius: 0.5rem;
     border: 1px solid #e9ecef;
     height: 100%;
+    background: linear-gradient(180deg, rgba(0,0,0,0.01) 0%, transparent 100%);
 }
 
-.metric-card .metric-value {
-    font-size: 1.5rem;
-    font-weight: 700;
-}
-
-.metric-card .metric-label {
+.summary-card .summary-label {
     font-size: 0.75rem;
     color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.summary-card .summary-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin: 0.25rem 0;
+}
+
+.summary-card .summary-value.cop-green  { color: #28a745; }
+.summary-card .summary-value.cop-amber  { color: #d39e00; }
+.summary-card .summary-value.cop-red    { color: #dc3545; }
+
+.summary-card .summary-range {
+    font-size: 0.7rem;
+    color: #868e96;
+}
+
+.summary-card-sensor {
+    border-color: #e0e4f0;
+    background: linear-gradient(180deg, rgba(99,102,241,0.02) 0%, transparent 100%);
 }
 
 .status-bar {

@@ -736,6 +736,85 @@ public static class HeatPumpEndpoints
             });
         }).WithName("GetCostOfUsage");
 
+        // ── Period Summary (server-side aggregation) ────────────────
+
+        group.MapGet("/period-summary/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, CosyDbContext db) =>
+        {
+            from ??= DateTime.UtcNow.AddDays(-7);
+            to ??= DateTime.UtcNow;
+
+            var snapshots = await db.HeatPumpSnapshots
+                .AsNoTracking()
+                .Where(s => s.DeviceId == deviceId && s.SnapshotTakenAt >= from && s.SnapshotTakenAt <= to)
+                .Select(s => new
+                {
+                    s.CoefficientOfPerformance,
+                    s.PowerInputKilowatt,
+                    s.HeatOutputKilowatt,
+                    s.OutdoorTemperatureCelsius,
+                    s.RoomTemperatureCelsius,
+                    s.RoomHumidityPercentage,
+                    s.HotWaterZoneSetpointCelsius,
+                    s.HeatingFlowTemperatureCelsius,
+                    s.HeatingZoneHeatDemand,
+                    s.HotWaterZoneHeatDemand
+                })
+                .ToListAsync();
+
+            if (snapshots.Count == 0)
+                return Results.Ok(new PeriodSummaryDto { PeriodFrom = from.Value, PeriodTo = to.Value });
+
+            var copsValid = snapshots.Where(s => s.CoefficientOfPerformance is > 0).Select(s => (double)s.CoefficientOfPerformance!.Value).ToList();
+            var outdoorValid = snapshots.Where(s => s.OutdoorTemperatureCelsius.HasValue).Select(s => (double)s.OutdoorTemperatureCelsius!.Value).ToList();
+            var roomValid = snapshots.Where(s => s.RoomTemperatureCelsius.HasValue).Select(s => (double)s.RoomTemperatureCelsius!.Value).ToList();
+            var humidityValid = snapshots.Where(s => s.RoomHumidityPercentage.HasValue).Select(s => (double)s.RoomHumidityPercentage!.Value).ToList();
+            var hwValid = snapshots.Where(s => s.HotWaterZoneSetpointCelsius.HasValue).Select(s => (double)s.HotWaterZoneSetpointCelsius!.Value).ToList();
+            var flowValid = snapshots.Where(s => s.HeatingFlowTemperatureCelsius.HasValue).Select(s => (double)s.HeatingFlowTemperatureCelsius!.Value).ToList();
+
+            var summary = new PeriodSummaryDto
+            {
+                PeriodFrom = from.Value,
+                PeriodTo = to.Value,
+                SnapshotCount = snapshots.Count,
+
+                AvgCop = copsValid.Count > 0 ? Math.Round(copsValid.Average(), 2) : null,
+                MinCop = copsValid.Count > 0 ? Math.Round(copsValid.Min(), 2) : null,
+                MaxCop = copsValid.Count > 0 ? Math.Round(copsValid.Max(), 2) : null,
+
+                TotalInputKwh = Math.Round(snapshots.Where(s => s.PowerInputKilowatt.HasValue).Sum(s => (double)s.PowerInputKilowatt!.Value * 0.25), 2),
+                TotalOutputKwh = Math.Round(snapshots.Where(s => s.HeatOutputKilowatt.HasValue).Sum(s => (double)s.HeatOutputKilowatt!.Value * 0.25), 2),
+
+                AvgOutdoorTemp = outdoorValid.Count > 0 ? Math.Round(outdoorValid.Average(), 1) : null,
+                MinOutdoorTemp = outdoorValid.Count > 0 ? Math.Round(outdoorValid.Min(), 1) : null,
+                MaxOutdoorTemp = outdoorValid.Count > 0 ? Math.Round(outdoorValid.Max(), 1) : null,
+
+                AvgRoomTemp = roomValid.Count > 0 ? Math.Round(roomValid.Average(), 1) : null,
+                MinRoomTemp = roomValid.Count > 0 ? Math.Round(roomValid.Min(), 1) : null,
+                MaxRoomTemp = roomValid.Count > 0 ? Math.Round(roomValid.Max(), 1) : null,
+
+                AvgRoomHumidity = humidityValid.Count > 0 ? Math.Round(humidityValid.Average(), 1) : null,
+                MinRoomHumidity = humidityValid.Count > 0 ? Math.Round(humidityValid.Min(), 1) : null,
+                MaxRoomHumidity = humidityValid.Count > 0 ? Math.Round(humidityValid.Max(), 1) : null,
+
+                AvgHotWaterSetpoint = hwValid.Count > 0 ? Math.Round(hwValid.Average(), 1) : null,
+                MinHotWaterSetpoint = hwValid.Count > 0 ? Math.Round(hwValid.Min(), 1) : null,
+                MaxHotWaterSetpoint = hwValid.Count > 0 ? Math.Round(hwValid.Max(), 1) : null,
+
+                AvgFlowTemp = flowValid.Count > 0 ? Math.Round(flowValid.Average(), 1) : null,
+                MinFlowTemp = flowValid.Count > 0 ? Math.Round(flowValid.Min(), 1) : null,
+                MaxFlowTemp = flowValid.Count > 0 ? Math.Round(flowValid.Max(), 1) : null,
+
+                HeatingDutyCyclePercent = snapshots.Count > 0
+                    ? Math.Round(100.0 * snapshots.Count(s => s.HeatingZoneHeatDemand == true) / snapshots.Count, 1)
+                    : 0,
+                HotWaterDutyCyclePercent = snapshots.Count > 0
+                    ? Math.Round(100.0 * snapshots.Count(s => s.HotWaterZoneHeatDemand == true) / snapshots.Count, 1)
+                    : 0
+            };
+
+            return Results.Ok(summary);
+        }).WithName("GetPeriodSummary");
+
         // ── Daily Aggregates ─────────────────────────────────────────
 
         group.MapGet("/daily-aggregates/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, CosyDbContext db) =>
