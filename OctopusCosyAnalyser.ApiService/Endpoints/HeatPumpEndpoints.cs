@@ -936,6 +936,132 @@ public static class HeatPumpEndpoints
                 .OrderBy(r => r.StartAt)
                 .ToListAsync();
 
+            // Load account settings once — used by both auto-sync and cost data fetch
+            var settings = await db.OctopusAccountSettings
+                .FirstOrDefaultAsync(s => s.AccountNumber == device.AccountNumber);
+
+            // Auto-sync time series if coverage is sparse (for new installs or first-time analysis)
+            var requestedDays = (int)(to - from).TotalDays;
+            var coveredDays = timeSeriesRecords
+                .Select(r => DateOnly.FromDateTime(r.StartAt))
+                .Distinct()
+                .Count();
+
+            if (coveredDays < requestedDays * 0.5 && !string.IsNullOrWhiteSpace(device.Euid))
+            {
+                if (settings is not null)
+                {
+                    var syncFrom = from;
+                    var syncTo = to;
+                    // Cap auto-sync to 90 days to avoid slow requests
+                    if ((syncTo - syncFrom).TotalDays > 90)
+                        syncFrom = syncTo.AddDays(-90);
+
+                    logger.LogInformation("Auto-syncing time series for device {DeviceId} from {From} to {To} (had {Covered}/{Requested} days)",
+                        deviceId, syncFrom, syncTo, coveredDays, requestedDays);
+
+                    try
+                    {
+                        var existingTimestamps = await db.HeatPumpTimeSeriesRecords
+                            .Where(r => r.DeviceId == deviceId && r.StartAt >= syncFrom && r.StartAt <= syncTo)
+                            .Select(r => r.StartAt)
+                            .ToListAsync();
+                        var existingSet = new HashSet<DateTime>(existingTimestamps);
+
+                        var chunkStart = syncFrom;
+                        var chunkSize = TimeSpan.FromDays(60);
+
+                        while (chunkStart < syncTo)
+                        {
+                            var chunkEnd = chunkStart + chunkSize;
+                            if (chunkEnd > syncTo) chunkEnd = syncTo;
+
+                            try
+                            {
+                                var tsData = await octopusClient.GetHeatPumpTimeSeriesPerformanceAsync(
+                                    settings.ApiKey, device.Euid, chunkStart, chunkEnd, "MONTH");
+                                var tsRoot = tsData.RootElement.GetProperty("data");
+
+                                if (tsRoot.TryGetProperty("octoHeatPumpTimeSeriesPerformance", out var tsSeries)
+                                    && tsSeries.ValueKind == JsonValueKind.Array)
+                                {
+                                    foreach (var item in tsSeries.EnumerateArray())
+                                    {
+                                        if (!item.TryGetProperty("startAt", out var startAtEl)
+                                            || !DateTimeOffset.TryParse(startAtEl.GetString(),
+                                                System.Globalization.CultureInfo.InvariantCulture,
+                                                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                                                out var startAtDto))
+                                            continue;
+
+                                        var startAt = startAtDto.UtcDateTime;
+                                        if (existingSet.Contains(startAt)) continue;
+
+                                        var endAtUtc = startAt.AddHours(1);
+                                        if (item.TryGetProperty("endAt", out var endAtEl)
+                                            && DateTimeOffset.TryParse(endAtEl.GetString(),
+                                                System.Globalization.CultureInfo.InvariantCulture,
+                                                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                                                out var endAtDto))
+                                            endAtUtc = endAtDto.UtcDateTime;
+
+                                        var record = new HeatPumpTimeSeriesRecord
+                                        {
+                                            DeviceId = deviceId,
+                                            StartAt = startAt,
+                                            EndAt = endAtUtc,
+                                            CreatedAt = DateTime.UtcNow
+                                        };
+
+                                        if (item.TryGetProperty("energyInput", out var ei) && ei.TryGetProperty("value", out var eiVal)
+                                            && decimal.TryParse(eiVal.GetString(), System.Globalization.NumberStyles.Any,
+                                                System.Globalization.CultureInfo.InvariantCulture, out var eiDec))
+                                            record.EnergyInputKwh = eiDec;
+
+                                        if (item.TryGetProperty("energyOutput", out var eo) && eo.TryGetProperty("value", out var eoVal)
+                                            && decimal.TryParse(eoVal.GetString(), System.Globalization.NumberStyles.Any,
+                                                System.Globalization.CultureInfo.InvariantCulture, out var eoDec))
+                                            record.EnergyOutputKwh = eoDec;
+
+                                        if (item.TryGetProperty("outdoorTemperature", out var ot) && ot.TryGetProperty("value", out var otVal)
+                                            && decimal.TryParse(otVal.GetString(), System.Globalization.NumberStyles.Any,
+                                                System.Globalization.CultureInfo.InvariantCulture, out var otDec))
+                                            record.OutdoorTemperatureCelsius = otDec;
+
+                                        db.HeatPumpTimeSeriesRecords.Add(record);
+                                        existingSet.Add(startAt);
+                                    }
+
+                                    await db.SaveChangesAsync();
+                                    db.ChangeTracker.Clear();
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                logger.LogWarning(ex, "Failed auto-sync time-series chunk {From} to {To} for device {DeviceId}",
+                                    chunkStart, chunkEnd, deviceId);
+                            }
+
+                            chunkStart = chunkEnd;
+                        }
+
+                        // Reload time series after sync
+                        timeSeriesRecords = await db.HeatPumpTimeSeriesRecords
+                            .AsNoTracking()
+                            .Where(r => r.DeviceId == deviceId && r.StartAt >= from && r.StartAt <= to)
+                            .OrderBy(r => r.StartAt)
+                            .ToListAsync();
+
+                        logger.LogInformation("Auto-sync complete for device {DeviceId}: now have {Count} time series records",
+                            deviceId, timeSeriesRecords.Count);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Auto-sync time series failed for device {DeviceId}", deviceId);
+                    }
+                }
+            }
+
             if (snapshots.Count == 0 && timeSeriesRecords.Count == 0)
                 return Results.Ok(new AiAnalysisResponseDto
                 {
@@ -958,18 +1084,26 @@ public static class HeatPumpEndpoints
             }
 
             // Merge cost data from Octopus API
-            var settings = await db.OctopusAccountSettings
-                .FirstOrDefaultAsync(s => s.AccountNumber == device.AccountNumber);
-
             var costDataStatus = "No account settings found";
             if (settings is not null)
             {
                 try
                 {
-                    logger.LogInformation("Fetching cost data for account {Account} from {From} to {To}",
-                        device.AccountNumber, from, to);
+                    logger.LogInformation("Fetching cost data for account {Account} (propertyId={PropertyId}) from {From} to {To}",
+                        device.AccountNumber, device.PropertyId, from, to);
 
-                    var costData = await octopusClient.GetCostOfUsageAsync(settings.ApiKey, device.AccountNumber, from, to);
+                    var costData = await octopusClient.GetCostOfUsageAsync(settings.ApiKey, device.AccountNumber, from, to, propertyId: device.PropertyId);
+
+                    // Log raw response structure for debugging
+                    if (costData.RootElement.TryGetProperty("data", out var costDataEl))
+                    {
+                        if (costDataEl.TryGetProperty("costOfUsage", out var costOfUsageEl))
+                            logger.LogInformation("Cost response structure: costOfUsage type={Type}", costOfUsageEl.ValueKind);
+                        else
+                            logger.LogWarning("Cost response missing costOfUsage field. Data keys: {Keys}",
+                                string.Join(", ", costDataEl.EnumerateObject().Select(p => p.Name)));
+                    }
+
                     var costRoot = costData.RootElement.GetProperty("data");
 
                     // Check for GraphQL errors
@@ -1134,6 +1268,16 @@ public static class HeatPumpEndpoints
                     .OrderByDescending(g2 => g2.Count())
                     .FirstOrDefault()?.Key;
 
+                var flowTempMinMode = day.Where(s => s.HeatingFlowTempAllowableMinCelsius.HasValue)
+                    .GroupBy(s => s.HeatingFlowTempAllowableMinCelsius!.Value)
+                    .OrderByDescending(g2 => g2.Count())
+                    .FirstOrDefault()?.Key;
+
+                var flowTempMaxMode = day.Where(s => s.HeatingFlowTempAllowableMaxCelsius.HasValue)
+                    .GroupBy(s => s.HeatingFlowTempAllowableMaxCelsius!.Value)
+                    .OrderByDescending(g2 => g2.Count())
+                    .FirstOrDefault()?.Key;
+
                 return new DailyAggregateDto
                 {
                     Date = g.Key,
@@ -1173,6 +1317,9 @@ public static class HeatPumpEndpoints
                     WeatherCompMin = wcMinMode.HasValue ? (double)wcMinMode.Value : null,
                     WeatherCompMax = wcMaxMode.HasValue ? (double)wcMaxMode.Value : null,
 
+                    FlowTempAllowableMin = flowTempMinMode.HasValue ? (double)flowTempMinMode.Value : null,
+                    FlowTempAllowableMax = flowTempMaxMode.HasValue ? (double)flowTempMaxMode.Value : null,
+
                     ControllerStateTransitions = stateTransitions,
 
                     HotWaterRunCount = hwRunCount,
@@ -1205,8 +1352,14 @@ public static class HeatPumpEndpoints
             .OrderBy(s => s.SnapshotTakenAt)
             .ToList();
 
+        // Deduplicate time series records by StartAt before grouping
+        var dedupedRecords = timeSeriesRecords
+            .GroupBy(r => r.StartAt)
+            .Select(g => g.First())
+            .ToList();
+
         // Group time series records by date
-        var tsByDate = timeSeriesRecords
+        var tsByDate = dedupedRecords
             .GroupBy(r => DateOnly.FromDateTime(r.StartAt))
             .ToDictionary(g => g.Key, g => g.ToList());
 
@@ -1228,7 +1381,7 @@ public static class HeatPumpEndpoints
                 .ToList();
 
             // Find weather comp settings from nearest snapshots (within 30 min window)
-            var wcValues = new List<(bool? enabled, decimal? min, decimal? max, decimal? flowTemp)>();
+            var wcValues = new List<(bool? enabled, decimal? min, decimal? max, decimal? flowTemp, decimal? flowTempAllowableMin, decimal? flowTempAllowableMax)>();
             foreach (var rec in records)
             {
                 var nearest = FindNearestSnapshot(snapshotsByTime, rec.StartAt, TimeSpan.FromMinutes(30));
@@ -1238,7 +1391,9 @@ public static class HeatPumpEndpoints
                         nearest.WeatherCompensationEnabled,
                         nearest.WeatherCompensationMinCelsius,
                         nearest.WeatherCompensationMaxCelsius,
-                        nearest.HeatingFlowTemperatureCelsius
+                        nearest.HeatingFlowTemperatureCelsius,
+                        nearest.HeatingFlowTempAllowableMinCelsius,
+                        nearest.HeatingFlowTempAllowableMaxCelsius
                     ));
                 }
             }
@@ -1267,6 +1422,18 @@ public static class HeatPumpEndpoints
                 .Select(v => (double)v.flowTemp!.Value)
                 .ToList();
 
+            var flowTempAllowMinMode = wcValues
+                .Where(v => v.flowTempAllowableMin.HasValue)
+                .GroupBy(v => v.flowTempAllowableMin!.Value)
+                .OrderByDescending(g => g.Count())
+                .FirstOrDefault()?.Key;
+
+            var flowTempAllowMaxMode = wcValues
+                .Where(v => v.flowTempAllowableMax.HasValue)
+                .GroupBy(v => v.flowTempAllowableMax!.Value)
+                .OrderByDescending(g => g.Count())
+                .FirstOrDefault()?.Key;
+
             if (aggByDate.TryGetValue(date, out var existing))
             {
                 // Merge: prefer time series energy totals (more complete hourly data)
@@ -1292,6 +1459,10 @@ public static class HeatPumpEndpoints
                     existing.WeatherCompMax = (double)wcMaxMode.Value;
                 if (!existing.AvgFlowTemp.HasValue && avgFlowTemp.Count > 0)
                     existing.AvgFlowTemp = avgFlowTemp.Average();
+                if (!existing.FlowTempAllowableMin.HasValue && flowTempAllowMinMode.HasValue)
+                    existing.FlowTempAllowableMin = (double)flowTempAllowMinMode.Value;
+                if (!existing.FlowTempAllowableMax.HasValue && flowTempAllowMaxMode.HasValue)
+                    existing.FlowTempAllowableMax = (double)flowTempAllowMaxMode.Value;
 
                 // Compute COP from time series energy data
                 if (tsEnergyIn > 0 && tsEnergyOut > 0)
@@ -1314,6 +1485,8 @@ public static class HeatPumpEndpoints
                     WeatherCompMin = wcMinMode.HasValue ? (double)wcMinMode.Value : null,
                     WeatherCompMax = wcMaxMode.HasValue ? (double)wcMaxMode.Value : null,
                     AvgFlowTemp = avgFlowTemp.Count > 0 ? avgFlowTemp.Average() : null,
+                    FlowTempAllowableMin = flowTempAllowMinMode.HasValue ? (double)flowTempAllowMinMode.Value : null,
+                    FlowTempAllowableMax = flowTempAllowMaxMode.HasValue ? (double)flowTempAllowMaxMode.Value : null,
                 };
 
                 aggregates.Add(newAgg);
