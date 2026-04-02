@@ -23,10 +23,12 @@ public class OctopusEnergyClient
     }
 
     private readonly HttpClient _httpClient;
+    private readonly ILogger<OctopusEnergyClient> _logger;
 
-    public OctopusEnergyClient(HttpClient httpClient)
+    public OctopusEnergyClient(HttpClient httpClient, ILogger<OctopusEnergyClient> logger)
     {
         _httpClient = httpClient;
+        _logger = logger;
         _httpClient.BaseAddress = new Uri("https://api.octopus.energy/v1/graphql/");
     }
 
@@ -727,17 +729,19 @@ public class OctopusEnergyClient
     /// If the query fails with schema validation errors, the cache is cleared and retried.
     /// grouping: HALF_HOUR, DAY, WEEK, MONTH, QUARTER
     /// </summary>
-    public async Task<JsonDocument> GetCostOfUsageAsync(string apiKey, string accountNumber, DateTime from, DateTime to, string grouping = "DAY")
+    public async Task<JsonDocument> GetCostOfUsageAsync(string apiKey, string accountNumber, DateTime from, DateTime to, string grouping = "DAY", int? propertyId = null)
     {
         var fromStr = from.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
         var toStr = to.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
 
         var schema = await DiscoverCostOfUsageSchemaAsync(apiKey);
+        _logger.LogInformation("Cost of usage schema: args=[{Args}], startArg={Start}, endArg={End}, isConnection={IsConn}",
+            string.Join(", ", schema.ArgNames), schema.StartArg, schema.EndArg, schema.IsConnection);
 
         JsonDocument result;
         try
         {
-            result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema);
+            result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema, propertyId);
         }
         catch (HttpRequestException ex)
         {
@@ -747,7 +751,7 @@ public class OctopusEnergyClient
             // Schema may be stale - clear cache and retry with fresh introspection
             InvalidateCostOfUsageSchemaCache();
             schema = await DiscoverCostOfUsageSchemaAsync(apiKey);
-            result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema);
+            result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema, propertyId);
         }
 
         // Also handle GraphQL-level errors (some servers return 200 with errors array)
@@ -761,7 +765,7 @@ public class OctopusEnergyClient
                 InvalidateCostOfUsageSchemaCache();
                 schema = await DiscoverCostOfUsageSchemaAsync(apiKey);
                 result.Dispose();
-                result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema);
+                result = await ExecuteCostOfUsageQueryAsync(apiKey, accountNumber, fromStr, toStr, grouping, schema, propertyId);
             }
         }
 
@@ -769,7 +773,7 @@ public class OctopusEnergyClient
     }
 
     private async Task<JsonDocument> ExecuteCostOfUsageQueryAsync(
-        string apiKey, string accountNumber, string fromStr, string toStr, string grouping, CostOfUsageSchema schema)
+        string apiKey, string accountNumber, string fromStr, string toStr, string grouping, CostOfUsageSchema schema, int? propertyId = null)
     {
         var variables = new Dictionary<string, object?>();
         if (schema.ArgNames.Contains("accountNumber"))
@@ -780,6 +784,8 @@ public class OctopusEnergyClient
             variables[schema.EndArg] = toStr;
         if (schema.ArgNames.Contains("grouping"))
             variables["grouping"] = grouping;
+        if (schema.ArgNames.Contains("propertyId") && propertyId.HasValue)
+            variables["propertyId"] = propertyId.Value;
 
         var varDeclarations = new List<string>();
         if (variables.ContainsKey("accountNumber"))
@@ -790,6 +796,8 @@ public class OctopusEnergyClient
             varDeclarations.Add($"${schema.EndArg}: DateTime!");
         if (variables.ContainsKey("grouping"))
             varDeclarations.Add("$grouping: ConsumptionGroupings!");
+        if (variables.ContainsKey("propertyId"))
+            varDeclarations.Add("$propertyId: Int!");
 
         string fieldSelection;
         if (schema.IsConnection && schema.FieldNames.Contains("edges"))

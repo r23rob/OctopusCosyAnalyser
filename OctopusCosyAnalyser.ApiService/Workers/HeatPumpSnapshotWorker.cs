@@ -254,12 +254,15 @@ public class HeatPumpSnapshotWorker : BackgroundService
                             && czConfig.TryGetProperty("code", out var czCode))
                         {
                             var zoneType = zt.GetString();
-                            if (zoneType == "HEAT" && heatingZoneCode is null)
+                            if (string.Equals(zoneType, "HEAT", StringComparison.OrdinalIgnoreCase) && heatingZoneCode is null)
                                 heatingZoneCode = czCode.GetString();
-                            else if (zoneType == "HOT_WATER" && hotWaterZoneCode is null)
+                            else if (string.Equals(zoneType, "HOT_WATER", StringComparison.OrdinalIgnoreCase) && hotWaterZoneCode is null)
                                 hotWaterZoneCode = czCode.GetString();
                         }
                     }
+
+                    _logger.LogDebug("Zone discovery for device {DeviceId}: heating={HeatingZone}, hotWater={HotWaterZone}",
+                        device.DeviceId, heatingZoneCode ?? "(none)", hotWaterZoneCode ?? "(none)");
 
                     foreach (var sz in statusZones.EnumerateArray())
                     {
@@ -268,7 +271,7 @@ public class HeatPumpSnapshotWorker : BackgroundService
 
                         var zoneCode = szZone.GetString();
 
-                        if (zoneCode == heatingZoneCode)
+                        if (string.Equals(zoneCode, heatingZoneCode, StringComparison.OrdinalIgnoreCase))
                         {
                             if (szTelemetry.TryGetProperty("setpointInCelsius", out var hzSetpoint) && hzSetpoint.ValueKind == JsonValueKind.Number && hzSetpoint.TryGetDecimal(out var hzSetpointDec))
                                 snapshot.HeatingZoneSetpointCelsius = hzSetpointDec;
@@ -277,7 +280,7 @@ public class HeatPumpSnapshotWorker : BackgroundService
                             if (szTelemetry.TryGetProperty("heatDemand", out var hzHeatDemand))
                                 snapshot.HeatingZoneHeatDemand = hzHeatDemand.ValueKind == JsonValueKind.True;
                         }
-                        else if (zoneCode == hotWaterZoneCode)
+                        else if (string.Equals(zoneCode, hotWaterZoneCode, StringComparison.OrdinalIgnoreCase))
                         {
                             if (szTelemetry.TryGetProperty("setpointInCelsius", out var hwSetpoint) && hwSetpoint.ValueKind == JsonValueKind.Number && hwSetpoint.TryGetDecimal(out var hwSetpointDec))
                                 snapshot.HotWaterZoneSetpointCelsius = hwSetpointDec;
@@ -286,6 +289,37 @@ public class HeatPumpSnapshotWorker : BackgroundService
                             if (szTelemetry.TryGetProperty("heatDemand", out var hwHeatDemand))
                                 snapshot.HotWaterZoneHeatDemand = hwHeatDemand.ValueKind == JsonValueKind.True;
                         }
+                    }
+
+                    // Fallback: if status zone matching found nothing for hot water,
+                    // try extracting directly from config zone data (heatDemand, callForHeat, currentOperation)
+                    if (hotWaterZoneCode is not null && !snapshot.HotWaterZoneHeatDemand.HasValue)
+                    {
+                        foreach (var cz in configZones.EnumerateArray())
+                        {
+                            if (cz.TryGetProperty("configuration", out var czConfig)
+                                && czConfig.TryGetProperty("zoneType", out var zt)
+                                && string.Equals(zt.GetString(), "HOT_WATER", StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (czConfig.TryGetProperty("heatDemand", out var cfgHeatDemand))
+                                    snapshot.HotWaterZoneHeatDemand = cfgHeatDemand.ValueKind == JsonValueKind.True;
+                                if (czConfig.TryGetProperty("callForHeat", out var cfgCallForHeat) && !snapshot.HotWaterZoneHeatDemand.HasValue)
+                                    snapshot.HotWaterZoneHeatDemand = cfgCallForHeat.ValueKind == JsonValueKind.True;
+                                if (czConfig.TryGetProperty("currentOperation", out var curOp)
+                                    && curOp.TryGetProperty("setpointInCelsius", out var opSetpoint)
+                                    && opSetpoint.ValueKind == JsonValueKind.Number
+                                    && opSetpoint.TryGetDecimal(out var opSetpointDec)
+                                    && !snapshot.HotWaterZoneSetpointCelsius.HasValue)
+                                    snapshot.HotWaterZoneSetpointCelsius = opSetpointDec;
+                                if (czConfig.TryGetProperty("currentOperation", out var curOp2)
+                                    && curOp2.TryGetProperty("mode", out var opMode)
+                                    && !string.IsNullOrEmpty(snapshot.HotWaterZoneMode))
+                                    snapshot.HotWaterZoneMode = opMode.GetString();
+                                break;
+                            }
+                        }
+                        _logger.LogDebug("Hot water fallback for device {DeviceId}: HeatDemand={Demand}, Setpoint={Setpoint}",
+                            device.DeviceId, snapshot.HotWaterZoneHeatDemand, snapshot.HotWaterZoneSetpointCelsius);
                     }
                 }
             }
