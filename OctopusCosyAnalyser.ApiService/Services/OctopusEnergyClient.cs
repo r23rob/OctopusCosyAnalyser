@@ -522,9 +522,115 @@ public class OctopusEnergyClient
 
     // ── Cost of Usage ──────────────────────────────────────────────
 
+    // Cached schema discovery for costOfUsage query
+    private static CostOfUsageSchema? _costOfUsageSchema;
+
+    private sealed record CostOfUsageSchema(
+        List<string> ArgNames,
+        string? StartArg,
+        string? EndArg,
+        string ReturnTypeName,
+        bool IsConnection,
+        bool IsArray,
+        List<string> FieldNames);
+
+    private async Task<CostOfUsageSchema> DiscoverCostOfUsageSchemaAsync(string apiKey)
+    {
+        if (_costOfUsageSchema is not null)
+            return _costOfUsageSchema;
+
+        var introspectionQuery = """
+        {
+          __schema {
+            queryType {
+              fields {
+                name
+                args { name type { name kind ofType { name } } }
+                type { name kind ofType { name kind fields { name } } }
+              }
+            }
+          }
+        }
+        """;
+
+        var result = await ExecuteRawQueryAsync(apiKey, introspectionQuery);
+        var fields = result.RootElement
+            .GetProperty("data")
+            .GetProperty("__schema")
+            .GetProperty("queryType")
+            .GetProperty("fields");
+
+        JsonElement? costField = null;
+        foreach (var field in fields.EnumerateArray())
+        {
+            if (field.GetProperty("name").GetString() == "costOfUsage")
+            {
+                costField = field;
+                break;
+            }
+        }
+
+        if (costField is null)
+            throw new InvalidOperationException("costOfUsage query not found in Octopus API schema");
+
+        var argNames = new List<string>();
+        foreach (var arg in costField.Value.GetProperty("args").EnumerateArray())
+            argNames.Add(arg.GetProperty("name").GetString()!);
+
+        var startDateArgs = new[] { "startAt", "fromDatetime", "from" };
+        var endDateArgs = new[] { "endAt", "toDatetime", "to" };
+        var startArg = argNames.FirstOrDefault(a => startDateArgs.Contains(a));
+        var endArg = argNames.FirstOrDefault(a => endDateArgs.Contains(a));
+
+        var typeEl = costField.Value.GetProperty("type");
+        var typeKind = typeEl.GetProperty("kind").GetString();
+        var typeName = typeEl.TryGetProperty("name", out var tn) && tn.ValueKind == JsonValueKind.String
+            ? tn.GetString() ?? "" : "";
+        var isArray = typeKind == "LIST";
+        var isConnection = typeName.Contains("Connection");
+
+        var innerTypeName = typeName;
+        if (typeKind is "LIST" or "NON_NULL")
+        {
+            if (typeEl.TryGetProperty("ofType", out var ofType))
+            {
+                innerTypeName = ofType.TryGetProperty("name", out var otn) && otn.ValueKind == JsonValueKind.String
+                    ? otn.GetString() ?? "" : "";
+                var innerKind = ofType.TryGetProperty("kind", out var ok) ? ok.GetString() : "";
+                if (innerKind == "LIST") isArray = true;
+                if (innerTypeName.Contains("Connection")) isConnection = true;
+            }
+        }
+
+        var typeIntrospection = await ExecuteRawQueryAsync(apiKey, $$"""
+            { __type(name: "{{innerTypeName}}") { name kind fields { name type { name kind ofType { name } } } } }
+        """);
+
+        var fieldNames = new List<string>();
+        var typeData = typeIntrospection.RootElement.GetProperty("data");
+        if (typeData.TryGetProperty("__type", out var introspectedType)
+            && introspectedType.ValueKind != JsonValueKind.Null
+            && introspectedType.TryGetProperty("fields", out var typeFields))
+        {
+            foreach (var f in typeFields.EnumerateArray())
+            {
+                var name = f.GetProperty("name").GetString()!;
+                fieldNames.Add(name);
+                if (name == "edges") isConnection = true;
+            }
+        }
+
+        _costOfUsageSchema = new CostOfUsageSchema(
+            argNames, startArg, endArg,
+            innerTypeName ?? "CostOfUsageType",
+            isConnection, isArray, fieldNames);
+
+        return _costOfUsageSchema;
+    }
+
     /// <summary>
     /// Gets the actual cost of energy usage for a date range.
-    /// Returns cost breakdown including unit costs and standing charges.
+    /// Schema is auto-discovered via introspection on first call.
     /// grouping: HALF_HOUR, DAY, WEEK, MONTH, QUARTER
     /// </summary>
     public async Task<JsonDocument> GetCostOfUsageAsync(string apiKey, string accountNumber, DateTime from, DateTime to, string grouping = "DAY")
@@ -532,107 +638,154 @@ public class OctopusEnergyClient
         var fromStr = from.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
         var toStr = to.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
 
-        var query = """
-        query CostOfUsage(
-          $accountNumber: String!,
-          $startAt: DateTime!,
-          $endAt: DateTime!,
-          $grouping: ConsumptionGroupings!,
-          $first: Int!,
-          $after: String
-        ) {
-          costOfUsage(
-            accountNumber: $accountNumber,
-            startAt: $startAt,
-            endAt: $endAt,
-            grouping: $grouping,
-            first: $first,
-            after: $after
-          ) {
-            edges {
-              node {
-                startAt
-                endAt
-                costInclTax
-                costExclTax
-                consumptionKwh
-                unitRateInclTax
-                unitRateExclTax
-              }
-            }
-            pageInfo {
-              hasNextPage
-              endCursor
-            }
-          }
+        var schema = await DiscoverCostOfUsageSchemaAsync(apiKey);
+
+        var variables = new Dictionary<string, object?>();
+        if (schema.ArgNames.Contains("accountNumber"))
+            variables["accountNumber"] = accountNumber;
+        if (schema.StartArg is not null)
+            variables[schema.StartArg] = fromStr;
+        if (schema.EndArg is not null)
+            variables[schema.EndArg] = toStr;
+        if (schema.ArgNames.Contains("grouping"))
+            variables["grouping"] = grouping;
+
+        var varDeclarations = new List<string>();
+        if (variables.ContainsKey("accountNumber"))
+            varDeclarations.Add("$accountNumber: String!");
+        if (schema.StartArg is not null)
+            varDeclarations.Add($"${schema.StartArg}: DateTime!");
+        if (schema.EndArg is not null)
+            varDeclarations.Add($"${schema.EndArg}: DateTime!");
+        if (variables.ContainsKey("grouping"))
+            varDeclarations.Add("$grouping: ConsumptionGroupings!");
+
+        var args = variables.Keys.Select(k => $"{k}: ${k}");
+
+        string fieldSelection;
+        if (schema.IsConnection && schema.FieldNames.Contains("edges"))
+        {
+            fieldSelection = "edges { node { startAt endAt costInclTax costExclTax consumptionKwh unitRateInclTax unitRateExclTax } } pageInfo { hasNextPage endCursor }";
         }
+        else
+        {
+            var wantedFields = new[] { "startAt", "endAt", "fromDatetime", "toDatetime",
+                "costInclTax", "costExclTax", "consumptionKwh",
+                "unitRateInclTax", "unitRateExclTax", "unitRate",
+                "costCurrency", "standingCharge", "totalCost", "totalConsumption" };
+            var availableFields = schema.FieldNames.Where(f => wantedFields.Contains(f)).ToList();
+            if (availableFields.Count == 0)
+                availableFields = schema.FieldNames;
+            fieldSelection = string.Join(" ", availableFields);
+        }
+
+        var query = $"""
+        query CostOfUsage({string.Join(", ", varDeclarations)}) {{
+          costOfUsage({string.Join(", ", args)}) {{
+            {fieldSelection}
+          }}
+        }}
         """;
 
-        // Paginate through all results (API limits first to 100)
-        var allEdges = new List<JsonElement>();
-        string? cursor = null;
-
-        while (true)
+        if (schema.IsConnection)
         {
-            var variables = new Dictionary<string, object?>
+            var allEdges = new List<JsonElement>();
+            string? cursor = null;
+            if (schema.ArgNames.Contains("first"))
+                variables["first"] = 100;
+
+            while (true)
             {
-                ["accountNumber"] = accountNumber,
-                ["startAt"] = fromStr,
-                ["endAt"] = toStr,
-                ["grouping"] = grouping,
-                ["first"] = 100,
-                ["after"] = cursor
-            };
+                if (schema.ArgNames.Contains("after"))
+                    variables["after"] = cursor;
 
+                var result = await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(variables));
+                if (result.RootElement.TryGetProperty("errors", out _))
+                    return result;
+
+                var data = result.RootElement.GetProperty("data");
+                if (!data.TryGetProperty("costOfUsage", out var costOfUsage)
+                    || costOfUsage.ValueKind == JsonValueKind.Null)
+                    return result;
+
+                if (costOfUsage.TryGetProperty("edges", out var edges))
+                    foreach (var edge in edges.EnumerateArray())
+                        allEdges.Add(edge.Clone());
+
+                var hasNext = costOfUsage.TryGetProperty("pageInfo", out var pi)
+                    && pi.TryGetProperty("hasNextPage", out var hn) && hn.GetBoolean();
+                if (!hasNext) break;
+
+                cursor = pi.GetProperty("endCursor").GetString();
+                result.Dispose();
+            }
+
+            using var ms = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(ms))
+            {
+                writer.WriteStartObject();
+                writer.WritePropertyName("data");
+                writer.WriteStartObject();
+                writer.WritePropertyName("costOfUsage");
+                writer.WriteStartObject();
+                writer.WritePropertyName("edges");
+                writer.WriteStartArray();
+                foreach (var edge in allEdges) edge.WriteTo(writer);
+                writer.WriteEndArray();
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+            }
+            return JsonDocument.Parse(ms.ToArray());
+        }
+        else
+        {
             var result = await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(variables));
-            var root = result.RootElement;
-
-            // If there are errors, return the result as-is
-            if (root.TryGetProperty("errors", out _))
+            if (result.RootElement.TryGetProperty("errors", out _))
                 return result;
 
-            var data = root.GetProperty("data");
+            var data = result.RootElement.GetProperty("data");
             if (!data.TryGetProperty("costOfUsage", out var costOfUsage)
                 || costOfUsage.ValueKind == JsonValueKind.Null)
                 return result;
 
-            if (costOfUsage.TryGetProperty("edges", out var edges))
+            // Normalise into edges/node format for consistent downstream parsing
+            using var ms = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(ms))
             {
-                foreach (var edge in edges.EnumerateArray())
-                    allEdges.Add(edge.Clone());
+                writer.WriteStartObject();
+                writer.WritePropertyName("data");
+                writer.WriteStartObject();
+                writer.WritePropertyName("costOfUsage");
+                writer.WriteStartObject();
+                writer.WritePropertyName("edges");
+                writer.WriteStartArray();
+
+                if (costOfUsage.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in costOfUsage.EnumerateArray())
+                    {
+                        writer.WriteStartObject();
+                        writer.WritePropertyName("node");
+                        item.WriteTo(writer);
+                        writer.WriteEndObject();
+                    }
+                }
+                else if (costOfUsage.ValueKind == JsonValueKind.Object)
+                {
+                    writer.WriteStartObject();
+                    writer.WritePropertyName("node");
+                    costOfUsage.WriteTo(writer);
+                    writer.WriteEndObject();
+                }
+
+                writer.WriteEndArray();
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+                writer.WriteEndObject();
             }
-
-            var hasNextPage = costOfUsage.TryGetProperty("pageInfo", out var pageInfo)
-                && pageInfo.TryGetProperty("hasNextPage", out var hnp)
-                && hnp.GetBoolean();
-
-            if (!hasNextPage)
-                break;
-
-            cursor = pageInfo.GetProperty("endCursor").GetString();
-            result.Dispose();
+            return JsonDocument.Parse(ms.ToArray());
         }
-
-        // Build a combined response document
-        using var ms = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(ms))
-        {
-            writer.WriteStartObject();
-            writer.WritePropertyName("data");
-            writer.WriteStartObject();
-            writer.WritePropertyName("costOfUsage");
-            writer.WriteStartObject();
-            writer.WritePropertyName("edges");
-            writer.WriteStartArray();
-            foreach (var edge in allEdges)
-                edge.WriteTo(writer);
-            writer.WriteEndArray();
-            writer.WriteEndObject();
-            writer.WriteEndObject();
-            writer.WriteEndObject();
-        }
-
-        return JsonDocument.Parse(ms.ToArray());
     }
 
     // ── Raw / Generic ────────────────────────────────────────────────

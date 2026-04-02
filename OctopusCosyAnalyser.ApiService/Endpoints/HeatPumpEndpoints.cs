@@ -850,13 +850,14 @@ public static class HeatPumpEndpoints
                         foreach (var edge in edges.EnumerateArray())
                         {
                             if (!edge.TryGetProperty("node", out var node)) continue;
-                            var startAt = node.TryGetProperty("startAt", out var sa) ? sa.GetString() : null;
-                            if (startAt == null || !DateTime.TryParse(startAt, out var dt)) continue;
+                            // Try multiple field names — API schema varies
+                            var startAtStr = TryGetString(node, "startAt", "fromDatetime", "from");
+                            if (startAtStr == null || !DateTime.TryParse(startAtStr, out var dt)) continue;
 
                             var date = DateOnly.FromDateTime(dt);
-                            var cost = GetJsonDouble(node, "costInclTax");
-                            var usage = GetJsonDouble(node, "consumptionKwh");
-                            var unitRate = GetJsonDouble(node, "unitRateInclTax");
+                            var cost = TryGetDouble(node, "costInclTax", "totalCost", "cost");
+                            var usage = TryGetDouble(node, "consumptionKwh", "totalConsumption", "consumption");
+                            var unitRate = TryGetDouble(node, "unitRateInclTax", "unitRate");
 
                             if (costByDate.TryGetValue(date, out var existing))
                             {
@@ -1498,6 +1499,37 @@ public static class HeatPumpEndpoints
             .Select(item => item.ValueKind == JsonValueKind.String ? item.GetString() ?? string.Empty : item.ToString())
             .Where(item => !string.IsNullOrWhiteSpace(item))
             .ToList();
+    }
+
+    private static string? TryGetString(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (element.TryGetProperty(propertyName, out var value)
+                && value.ValueKind == JsonValueKind.String)
+            {
+                return value.GetString();
+            }
+        }
+        return null;
+    }
+
+    private static double TryGetDouble(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (!element.TryGetProperty(propertyName, out var value))
+                continue;
+
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var d))
+                return d;
+
+            if (value.ValueKind == JsonValueKind.String
+                && double.TryParse(value.GetString(), System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+                return parsed;
+        }
+        return 0;
     }
 
     public sealed record GraphqlQueryRequest(string AccountNumber, string Query, JsonElement? Variables);
