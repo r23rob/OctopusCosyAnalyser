@@ -317,6 +317,7 @@ else
     private PeriodSummaryDto? periodSummary;
     private bool periodLoading;
     private int selectedPeriodDays = 7;
+    private int _periodLoadVersion;
 
     // Trend chart
     private List<HeatPumpSnapshotDto> trendSnapshots = [];
@@ -465,6 +466,7 @@ else
     private async Task LoadPeriodDataAsync()
     {
         if (string.IsNullOrEmpty(deviceId)) return;
+        var thisVersion = Interlocked.Increment(ref _periodLoadVersion);
         periodLoading = true;
         await InvokeAsync(StateHasChanged);
         try
@@ -476,12 +478,39 @@ else
             var snapshotsTask = Api.GetSnapshotsAsync(deviceId, from, to);
             await Task.WhenAll(periodTask, snapshotsTask);
 
+            // Discard results if a newer request was started while we were loading
+            if (thisVersion != _periodLoadVersion) return;
+
             periodSummary = periodTask.Result;
-            trendSnapshots = snapshotsTask.Result?.Snapshots?.OrderBy(s => s.SnapshotTakenAt).ToList() ?? [];
+            var allSnapshots = snapshotsTask.Result?.Snapshots?.OrderBy(s => s.SnapshotTakenAt).ToList() ?? [];
+
+            // Downsample for long periods to keep chart responsive
+            trendSnapshots = selectedPeriodDays > 7 ? DownsampleSnapshots(allSnapshots, maxPoints: 500) : allSnapshots;
             BuildCop3RefLine();
         }
-        catch (Exception ex) { errorMessage = $"Period data failed: {ex.Message}"; }
-        finally { periodLoading = false; await InvokeAsync(StateHasChanged); }
+        catch (Exception ex)
+        {
+            if (thisVersion == _periodLoadVersion)
+                errorMessage = $"Period data failed: {ex.Message}";
+        }
+        finally
+        {
+            if (thisVersion == _periodLoadVersion)
+            {
+                periodLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private static List<HeatPumpSnapshotDto> DownsampleSnapshots(List<HeatPumpSnapshotDto> snapshots, int maxPoints)
+    {
+        if (snapshots.Count <= maxPoints) return snapshots;
+        var step = (double)snapshots.Count / maxPoints;
+        var result = new List<HeatPumpSnapshotDto>(maxPoints);
+        for (var i = 0; i < maxPoints; i++)
+            result.Add(snapshots[(int)(i * step)]);
+        return result;
     }
 
     private async Task RefreshLiveData()
@@ -539,7 +568,7 @@ else
     private static string FmtDec(double? v) => v.HasValue ? v.Value.ToString("F2") : "—";
     private static string FmtTemp(double? v) => v.HasValue ? $"{v.Value:F1} °C" : "—";
     private static string FmtPct(double? v) => v.HasValue ? $"{v.Value:F1}%" : "—";
-    private static string FmtKwh(double? v) => v is > 0 ? $"{v.Value:F1}" : "—";
+    private static string FmtKwh(double? v) => v.HasValue ? $"{v.Value:F1}" : "—";
 
     public void Dispose()
     {

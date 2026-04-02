@@ -743,6 +743,11 @@ public static class HeatPumpEndpoints
             from ??= DateTime.UtcNow.AddDays(-7);
             to ??= DateTime.UtcNow;
 
+            if (from >= to)
+                return Results.BadRequest("'from' must be before 'to'.");
+            if ((to.Value - from.Value).TotalDays > 400)
+                return Results.BadRequest("Maximum range is 400 days.");
+
             var snapshots = await db.HeatPumpSnapshots
                 .AsNoTracking()
                 .Where(s => s.DeviceId == deviceId && s.SnapshotTakenAt >= from && s.SnapshotTakenAt <= to)
@@ -764,12 +769,73 @@ public static class HeatPumpEndpoints
             if (snapshots.Count == 0)
                 return Results.Ok(new PeriodSummaryDto { PeriodFrom = from.Value, PeriodTo = to.Value });
 
-            var copsValid = snapshots.Where(s => s.CoefficientOfPerformance is > 0).Select(s => (double)s.CoefficientOfPerformance!.Value).ToList();
-            var outdoorValid = snapshots.Where(s => s.OutdoorTemperatureCelsius.HasValue).Select(s => (double)s.OutdoorTemperatureCelsius!.Value).ToList();
-            var roomValid = snapshots.Where(s => s.RoomTemperatureCelsius.HasValue).Select(s => (double)s.RoomTemperatureCelsius!.Value).ToList();
-            var humidityValid = snapshots.Where(s => s.RoomHumidityPercentage.HasValue).Select(s => (double)s.RoomHumidityPercentage!.Value).ToList();
-            var hwValid = snapshots.Where(s => s.HotWaterZoneSetpointCelsius.HasValue).Select(s => (double)s.HotWaterZoneSetpointCelsius!.Value).ToList();
-            var flowValid = snapshots.Where(s => s.HeatingFlowTemperatureCelsius.HasValue).Select(s => (double)s.HeatingFlowTemperatureCelsius!.Value).ToList();
+            // Single-pass aggregation to avoid multiple list allocations
+            double copSum = 0, copMin = double.MaxValue, copMax = double.MinValue;
+            int copCount = 0;
+            double outdoorSum = 0, outdoorMin = double.MaxValue, outdoorMax = double.MinValue;
+            int outdoorCount = 0;
+            double roomSum = 0, roomMin = double.MaxValue, roomMax = double.MinValue;
+            int roomCount = 0;
+            double humiditySum = 0, humidityMin = double.MaxValue, humidityMax = double.MinValue;
+            int humidityCount = 0;
+            double hwSum = 0, hwMin = double.MaxValue, hwMax = double.MinValue;
+            int hwCount = 0;
+            double flowSum = 0, flowMin = double.MaxValue, flowMax = double.MinValue;
+            int flowCount = 0;
+            double totalInputKwh = 0, totalOutputKwh = 0;
+            int heatingDemandCount = 0, hotWaterDemandCount = 0;
+
+            foreach (var s in snapshots)
+            {
+                if (s.CoefficientOfPerformance is > 0)
+                {
+                    var v = (double)s.CoefficientOfPerformance.Value;
+                    copSum += v; copCount++;
+                    if (v < copMin) copMin = v;
+                    if (v > copMax) copMax = v;
+                }
+                if (s.PowerInputKilowatt.HasValue)
+                    totalInputKwh += (double)s.PowerInputKilowatt.Value * 0.25;
+                if (s.HeatOutputKilowatt.HasValue)
+                    totalOutputKwh += (double)s.HeatOutputKilowatt.Value * 0.25;
+                if (s.OutdoorTemperatureCelsius.HasValue)
+                {
+                    var v = (double)s.OutdoorTemperatureCelsius.Value;
+                    outdoorSum += v; outdoorCount++;
+                    if (v < outdoorMin) outdoorMin = v;
+                    if (v > outdoorMax) outdoorMax = v;
+                }
+                if (s.RoomTemperatureCelsius.HasValue)
+                {
+                    var v = (double)s.RoomTemperatureCelsius.Value;
+                    roomSum += v; roomCount++;
+                    if (v < roomMin) roomMin = v;
+                    if (v > roomMax) roomMax = v;
+                }
+                if (s.RoomHumidityPercentage.HasValue)
+                {
+                    var v = (double)s.RoomHumidityPercentage.Value;
+                    humiditySum += v; humidityCount++;
+                    if (v < humidityMin) humidityMin = v;
+                    if (v > humidityMax) humidityMax = v;
+                }
+                if (s.HotWaterZoneSetpointCelsius.HasValue)
+                {
+                    var v = (double)s.HotWaterZoneSetpointCelsius.Value;
+                    hwSum += v; hwCount++;
+                    if (v < hwMin) hwMin = v;
+                    if (v > hwMax) hwMax = v;
+                }
+                if (s.HeatingFlowTemperatureCelsius.HasValue)
+                {
+                    var v = (double)s.HeatingFlowTemperatureCelsius.Value;
+                    flowSum += v; flowCount++;
+                    if (v < flowMin) flowMin = v;
+                    if (v > flowMax) flowMax = v;
+                }
+                if (s.HeatingZoneHeatDemand == true) heatingDemandCount++;
+                if (s.HotWaterZoneHeatDemand == true) hotWaterDemandCount++;
+            }
 
             var summary = new PeriodSummaryDto
             {
@@ -777,39 +843,35 @@ public static class HeatPumpEndpoints
                 PeriodTo = to.Value,
                 SnapshotCount = snapshots.Count,
 
-                AvgCop = copsValid.Count > 0 ? Math.Round(copsValid.Average(), 2) : null,
-                MinCop = copsValid.Count > 0 ? Math.Round(copsValid.Min(), 2) : null,
-                MaxCop = copsValid.Count > 0 ? Math.Round(copsValid.Max(), 2) : null,
+                AvgCop = copCount > 0 ? Math.Round(copSum / copCount, 2) : null,
+                MinCop = copCount > 0 ? Math.Round(copMin, 2) : null,
+                MaxCop = copCount > 0 ? Math.Round(copMax, 2) : null,
 
-                TotalInputKwh = Math.Round(snapshots.Where(s => s.PowerInputKilowatt.HasValue).Sum(s => (double)s.PowerInputKilowatt!.Value * 0.25), 2),
-                TotalOutputKwh = Math.Round(snapshots.Where(s => s.HeatOutputKilowatt.HasValue).Sum(s => (double)s.HeatOutputKilowatt!.Value * 0.25), 2),
+                TotalInputKwh = Math.Round(totalInputKwh, 2),
+                TotalOutputKwh = Math.Round(totalOutputKwh, 2),
 
-                AvgOutdoorTemp = outdoorValid.Count > 0 ? Math.Round(outdoorValid.Average(), 1) : null,
-                MinOutdoorTemp = outdoorValid.Count > 0 ? Math.Round(outdoorValid.Min(), 1) : null,
-                MaxOutdoorTemp = outdoorValid.Count > 0 ? Math.Round(outdoorValid.Max(), 1) : null,
+                AvgOutdoorTemp = outdoorCount > 0 ? Math.Round(outdoorSum / outdoorCount, 1) : null,
+                MinOutdoorTemp = outdoorCount > 0 ? Math.Round(outdoorMin, 1) : null,
+                MaxOutdoorTemp = outdoorCount > 0 ? Math.Round(outdoorMax, 1) : null,
 
-                AvgRoomTemp = roomValid.Count > 0 ? Math.Round(roomValid.Average(), 1) : null,
-                MinRoomTemp = roomValid.Count > 0 ? Math.Round(roomValid.Min(), 1) : null,
-                MaxRoomTemp = roomValid.Count > 0 ? Math.Round(roomValid.Max(), 1) : null,
+                AvgRoomTemp = roomCount > 0 ? Math.Round(roomSum / roomCount, 1) : null,
+                MinRoomTemp = roomCount > 0 ? Math.Round(roomMin, 1) : null,
+                MaxRoomTemp = roomCount > 0 ? Math.Round(roomMax, 1) : null,
 
-                AvgRoomHumidity = humidityValid.Count > 0 ? Math.Round(humidityValid.Average(), 1) : null,
-                MinRoomHumidity = humidityValid.Count > 0 ? Math.Round(humidityValid.Min(), 1) : null,
-                MaxRoomHumidity = humidityValid.Count > 0 ? Math.Round(humidityValid.Max(), 1) : null,
+                AvgRoomHumidity = humidityCount > 0 ? Math.Round(humiditySum / humidityCount, 1) : null,
+                MinRoomHumidity = humidityCount > 0 ? Math.Round(humidityMin, 1) : null,
+                MaxRoomHumidity = humidityCount > 0 ? Math.Round(humidityMax, 1) : null,
 
-                AvgHotWaterSetpoint = hwValid.Count > 0 ? Math.Round(hwValid.Average(), 1) : null,
-                MinHotWaterSetpoint = hwValid.Count > 0 ? Math.Round(hwValid.Min(), 1) : null,
-                MaxHotWaterSetpoint = hwValid.Count > 0 ? Math.Round(hwValid.Max(), 1) : null,
+                AvgHotWaterSetpoint = hwCount > 0 ? Math.Round(hwSum / hwCount, 1) : null,
+                MinHotWaterSetpoint = hwCount > 0 ? Math.Round(hwMin, 1) : null,
+                MaxHotWaterSetpoint = hwCount > 0 ? Math.Round(hwMax, 1) : null,
 
-                AvgFlowTemp = flowValid.Count > 0 ? Math.Round(flowValid.Average(), 1) : null,
-                MinFlowTemp = flowValid.Count > 0 ? Math.Round(flowValid.Min(), 1) : null,
-                MaxFlowTemp = flowValid.Count > 0 ? Math.Round(flowValid.Max(), 1) : null,
+                AvgFlowTemp = flowCount > 0 ? Math.Round(flowSum / flowCount, 1) : null,
+                MinFlowTemp = flowCount > 0 ? Math.Round(flowMin, 1) : null,
+                MaxFlowTemp = flowCount > 0 ? Math.Round(flowMax, 1) : null,
 
-                HeatingDutyCyclePercent = snapshots.Count > 0
-                    ? Math.Round(100.0 * snapshots.Count(s => s.HeatingZoneHeatDemand == true) / snapshots.Count, 1)
-                    : 0,
-                HotWaterDutyCyclePercent = snapshots.Count > 0
-                    ? Math.Round(100.0 * snapshots.Count(s => s.HotWaterZoneHeatDemand == true) / snapshots.Count, 1)
-                    : 0
+                HeatingDutyCyclePercent = Math.Round(100.0 * heatingDemandCount / snapshots.Count, 1),
+                HotWaterDutyCyclePercent = Math.Round(100.0 * hotWaterDemandCount / snapshots.Count, 1)
             };
 
             return Results.Ok(summary);
