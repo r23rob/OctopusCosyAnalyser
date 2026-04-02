@@ -1,0 +1,157 @@
+@inject HeatPumpApiClient Api
+@rendermode InteractiveServer
+
+@if (Summary == null)
+{
+    <p class="text-muted">No data available. Waiting for summary data...</p>
+}
+else
+{
+    <!-- Sensor Cards -->
+    <h5>Sensors</h5>
+    @if (Summary.ControllerStatus?.Sensors?.Count > 0)
+    {
+        <div class="row g-3">
+            @foreach (var sensor in Summary.ControllerStatus.Sensors)
+            {
+                var isOnline = sensor.Connectivity?.Online == true;
+                var hasTemp = sensor.Telemetry?.TemperatureInCelsius.HasValue == true;
+                var hasHumidity = sensor.Telemetry?.HumidityPercentage.HasValue == true;
+
+                <div class="col-md-4 col-lg-3">
+                    <div class="card @(isOnline ? "border-success" : "border-secondary") h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <strong>@(sensor.Code ?? "Unknown")</strong>
+                            <span class="badge @(isOnline ? "bg-success" : "bg-secondary")">@(isOnline ? "Online" : "Offline")</span>
+                        </div>
+                        <div class="card-body text-center">
+                            @if (hasTemp)
+                            {
+                                <div class="mb-2">
+                                    <span class="fs-1">@(sensor.Telemetry!.TemperatureInCelsius!.Value.ToString("F1"))</span>
+                                    <span class="text-muted">°C</span>
+                                </div>
+                            }
+                            @if (hasHumidity)
+                            {
+                                <div>
+                                    <span class="fs-4">@(sensor.Telemetry!.HumidityPercentage!.Value.ToString("F0"))</span>
+                                    <span class="text-muted">% humidity</span>
+                                </div>
+                            }
+                            @if (!hasTemp && !hasHumidity) { <p class="text-muted">No telemetry data</p> }
+                        </div>
+                        <div class="card-footer text-muted small">@(sensor.Telemetry?.RetrievedAt ?? "—")</div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Zone Status -->
+    <h5 class="mt-4">Zone Status</h5>
+    @if (Summary.ControllerStatus?.Zones?.Count > 0)
+    {
+        <div class="row g-3">
+            @foreach (var zone in Summary.ControllerStatus.Zones)
+            {
+                var isHeating = zone.Telemetry?.HeatDemand == true;
+                <div class="col-md-6">
+                    <div class="card @(isHeating ? "border-danger" : "border-info") h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <strong>@(zone.Zone ?? "Unknown Zone")</strong>
+                            <span class="badge @(isHeating ? "bg-danger" : "bg-info")">@(isHeating ? "Heating" : "Idle")</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-4">
+                                    <h6 class="text-muted">Mode</h6>
+                                    <h5>@(zone.Telemetry?.Mode ?? "—")</h5>
+                                </div>
+                                <div class="col-4">
+                                    <h6 class="text-muted">Setpoint</h6>
+                                    <h5>@(zone.Telemetry?.SetpointInCelsius?.ToString("F1") ?? "—") °C</h5>
+                                </div>
+                                <div class="col-4">
+                                    <h6 class="text-muted">Relay</h6>
+                                    <h5>@(zone.Telemetry?.RelaySwitchedOn == true ? "ON" : "OFF")</h5>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- System Info -->
+    <h5 class="mt-4">System Information</h5>
+    <div class="row g-3">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">Controller</div>
+                <div class="card-body">
+                    <p><strong>Connected:</strong> @(Summary.ControllerConfiguration?.Controller?.Connected == true ? "Yes" : "No")</p>
+                    <p><strong>Timezone:</strong> @(Summary.ControllerConfiguration?.Controller?.HeatPumpTimezone ?? "—")</p>
+                    <p><strong>State:</strong> @string.Join(", ", Summary.ControllerConfiguration?.Controller?.State ?? [])</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">Heat Pump Unit</div>
+                <div class="card-body">
+                    <p><strong>Model:</strong> @(Summary.ControllerConfiguration?.HeatPump?.Model ?? "—")</p>
+                    <p><strong>Serial:</strong> @(Summary.ControllerConfiguration?.HeatPump?.SerialNumber ?? "—")</p>
+                    <p><strong>Hardware:</strong> @(Summary.ControllerConfiguration?.HeatPump?.HardwareVersion ?? "—")</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">Weather Compensation</div>
+                <div class="card-body text-center">
+                    @{ var wc = Summary.ControllerConfiguration?.HeatPump?.WeatherCompensation; }
+                    <h4>@(wc?.Enabled == true ? "Enabled" : "Disabled")</h4>
+                    @if (wc?.CurrentRange != null)
+                    {
+                        <p class="mt-2"><strong>Range:</strong> @Fmt(wc.CurrentRange.Minimum) – @Fmt(wc.CurrentRange.Maximum)</p>
+                    }
+                    <p class="mt-1"><strong>Flow Temp:</strong> @Fmt(Summary.ControllerConfiguration?.HeatPump?.HeatingFlowTemperature?.CurrentTemperature)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Zone Configuration -->
+    @if (Summary.ControllerConfiguration?.Zones?.Count > 0)
+    {
+        <h5 class="mt-4">Zone Configuration</h5>
+        <table class="table table-striped table-sm">
+            <thead>
+                <tr><th>Name</th><th>Type</th><th>Enabled</th><th>Mode</th><th>Setpoint</th><th>Call for Heat</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var z in Summary.ControllerConfiguration.Zones)
+                {
+                    var c = z.Configuration;
+                    <tr>
+                        <td>@(c?.DisplayName ?? "—")</td>
+                        <td>@(c?.ZoneType ?? "—")</td>
+                        <td>@(c?.Enabled == true ? "Yes" : "No")</td>
+                        <td>@(c?.CurrentOperation?.Mode ?? "—")</td>
+                        <td>@(c?.CurrentOperation?.SetpointInCelsius?.ToString("F1") ?? "—") °C</td>
+                        <td>@(c?.CallForHeat == true ? "Yes" : "No")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    [Parameter] public HeatPumpSummaryDto? Summary { get; set; }
+
+    private static string Fmt(HeatPumpValueAndUnitDto? v)
+        => v == null ? "—" : string.IsNullOrWhiteSpace(v.Unit) ? (v.Value ?? "—") : $"{v.Value} {v.Unit}";
+}

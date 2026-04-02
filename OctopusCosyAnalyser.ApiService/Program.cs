@@ -24,11 +24,12 @@ builder.Services.AddHttpClient<OctopusEnergyClient>()
         options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
     });
 
-// Add AI Analysis Service (Anthropic API)
+// Add AI services
 // API key can come from DB (Account Settings) or from env var / config as fallback
 var anthropicKey = builder.Configuration["Anthropic:ApiKey"]
     ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
 
+// Detailed AI analysis service (raw HTTP client for full CSV-based analysis)
 builder.Services.AddHttpClient<AiAnalysisService>(client =>
 {
     client.Timeout = TimeSpan.FromMinutes(3);
@@ -40,6 +41,9 @@ builder.Services.AddHttpClient<AiAnalysisService>(client =>
         client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
     }
 });
+
+// Dashboard AI summary service (official Anthropic SDK, auto-cached 30 min)
+builder.Services.AddSingleton<HeatPumpAiService>();
 
 // Add Heat Pump Snapshot Worker
 builder.Services.AddHostedService<HeatPumpSnapshotWorker>();

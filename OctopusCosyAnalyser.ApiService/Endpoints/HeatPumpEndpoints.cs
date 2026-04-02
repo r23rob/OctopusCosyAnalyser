@@ -915,6 +915,27 @@ public static class HeatPumpEndpoints
                 CostDataStatus = costDataStatus
             });
         }).WithName("GetAiAnalysis");
+
+        // AI Dashboard Summary (auto-cached, lightweight)
+        group.MapGet("/ai-summary/{deviceId}", async (string deviceId, HeatPumpAiService aiService, CosyDbContext db) =>
+        {
+            var device = await db.HeatPumpDevices.FirstOrDefaultAsync(d => d.DeviceId == deviceId);
+            if (device is null)
+                return Results.NotFound("Device not found");
+
+            var summary = await aiService.GenerateSummaryAsync(deviceId);
+            return Results.Ok(summary);
+        }).WithName("GetAiSummary");
+
+        group.MapGet("/ai-summary/{deviceId}/refresh", async (string deviceId, HeatPumpAiService aiService, CosyDbContext db) =>
+        {
+            var device = await db.HeatPumpDevices.FirstOrDefaultAsync(d => d.DeviceId == deviceId);
+            if (device is null)
+                return Results.NotFound("Device not found");
+
+            var summary = await aiService.GenerateSummaryAsync(deviceId, forceRefresh: true);
+            return Results.Ok(summary);
+        }).WithName("RefreshAiSummary");
     }
 
     internal static List<DailyAggregateDto> ComputeDailyAggregates(List<HeatPumpSnapshot> snapshots)

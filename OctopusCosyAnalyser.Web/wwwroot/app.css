@@ -137,3 +137,152 @@ h1:focus {
     margin-right: 6px;
     vertical-align: middle;
 }
+
+/* ── Unified Dashboard Hero ──────────────────────────────────── */
+
+.cop-hero {
+    text-align: center;
+    padding: 1.5rem 1rem 1rem;
+    background: linear-gradient(180deg, rgba(0,0,0,0.02) 0%, transparent 100%);
+    border-radius: 0.75rem;
+    border: 1px solid #e9ecef;
+    margin-bottom: 1rem;
+}
+
+.cop-value {
+    font-size: 4rem;
+    font-weight: 700;
+    line-height: 1;
+    transition: color 0.3s;
+}
+
+.cop-value.cop-green  { color: #28a745; }
+.cop-value.cop-amber  { color: #d39e00; }
+.cop-value.cop-red    { color: #dc3545; }
+
+.cop-label {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+.cop-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-top: 0.5rem;
+}
+
+.cop-badge.cop-green  { background: rgba(40,167,69,0.12); color: #28a745; }
+.cop-badge.cop-amber  { background: rgba(255,193,7,0.15); color: #d39e00; }
+.cop-badge.cop-red    { background: rgba(220,53,69,0.12); color: #dc3545; }
+
+.metric-card {
+    text-align: center;
+    padding: 0.75rem 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid #e9ecef;
+    height: 100%;
+}
+
+.metric-card .metric-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.metric-card .metric-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.status-bar {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.5rem 0;
+    margin-bottom: 0.75rem;
+}
+
+.mini-trend {
+    border: 1px solid #e9ecef;
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.mini-trend-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.25rem;
+}
+
+.mini-trend-header .title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #6c757d;
+}
+
+/* ── AI Summary Card ─────────────────────────────────────────── */
+
+.ai-summary-card {
+    border: 1px solid #e0e4f0;
+    border-radius: 0.75rem;
+    background: linear-gradient(135deg, rgba(99,102,241,0.03) 0%, rgba(59,130,246,0.03) 100%);
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+
+.ai-summary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e0e4f0;
+    background: rgba(99,102,241,0.04);
+}
+
+.ai-summary-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #4338ca;
+}
+
+.ai-summary-body {
+    padding: 0.75rem 1rem;
+}
+
+.ai-section {
+    margin-bottom: 0.75rem;
+}
+
+.ai-section:last-child {
+    margin-bottom: 0;
+}
+
+.ai-section-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6366f1;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-bottom: 0.2rem;
+}
+
+.ai-section-text {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: #374151;
+}
+
+.ai-suggestions {
+    border-top: 1px solid #e0e4f0;
+    padding-top: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.ai-suggestions .ai-section-label {
+    color: #d97706;
+}

@@ -267,6 +267,14 @@ public class HeatPumpApiClient
         return await response.Content.ReadFromJsonAsync<AiAnalysisResponseDto>();
     }
 
+    // ── AI Dashboard Summary ──────────────────────────────────────
+
+    public async Task<AiSummaryDto?> GetAiSummaryAsync(string deviceId)
+        => await _http.GetFromJsonAsync<AiSummaryDto>($"/api/heatpump/ai-summary/{deviceId}");
+
+    public async Task<AiSummaryDto?> RefreshAiSummaryAsync(string deviceId)
+        => await _http.GetFromJsonAsync<AiSummaryDto>($"/api/heatpump/ai-summary/{deviceId}/refresh");
+
     // ── Cost of Usage ─────────────────────────────────────────────
 
     public async Task<string> GetCostOfUsageRawAsync(string accountNumber, DateTime? from = null, DateTime? to = null)
