@@ -50,6 +50,16 @@ public class HeatPumpApiClient
     public async Task<HeatPumpSummaryDto?> GetSummaryAsync(string deviceId)
         => await _http.GetFromJsonAsync<HeatPumpSummaryDto>($"/api/heatpump/summary/{deviceId}");
 
+    // ── Period Summary (aggregated stats) ─────────────────────────────
+
+    public async Task<PeriodSummaryDto?> GetPeriodSummaryAsync(string deviceId, DateTime? from = null, DateTime? to = null)
+    {
+        var fromStr = (from ?? DateTime.UtcNow.AddDays(-7)).ToString("o");
+        var toStr = (to ?? DateTime.UtcNow).ToString("o");
+        return await _http.GetFromJsonAsync<PeriodSummaryDto>(
+            $"/api/heatpump/period-summary/{deviceId}?from={Uri.EscapeDataString(fromStr)}&to={Uri.EscapeDataString(toStr)}");
+    }
+
     // ── Snapshots (persisted history from background worker) ─────────
 
     public async Task<LatestSnapshotDto?> GetLatestSnapshotAsync(string deviceId)

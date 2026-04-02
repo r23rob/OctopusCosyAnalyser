@@ -3,6 +3,7 @@
 @implements IDisposable
 @rendermode InteractiveServer
 @using OctopusCosyAnalyser.Web.Components.Pages.HeatPump.Tabs
+@using OctopusCosyAnalyser.Shared.Models
 
 <PageTitle>Heat Pump – Dashboard</PageTitle>
 
@@ -38,59 +39,20 @@ else
         <div class="alert alert-danger">@errorMessage</div>
     }
 
-    <!-- ═══ HERO: COP Gauge ═══ -->
-    <div class="cop-hero">
-        <div class="cop-label">Live COP</div>
-        <div class="cop-value @CopColorClass">@CopDisplay</div>
-        <div>
-            <span class="cop-badge @CopColorClass">@CopRating</span>
-        </div>
-        <div class="cop-label mt-2">
-            Seasonal COP: <strong>@(summary?.LifetimePerformance?.SeasonalCoefficientOfPerformance ?? "—")</strong>
-        </div>
-    </div>
-
-    <!-- ═══ KEY METRICS ROW ═══ -->
-    <div class="row g-2 mb-2">
-        <div class="col-6 col-md">
-            <div class="metric-card">
-                <div class="metric-label">Power Input</div>
-                <div class="metric-value text-primary">@Fmt(summary?.LivePerformance?.PowerInput)</div>
-            </div>
-        </div>
-        <div class="col-6 col-md">
-            <div class="metric-card">
-                <div class="metric-label">Heat Output</div>
-                <div class="metric-value text-danger">@Fmt(summary?.LivePerformance?.HeatOutput)</div>
-            </div>
-        </div>
-        <div class="col-6 col-md">
-            <div class="metric-card">
-                <div class="metric-label">Outdoor</div>
-                <div class="metric-value text-warning">@Fmt(summary?.LivePerformance?.OutdoorTemperature)</div>
-            </div>
-        </div>
-        <div class="col-6 col-md">
-            <div class="metric-card">
-                <div class="metric-label">Room Temp</div>
-                <div class="metric-value">@RoomTempDisplay</div>
-            </div>
-        </div>
-        <div class="col-6 col-md">
-            <div class="metric-card">
-                <div class="metric-label">Flow Temp</div>
-                <div class="metric-value">@Fmt(summary?.ControllerConfiguration?.HeatPump?.HeatingFlowTemperature?.CurrentTemperature)</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ═══ STATUS BAR ═══ -->
+    <!-- ═══ STATUS BAR (compact live status) ═══ -->
     <div class="status-bar">
         @{ var controllerState = summary?.ControllerConfiguration?.Controller?.State; }
         @if (controllerState?.Count > 0)
         {
             var isHeating = controllerState.Any(s => s.Contains("HEAT", StringComparison.OrdinalIgnoreCase));
             <span class="badge @(isHeating ? "bg-danger" : "bg-info")">@(isHeating ? "HEATING" : "IDLE")</span>
+        }
+
+        @if (_parsedCop.HasValue)
+        {
+            <span class="badge @(CopColorClass == "cop-green" ? "bg-success" : CopColorClass == "cop-amber" ? "bg-warning text-dark" : "bg-danger")">
+                Live COP: @CopDisplay
+            </span>
         }
 
         @{ var wcEnabled = summary?.ControllerConfiguration?.HeatPump?.WeatherCompensation?.Enabled == true; }
@@ -119,26 +81,133 @@ else
         </span>
     </div>
 
-    <!-- ═══ MINI COP TREND (24h) ═══ -->
+    <!-- ═══ PERIOD SELECTOR ═══ -->
+    <div class="period-selector">
+        <div class="btn-group" role="group">
+            <button class="btn @(selectedPeriodDays == 1 ? "btn-primary" : "btn-outline-primary") btn-sm" @onclick="() => SetPeriod(1)">1 Day</button>
+            <button class="btn @(selectedPeriodDays == 7 ? "btn-primary" : "btn-outline-primary") btn-sm" @onclick="() => SetPeriod(7)">1 Week</button>
+            <button class="btn @(selectedPeriodDays == 30 ? "btn-primary" : "btn-outline-primary") btn-sm" @onclick="() => SetPeriod(30)">1 Month</button>
+            <button class="btn @(selectedPeriodDays == 365 ? "btn-primary" : "btn-outline-primary") btn-sm" @onclick="() => SetPeriod(365)">1 Year</button>
+        </div>
+        @if (periodLoading)
+        {
+            <span class="spinner-border spinner-border-sm ms-2" role="status"></span>
+        }
+        @if (periodSummary?.SnapshotCount > 0)
+        {
+            <span class="small text-muted ms-2">@periodSummary.SnapshotCount snapshots</span>
+        }
+    </div>
+
+    <!-- ═══ KEY INDICATORS ═══ -->
+    <div class="row g-2 mb-2">
+        <div class="col-6 col-md-3">
+            <div class="summary-card">
+                <div class="summary-label">Avg COP</div>
+                <div class="summary-value @PeriodCopColorClass">@FmtDec(periodSummary?.AvgCop)</div>
+                <div class="summary-range">@FmtDec(periodSummary?.MinCop) – @FmtDec(periodSummary?.MaxCop)</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="summary-card">
+                <div class="summary-label">Input Energy</div>
+                <div class="summary-value text-primary">@FmtKwh(periodSummary?.TotalInputKwh)</div>
+                <div class="summary-range">total kWh</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="summary-card">
+                <div class="summary-label">Heat Output</div>
+                <div class="summary-value text-danger">@FmtKwh(periodSummary?.TotalOutputKwh)</div>
+                <div class="summary-range">total kWh</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="summary-card">
+                <div class="summary-label">Outdoor Temp</div>
+                <div class="summary-value text-warning">@FmtTemp(periodSummary?.AvgOutdoorTemp)</div>
+                <div class="summary-range">@FmtTemp(periodSummary?.MinOutdoorTemp) – @FmtTemp(periodSummary?.MaxOutdoorTemp)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ SENSOR SUMMARIES ═══ -->
+    <div class="row g-2 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="summary-card summary-card-sensor">
+                <div class="summary-label">Room Temp</div>
+                <div class="summary-value">@FmtTemp(periodSummary?.AvgRoomTemp)</div>
+                <div class="summary-range">@FmtTemp(periodSummary?.MinRoomTemp) – @FmtTemp(periodSummary?.MaxRoomTemp)</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="summary-card summary-card-sensor">
+                <div class="summary-label">Room Humidity</div>
+                <div class="summary-value">@FmtPct(periodSummary?.AvgRoomHumidity)</div>
+                <div class="summary-range">@FmtPct(periodSummary?.MinRoomHumidity) – @FmtPct(periodSummary?.MaxRoomHumidity)</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="summary-card summary-card-sensor">
+                <div class="summary-label">Hot Water</div>
+                <div class="summary-value">@FmtTemp(periodSummary?.AvgHotWaterSetpoint)</div>
+                <div class="summary-range">@FmtTemp(periodSummary?.MinHotWaterSetpoint) – @FmtTemp(periodSummary?.MaxHotWaterSetpoint)</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="summary-card summary-card-sensor">
+                <div class="summary-label">Flow Temp</div>
+                <div class="summary-value">@FmtTemp(periodSummary?.AvgFlowTemp)</div>
+                <div class="summary-range">@FmtTemp(periodSummary?.MinFlowTemp) – @FmtTemp(periodSummary?.MaxFlowTemp)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ DUTY CYCLE BAR ═══ -->
+    @if (periodSummary?.SnapshotCount > 0)
+    {
+        <div class="row g-2 mb-3">
+            <div class="col-6">
+                <div class="summary-card summary-card-sensor">
+                    <div class="summary-label">Heating Duty Cycle</div>
+                    <div class="summary-value">@periodSummary.HeatingDutyCyclePercent.ToString("F1")%</div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="summary-card summary-card-sensor">
+                    <div class="summary-label">Hot Water Duty Cycle</div>
+                    <div class="summary-value">@periodSummary.HotWaterDutyCyclePercent.ToString("F1")%</div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- ═══ COP TREND CHART ═══ -->
     @if (trendSnapshots.Count > 0)
     {
-        <div class="mini-trend">
-            <div class="mini-trend-header">
-                <span class="title">COP — Last 24 Hours</span>
-                <span class="small text-muted">@trendSnapshots.Count data points</span>
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <strong>COP Trend — @PeriodLabel</strong>
+                <span class="small text-muted ms-2">@trendSnapshots.Count data points</span>
             </div>
-            <RadzenChart Style="height: 140px;">
-                <RadzenLineSeries Data="@trendSnapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="CoefficientOfPerformance"
-                                 Stroke="rgb(40,167,69)" StrokeWidth="2" />
-                <RadzenLineSeries Data="@cop3RefLine" CategoryProperty="Time" ValueProperty="Value"
-                                 Stroke="rgba(220,53,69,0.4)" StrokeWidth="1" LineType="LineType.Dashed" />
-                <RadzenCategoryAxis FormatString="{0:HH:mm}" Visible="true" />
-                <RadzenValueAxis Min="0" Visible="true">
-                    <RadzenGridLines Visible="true" />
-                </RadzenValueAxis>
-                <RadzenLegend Visible="false" />
-            </RadzenChart>
+            <div class="card-body p-2">
+                <RadzenChart Style="height: 200px;">
+                    <RadzenLineSeries Data="@trendSnapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="CoefficientOfPerformance"
+                                     Stroke="rgb(40,167,69)" StrokeWidth="2" />
+                    <RadzenLineSeries Data="@cop3RefLine" CategoryProperty="Time" ValueProperty="Value"
+                                     Stroke="rgba(220,53,69,0.4)" StrokeWidth="1" LineType="LineType.Dashed" />
+                    <RadzenCategoryAxis FormatString="@TrendAxisFormat" Visible="true" />
+                    <RadzenValueAxis Min="0" Visible="true">
+                        <RadzenGridLines Visible="true" />
+                    </RadzenValueAxis>
+                    <RadzenLegend Visible="false" />
+                </RadzenChart>
+            </div>
         </div>
+    }
+    else if (!periodLoading && periodSummary != null)
+    {
+        <div class="alert alert-info">No snapshot data available for this period.</div>
     }
 
     <!-- ═══ AI SUMMARY ═══ -->
@@ -146,7 +215,7 @@ else
         <div class="ai-summary-header">
             <span class="ai-summary-title">AI Performance Summary</span>
             <div>
-                @if (aiSummary?.GeneratedAt != default)
+                @if (aiSummary is not null && aiSummary.GeneratedAt != default)
                 {
                     <span class="small text-muted me-2">@aiSummary.GeneratedAt.ToString("dd MMM HH:mm")</span>
                 }
@@ -244,16 +313,22 @@ else
     private AiSummaryDto? aiSummary;
     private bool aiLoading;
 
-    // Mini trend
+    // Period summary
+    private PeriodSummaryDto? periodSummary;
+    private bool periodLoading;
+    private int selectedPeriodDays = 7;
+    private int _periodLoadVersion;
+
+    // Trend chart
     private List<HeatPumpSnapshotDto> trendSnapshots = [];
     private List<RefPoint> cop3RefLine = [];
 
     // Auto-refresh timer
     private System.Threading.Timer? _refreshTimer;
 
-    // COP parsing
+    // COP parsing (live)
     private double? _parsedCop;
-    private string CopDisplay => _parsedCop.HasValue ? _parsedCop.Value.ToString("F2") : (summary?.LivePerformance?.CoefficientOfPerformance ?? "—");
+    private string CopDisplay => _parsedCop.HasValue ? _parsedCop.Value.ToString("F2") : "—";
     private string CopColorClass => _parsedCop switch
     {
         >= 3.5 => "cop-green",
@@ -261,26 +336,26 @@ else
         _ when _parsedCop.HasValue => "cop-red",
         _ => ""
     };
-    private string CopRating => _parsedCop switch
+
+    // Period COP color
+    private string PeriodCopColorClass => periodSummary?.AvgCop switch
     {
-        >= 3.5 => "Excellent",
-        >= 2.5 => "OK",
-        _ when _parsedCop.HasValue => "Poor",
-        _ => "—"
+        >= 3.5 => "cop-green",
+        >= 2.5 => "cop-amber",
+        _ when periodSummary?.AvgCop.HasValue == true => "cop-red",
+        _ => ""
     };
 
-    private string RoomTempDisplay
+    private string PeriodLabel => selectedPeriodDays switch
     {
-        get
-        {
-            if (trendSnapshots.Count == 0) return "—";
-            var latest = trendSnapshots.LastOrDefault();
-            if (latest?.RoomTemperatureCelsius == null) return "—";
-            var temp = latest.RoomTemperatureCelsius.Value.ToString("F1");
-            var setpoint = latest.HeatingZoneSetpointCelsius?.ToString("F1");
-            return setpoint != null ? $"{temp} / {setpoint} °C" : $"{temp} °C";
-        }
-    }
+        1 => "Last 24 Hours",
+        7 => "Last 7 Days",
+        30 => "Last 30 Days",
+        365 => "Last 12 Months",
+        _ => $"Last {selectedPeriodDays} Days"
+    };
+
+    private string TrendAxisFormat => selectedPeriodDays <= 1 ? "{0:HH:mm}" : selectedPeriodDays <= 7 ? "{0:ddd HH:mm}" : "{0:MMM dd}";
 
     private string SnapshotHealthBadge
     {
@@ -368,21 +443,74 @@ else
         {
             var summaryTask = Api.GetSummaryAsync(deviceId);
             var latestTask = Api.GetLatestSnapshotAsync(deviceId);
-            var snapshotsTask = Api.GetSnapshotsAsync(deviceId, DateTime.UtcNow.AddHours(-24), DateTime.UtcNow);
-            await Task.WhenAll(summaryTask, latestTask, snapshotsTask);
+            await Task.WhenAll(summaryTask, latestTask);
 
             summary = summaryTask.Result;
             latestSnapshot = latestTask.Result;
-            trendSnapshots = snapshotsTask.Result?.Snapshots?.OrderBy(s => s.SnapshotTakenAt).ToList() ?? [];
-
-            // Load AI summary in background (don't block dashboard)
-            _ = LoadAiSummaryAsync();
-
             ParseCop();
-            BuildCop3RefLine();
+
+            // Load period data and AI summary in parallel (don't block main dashboard)
+            _ = LoadPeriodDataAsync();
+            _ = LoadAiSummaryAsync();
         }
         catch (Exception ex) { errorMessage = ex.Message; }
         finally { isLoading = false; }
+    }
+
+    private async Task SetPeriod(int days)
+    {
+        selectedPeriodDays = days;
+        await LoadPeriodDataAsync();
+    }
+
+    private async Task LoadPeriodDataAsync()
+    {
+        if (string.IsNullOrEmpty(deviceId)) return;
+        var thisVersion = Interlocked.Increment(ref _periodLoadVersion);
+        periodLoading = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var from = DateTime.UtcNow.AddDays(-selectedPeriodDays);
+            var to = DateTime.UtcNow;
+
+            var periodTask = Api.GetPeriodSummaryAsync(deviceId, from, to);
+            var snapshotsTask = Api.GetSnapshotsAsync(deviceId, from, to);
+            await Task.WhenAll(periodTask, snapshotsTask);
+
+            // Discard results if a newer request was started while we were loading
+            if (thisVersion != _periodLoadVersion) return;
+
+            periodSummary = periodTask.Result;
+            var allSnapshots = snapshotsTask.Result?.Snapshots?.OrderBy(s => s.SnapshotTakenAt).ToList() ?? [];
+
+            // Downsample for long periods to keep chart responsive
+            trendSnapshots = selectedPeriodDays > 7 ? DownsampleSnapshots(allSnapshots, maxPoints: 500) : allSnapshots;
+            BuildCop3RefLine();
+        }
+        catch (Exception ex)
+        {
+            if (thisVersion == _periodLoadVersion)
+                errorMessage = $"Period data failed: {ex.Message}";
+        }
+        finally
+        {
+            if (thisVersion == _periodLoadVersion)
+            {
+                periodLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private static List<HeatPumpSnapshotDto> DownsampleSnapshots(List<HeatPumpSnapshotDto> snapshots, int maxPoints)
+    {
+        if (snapshots.Count <= maxPoints) return snapshots;
+        var step = (double)snapshots.Count / maxPoints;
+        var result = new List<HeatPumpSnapshotDto>(maxPoints);
+        for (var i = 0; i < maxPoints; i++)
+            result.Add(snapshots[(int)(i * step)]);
+        return result;
     }
 
     private async Task RefreshLiveData()
@@ -437,8 +565,10 @@ else
         finally { aiLoading = false; }
     }
 
-    private static string Fmt(HeatPumpValueAndUnitDto? v)
-        => v == null ? "—" : string.IsNullOrWhiteSpace(v.Unit) ? (v.Value ?? "—") : $"{v.Value} {v.Unit}";
+    private static string FmtDec(double? v) => v.HasValue ? v.Value.ToString("F2") : "—";
+    private static string FmtTemp(double? v) => v.HasValue ? $"{v.Value:F1} °C" : "—";
+    private static string FmtPct(double? v) => v.HasValue ? $"{v.Value:F1}%" : "—";
+    private static string FmtKwh(double? v) => v.HasValue ? $"{v.Value:F1}" : "—";
 
     public void Dispose()
     {
