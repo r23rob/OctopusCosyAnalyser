@@ -820,14 +820,28 @@ public static class HeatPumpEndpoints
             var settings = await db.OctopusAccountSettings
                 .FirstOrDefaultAsync(s => s.AccountNumber == device.AccountNumber);
 
+            var costDataStatus = "No account settings found";
             if (settings is not null)
             {
                 try
                 {
+                    logger.LogInformation("Fetching cost data for account {Account} from {From} to {To}",
+                        device.AccountNumber, from, to);
+
                     var costData = await octopusClient.GetCostOfUsageAsync(settings.ApiKey, device.AccountNumber, from, to);
                     var costRoot = costData.RootElement.GetProperty("data");
 
-                    if (costRoot.TryGetProperty("costOfUsage", out var costEl)
+                    // Check for GraphQL errors
+                    if (costData.RootElement.TryGetProperty("errors", out var errorsEl)
+                        && errorsEl.ValueKind == JsonValueKind.Array
+                        && errorsEl.GetArrayLength() > 0)
+                    {
+                        var errorMsgs = string.Join("; ", errorsEl.EnumerateArray()
+                            .Select(e => e.TryGetProperty("message", out var m) ? m.GetString() : e.ToString()));
+                        costDataStatus = $"GraphQL errors: {errorMsgs}";
+                        logger.LogWarning("Cost data query returned errors for device {DeviceId}: {Errors}", deviceId, errorMsgs);
+                    }
+                    else if (costRoot.TryGetProperty("costOfUsage", out var costEl)
                         && costEl.ValueKind != JsonValueKind.Null
                         && costEl.TryGetProperty("edges", out var edges)
                         && edges.ValueKind == JsonValueKind.Array)
@@ -857,6 +871,7 @@ public static class HeatPumpEndpoints
                             }
                         }
 
+                        var mergedCount = 0;
                         foreach (var agg in aggregates)
                         {
                             if (costByDate.TryGetValue(agg.Date, out var costInfo))
@@ -867,13 +882,22 @@ public static class HeatPumpEndpoints
                                 agg.CostPerKwhHeatPence = agg.TotalHeatOutputKwh > 0
                                     ? costInfo.cost / agg.TotalHeatOutputKwh
                                     : null;
+                                mergedCount++;
                             }
                         }
+
+                        costDataStatus = $"OK: {costByDate.Count} days of cost data, merged into {mergedCount} aggregates";
+                        logger.LogInformation("Merged cost data for device {DeviceId}: {Status}", deviceId, costDataStatus);
+                    }
+                    else
+                    {
+                        costDataStatus = "costOfUsage returned null or empty";
+                        logger.LogWarning("Cost data query returned null/empty for device {DeviceId}", deviceId);
                     }
                 }
                 catch (Exception ex)
                 {
-                    // Cost data is optional; log warning and continue without it
+                    costDataStatus = $"Error: {ex.Message}";
                     logger.LogWarning(ex, "Failed to merge Octopus cost data for device {DeviceId}", deviceId);
                 }
             }
@@ -887,7 +911,8 @@ public static class HeatPumpEndpoints
                 To = to,
                 DaysAnalysed = aggregates.Count,
                 TotalSnapshots = snapshots.Count,
-                TotalTimeSeriesRecords = timeSeriesRecords.Count
+                TotalTimeSeriesRecords = timeSeriesRecords.Count,
+                CostDataStatus = costDataStatus
             });
         }).WithName("GetAiAnalysis");
     }
@@ -929,6 +954,11 @@ public static class HeatPumpEndpoints
                 }
 
                 // Weather compensation mode (most frequent non-null value)
+                var wcEnabledMode = day.Where(s => s.WeatherCompensationEnabled.HasValue)
+                    .GroupBy(s => s.WeatherCompensationEnabled!.Value)
+                    .OrderByDescending(g2 => g2.Count())
+                    .FirstOrDefault()?.Key;
+
                 var wcMinMode = day.Where(s => s.WeatherCompensationMinCelsius.HasValue)
                     .GroupBy(s => s.WeatherCompensationMinCelsius!.Value)
                     .OrderByDescending(g2 => g2.Count())
@@ -962,6 +992,7 @@ public static class HeatPumpEndpoints
                         ? day.Where(s => s.OutdoorTemperatureCelsius.HasValue)
                             .Select(s => (double)s.OutdoorTemperatureCelsius!.Value).Max()
                         : null,
+                    // NOTE: This is the configured fixed flow temp SETPOINT, not a measured flow temperature
                     AvgFlowTemp = AvgDecimal(heatingSnapshots, s => s.HeatingFlowTemperatureCelsius),
                     AvgRoomTemp = AvgDecimal(day, s => s.RoomTemperatureCelsius),
                     AvgSetpoint = AvgDecimal(day, s => s.HeatingZoneSetpointCelsius),
@@ -973,6 +1004,7 @@ public static class HeatPumpEndpoints
                         ? day.Count(s => s.HotWaterZoneHeatDemand == true) * 100.0 / day.Count
                         : 0,
 
+                    WeatherCompEnabled = wcEnabledMode,
                     WeatherCompMin = wcMinMode.HasValue ? (double)wcMinMode.Value : null,
                     WeatherCompMax = wcMaxMode.HasValue ? (double)wcMaxMode.Value : null,
 
@@ -1047,6 +1079,12 @@ public static class HeatPumpEndpoints
             }
 
             // Compute weather comp mode values for the day from matched snapshots
+            var wcEnabledMode = wcValues
+                .Where(v => v.enabled.HasValue)
+                .GroupBy(v => v.enabled!.Value)
+                .OrderByDescending(g => g.Count())
+                .FirstOrDefault()?.Key;
+
             var wcMinMode = wcValues
                 .Where(v => v.min.HasValue)
                 .GroupBy(v => v.min!.Value)
@@ -1081,6 +1119,8 @@ public static class HeatPumpEndpoints
                     existing.MaxOutdoorTemp = tsOutdoorTemps.Max();
 
                 // Supplement weather comp from time-series-correlated snapshots if not already set
+                if (!existing.WeatherCompEnabled.HasValue && wcEnabledMode.HasValue)
+                    existing.WeatherCompEnabled = wcEnabledMode.Value;
                 if (!existing.WeatherCompMin.HasValue && wcMinMode.HasValue)
                     existing.WeatherCompMin = (double)wcMinMode.Value;
                 if (!existing.WeatherCompMax.HasValue && wcMaxMode.HasValue)
@@ -1105,6 +1145,7 @@ public static class HeatPumpEndpoints
                     MinOutdoorTemp = tsOutdoorTemps.Count > 0 ? tsOutdoorTemps.Min() : null,
                     MaxOutdoorTemp = tsOutdoorTemps.Count > 0 ? tsOutdoorTemps.Max() : null,
                     AvgCopHeating = tsEnergyIn > 0 ? tsEnergyOut / tsEnergyIn : null,
+                    WeatherCompEnabled = wcEnabledMode,
                     WeatherCompMin = wcMinMode.HasValue ? (double)wcMinMode.Value : null,
                     WeatherCompMax = wcMaxMode.HasValue ? (double)wcMaxMode.Value : null,
                     AvgFlowTemp = avgFlowTemp.Count > 0 ? avgFlowTemp.Average() : null,

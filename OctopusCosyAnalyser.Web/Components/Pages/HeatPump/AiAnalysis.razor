@@ -111,6 +111,14 @@ else
             </div>
         </div>
 
+        @if (!string.IsNullOrEmpty(analysisResult.CostDataStatus))
+        {
+            var costClass = analysisResult.CostDataStatus.StartsWith("OK") ? "alert-success" : "alert-warning";
+            <div class="alert @costClass py-1 small mb-3">
+                <strong>Cost Data:</strong> @analysisResult.CostDataStatus
+            </div>
+        }
+
         <!-- Analysis Result -->
         <div class="card">
             <div class="card-header"><strong>Analysis</strong></div>

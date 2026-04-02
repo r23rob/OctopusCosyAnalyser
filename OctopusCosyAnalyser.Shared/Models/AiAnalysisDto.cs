@@ -15,4 +15,5 @@ public sealed class AiAnalysisResponseDto
     public int DaysAnalysed { get; set; }
     public int TotalSnapshots { get; set; }
     public int TotalTimeSeriesRecords { get; set; }
+    public string? CostDataStatus { get; set; }
 }

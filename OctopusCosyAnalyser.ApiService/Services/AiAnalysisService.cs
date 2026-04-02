@@ -33,9 +33,16 @@ public class AiAnalysisService
           - Below 0°C: COP 2.0–2.5
         - If actual COP is significantly below these benchmarks for the given outdoor temp, the system is underperforming.
 
-        **Weather Compensation (WC)**: The system automatically adjusts flow temperature based on outdoor temperature. Lower flow temps = higher COP.
-        - WC Min: the minimum flow temperature (used in mild weather). Typical range: 25–35°C.
-        - WC Max: the maximum flow temperature (used in cold weather). Typical range: 40–55°C.
+        **Weather Compensation (WC) vs Fixed Flow Temperature**:
+        The Cosy system has TWO heating modes — only one is active at a time:
+        - **WC_Enabled=true**: Weather Compensation is active. The system automatically varies flow temperature between WC_MinC (mild weather) and WC_MaxC (cold weather) based on outdoor temperature. Lower flow temps = higher COP.
+        - **WC_Enabled=false**: Fixed flow temperature mode. The system uses a constant flow temperature set to FixedFlowSetpointC regardless of outdoor conditions.
+        
+        **IMPORTANT**: FixedFlowSetpointC is the CONFIGURED setpoint for fixed mode — it is NOT a measured actual flow temperature. The Octopus API does not provide a measured flow temperature reading. When WC is enabled, the system ignores FixedFlowSetpointC and uses the WC curve instead.
+        
+        WC curve tuning guidelines:
+        - WC Min: the flow temperature used in mild weather. Typical range: 25–35°C.
+        - WC Max: the flow temperature used in cold weather. Typical range: 40–55°C.
         - If COP is poor on mild days (>5°C), WC max is likely too high — the system is sending water hotter than needed.
         - If the house can't maintain setpoint on cold days, WC max may need to increase — but try reducing setpoint or improving insulation first.
 
@@ -174,7 +181,7 @@ public class AiAnalysisService
     private static string BuildCsv(List<DailyAggregateDto> aggregates)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Date,Snapshots,AvgCOP_Heating,AvgCOP_HotWater,AvgCOP_SpaceHeatingOnly,ElecKwh,HeatKwh,AvgOutdoorC,MinOutdoorC,MaxOutdoorC,AvgFlowC,AvgRoomC,AvgSetpointC,HeatingDuty%,HotWaterDuty%,WC_MinC,WC_MaxC,StateTransitions,CostPence,UsageKwh,AvgUnitRateP,CostPerKwhHeatP,HW_RunCount,HW_TotalMins,AvgHW_SetpointC");
+        sb.AppendLine("Date,Snapshots,AvgCOP_Heating,AvgCOP_HotWater,AvgCOP_SpaceHeatingOnly,ElecKwh,HeatKwh,AvgOutdoorC,MinOutdoorC,MaxOutdoorC,FixedFlowSetpointC,AvgRoomC,AvgSetpointC,HeatingDuty%,HotWaterDuty%,WC_Enabled,WC_MinC,WC_MaxC,StateTransitions,CostPence,UsageKwh,AvgUnitRateP,CostPerKwhHeatP,HW_RunCount,HW_TotalMins,AvgHW_SetpointC");
 
         foreach (var a in aggregates)
         {
@@ -194,6 +201,7 @@ public class AiAnalysisService
                 Fmt(a.AvgSetpoint),
                 a.HeatingDutyCyclePercent.ToString("F1", CultureInfo.InvariantCulture),
                 a.HotWaterDutyCyclePercent.ToString("F1", CultureInfo.InvariantCulture),
+                a.WeatherCompEnabled.HasValue ? (a.WeatherCompEnabled.Value ? "true" : "false") : "",
                 Fmt(a.WeatherCompMin),
                 Fmt(a.WeatherCompMax),
                 a.ControllerStateTransitions.ToString(CultureInfo.InvariantCulture),

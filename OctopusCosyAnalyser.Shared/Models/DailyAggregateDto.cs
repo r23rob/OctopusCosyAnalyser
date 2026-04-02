@@ -18,7 +18,7 @@ public sealed class DailyAggregateDto
     public double? AvgOutdoorTemp { get; set; }
     public double? MinOutdoorTemp { get; set; }
     public double? MaxOutdoorTemp { get; set; }
-    public double? AvgFlowTemp { get; set; }
+    public double? AvgFlowTemp { get; set; }      // Fixed flow temp setpoint (NOT a measured value)
     public double? AvgRoomTemp { get; set; }
     public double? AvgSetpoint { get; set; }
 
@@ -27,8 +27,9 @@ public sealed class DailyAggregateDto
     public double HotWaterDutyCyclePercent { get; set; }
 
     // Weather compensation settings (mode for the day)
-    public double? WeatherCompMin { get; set; }
-    public double? WeatherCompMax { get; set; }
+    public bool? WeatherCompEnabled { get; set; }  // true = WC curve active, false = fixed flow temp
+    public double? WeatherCompMin { get; set; }    // WC curve minimum flow temp (mild weather)
+    public double? WeatherCompMax { get; set; }    // WC curve maximum flow temp (cold weather)
 
     // Cycling (controller state transitions)
     public int ControllerStateTransitions { get; set; }
