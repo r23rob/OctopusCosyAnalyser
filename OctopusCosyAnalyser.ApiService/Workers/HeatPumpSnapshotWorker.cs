@@ -203,7 +203,13 @@ public class HeatPumpSnapshotWorker : BackgroundService
                     {
                         bool? wcEnabled = null;
                         if (weatherComp.TryGetProperty("enabled", out var wcEnabledEl))
-                            wcEnabled = wcEnabledEl.ValueKind == JsonValueKind.True;
+                        {
+                            if (wcEnabledEl.ValueKind == JsonValueKind.True)
+                                wcEnabled = true;
+                            else if (wcEnabledEl.ValueKind == JsonValueKind.False)
+                                wcEnabled = false;
+                            // null/undefined/unexpected: leave wcEnabled null → FlowTempMode stays null
+                        }
 
                         if (wcEnabled == true)
                         {

@@ -446,9 +446,11 @@ else
 
     private void BuildWeatherCompensationChart()
     {
-        // Fixed Flow setpoint scatter: only snapshots in FixedFlow mode with outdoor temp data
+        // Fixed Flow setpoint scatter: only FixedFlow-mode snapshots with outdoor temp data
         var fixedFlowSnapshots = snapshots
-            .Where(s => s.OutdoorTemperatureCelsius.HasValue && s.HeatingFlowTemperatureCelsius.HasValue)
+            .Where(s => s.FlowTempMode == FlowTempMode.FixedFlow
+                && s.OutdoorTemperatureCelsius.HasValue
+                && s.HeatingFlowTemperatureCelsius.HasValue)
             .ToList();
 
         wcAtTarget = fixedFlowSnapshots
@@ -470,11 +472,11 @@ else
         var maxX = fixedFlowSnapshots.Max(s => (double)s.OutdoorTemperatureCelsius!.Value);
 
         // WC curve reference lines — only from WC Weather Compensation mode snapshots
-        var firstWcMin = snapshots.FirstOrDefault(s => s.FlowTempMode == "WeatherCompensation" && s.WeatherCompensationMinCelsius.HasValue);
+        var firstWcMin = snapshots.FirstOrDefault(s => s.FlowTempMode == FlowTempMode.WeatherCompensation && s.WeatherCompensationMinCelsius.HasValue);
         if (firstWcMin != null)
             wcMinRef = [new ScatterPoint { X = minX, Y = (double)firstWcMin.WeatherCompensationMinCelsius!.Value }, new ScatterPoint { X = maxX, Y = (double)firstWcMin.WeatherCompensationMinCelsius!.Value }];
 
-        var firstWcMax = snapshots.FirstOrDefault(s => s.FlowTempMode == "WeatherCompensation" && s.WeatherCompensationMaxCelsius.HasValue);
+        var firstWcMax = snapshots.FirstOrDefault(s => s.FlowTempMode == FlowTempMode.WeatherCompensation && s.WeatherCompensationMaxCelsius.HasValue);
         if (firstWcMax != null)
             wcMaxRef = [new ScatterPoint { X = minX, Y = (double)firstWcMax.WeatherCompensationMaxCelsius!.Value }, new ScatterPoint { X = maxX, Y = (double)firstWcMax.WeatherCompensationMaxCelsius!.Value }];
     }

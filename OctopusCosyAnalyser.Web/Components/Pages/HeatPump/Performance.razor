@@ -196,8 +196,8 @@ else if (summary != null)
                 <tr><td><strong>Avg Power In</strong></td><td>@AvgOrDash(snapshots.Select(s => s.PowerInputKilowatt)) kW</td></tr>
                 <tr><td><strong>Avg Heat Out</strong></td><td>@AvgOrDash(snapshots.Select(s => s.HeatOutputKilowatt)) kW</td></tr>
                 <tr><td><strong>Avg Outdoor Temp</strong></td><td>@AvgOrDash(snapshots.Select(s => s.OutdoorTemperatureCelsius)) °C</td></tr>
-                <tr><td><strong>Fixed Flow Setpoint</strong></td><td>@AvgOrDash(snapshots.Where(s => s.FlowTempMode == "FixedFlow").Select(s => s.HeatingFlowTemperatureCelsius)) °C</td></tr>
-                <tr><td><strong>WC Weather Comp Range</strong></td><td>@AvgOrDash(snapshots.Where(s => s.FlowTempMode == "WeatherCompensation").Select(s => s.WeatherCompensationMinCelsius)) – @AvgOrDash(snapshots.Where(s => s.FlowTempMode == "WeatherCompensation").Select(s => s.WeatherCompensationMaxCelsius)) °C</td></tr>
+                <tr><td><strong>Fixed Flow Setpoint</strong></td><td>@AvgOrDash(snapshots.Where(s => s.FlowTempMode == FlowTempMode.FixedFlow).Select(s => s.HeatingFlowTemperatureCelsius)) °C</td></tr>
+                <tr><td><strong>WC Weather Comp Range</strong></td><td>@AvgOrDash(snapshots.Where(s => s.FlowTempMode == FlowTempMode.WeatherCompensation).Select(s => s.WeatherCompensationMinCelsius)) – @AvgOrDash(snapshots.Where(s => s.FlowTempMode == FlowTempMode.WeatherCompensation).Select(s => s.WeatherCompensationMaxCelsius)) °C</td></tr>
             </tbody>
         </table>
     }

@@ -41,6 +41,16 @@ namespace OctopusCosyAnalyser.ApiService.Migrations
                 WHERE "FlowTempMode" = 'WeatherCompensation';
                 """);
 
+            // For rows where mode is unknown (null), null out all mode-specific fields
+            // to avoid leaking stale data into mode-filtered charts/aggregations
+            migrationBuilder.Sql("""
+                UPDATE "HeatPumpSnapshots"
+                SET "WeatherCompensationMinCelsius" = NULL,
+                    "WeatherCompensationMaxCelsius" = NULL,
+                    "HeatingFlowTemperatureCelsius" = NULL
+                WHERE "FlowTempMode" IS NULL;
+                """);
+
             migrationBuilder.DropColumn(
                 name: "WeatherCompensationEnabled",
                 table: "HeatPumpSnapshots");

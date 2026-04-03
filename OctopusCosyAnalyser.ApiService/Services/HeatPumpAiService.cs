@@ -163,9 +163,9 @@ public class HeatPumpAiService
             AvgRoomTemp = withRoom.Count > 0 ? (double)withRoom.Average(s => s.RoomTemperatureCelsius!.Value) : null,
             AvgSetpoint = withSetpoint.Count > 0 ? (double)withSetpoint.Average(s => s.HeatingZoneSetpointCelsius!.Value) : null,
             DutyCyclePercent = withDemand.Count > 0 ? withDemand.Count(s => s.HeatingZoneHeatDemand == true) * 100.0 / withDemand.Count : null,
-            FlowTempMode = snapshots.LastOrDefault()?.FlowTempMode,
-            WcMin = snapshots.LastOrDefault()?.WeatherCompensationMinCelsius.HasValue == true ? (double)snapshots.Last().WeatherCompensationMinCelsius!.Value : null,
-            WcMax = snapshots.LastOrDefault()?.WeatherCompensationMaxCelsius.HasValue == true ? (double)snapshots.Last().WeatherCompensationMaxCelsius!.Value : null,
+            FlowTempMode = snapshots.MaxBy(s => s.SnapshotTakenAt)?.FlowTempMode,
+            WcMin = snapshots.MaxBy(s => s.SnapshotTakenAt)?.WeatherCompensationMinCelsius is { } wcMin ? (double)wcMin : null,
+            WcMax = snapshots.MaxBy(s => s.SnapshotTakenAt)?.WeatherCompensationMaxCelsius is { } wcMax ? (double)wcMax : null,
         };
     }
 
@@ -188,10 +188,14 @@ public class HeatPumpAiService
                 sb.Append("Flow temp mode: WC Weather Compensation");
                 if (stats.WcMin.HasValue && stats.WcMax.HasValue) sb.Append($" (curve {stats.WcMin:F0}–{stats.WcMax:F0}°C)");
             }
-            else
+            else if (stats.FlowTempMode == Shared.Models.FlowTempMode.FixedFlow)
             {
                 sb.Append("Flow temp mode: Fixed Flow");
                 if (stats.AvgFlowTemp.HasValue) sb.Append($" ({stats.AvgFlowTemp:F1}°C setpoint)");
+            }
+            else
+            {
+                sb.Append($"Flow temp mode: unrecognized ({stats.FlowTempMode})");
             }
             sb.AppendLine();
         }
