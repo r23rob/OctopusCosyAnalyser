@@ -46,7 +46,7 @@ else
                                         Min="0" Max="6" Step="2" MinorStep="1"
                                         TickPosition="GaugeTickPosition.Outside"
                                         Radius="0.8"
-                                        Stroke="transparent" Fill="transparent">
+                                        Stroke="transparent">
                     <RadzenRadialGaugeScaleRange From="0" To="2.5" Fill="#ef4444" Height="12" />
                     <RadzenRadialGaugeScaleRange From="2.5" To="3.5" Fill="#f59e0b" Height="12" />
                     <RadzenRadialGaugeScaleRange From="3.5" To="6" Fill="#22c55e" Height="12" />
@@ -64,7 +64,7 @@ else
                                         Min="0" Max="@PowerGaugeMax" Step="@(PowerGaugeMax / 4)" MinorStep="0"
                                         TickPosition="GaugeTickPosition.Outside"
                                         Radius="0.8"
-                                        Stroke="transparent" Fill="transparent">
+                                        Stroke="transparent">
                     <RadzenRadialGaugeScaleRange From="0" To="@PowerGaugeMax" Fill="#3b82f6" Height="12" />
                     <RadzenRadialGaugeScalePointer Value="@(_parsedPowerInput ?? 0)" ShowValue="false"
                                                    Length="0.6" Fill="rgba(255,255,255,0.85)" />
@@ -81,7 +81,7 @@ else
                                         Min="0" Max="@HeatGaugeMax" Step="@(HeatGaugeMax / 4)" MinorStep="0"
                                         TickPosition="GaugeTickPosition.Outside"
                                         Radius="0.8"
-                                        Stroke="transparent" Fill="transparent">
+                                        Stroke="transparent">
                     <RadzenRadialGaugeScaleRange From="0" To="@HeatGaugeMax" Fill="#22c55e" Height="12" />
                     <RadzenRadialGaugeScalePointer Value="@(_parsedHeatOutput ?? 0)" ShowValue="false"
                                                    Length="0.6" Fill="rgba(255,255,255,0.85)" />
