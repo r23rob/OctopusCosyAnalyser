@@ -292,7 +292,7 @@ else
             <RadzenTabsItem Text="Costs" Icon="payments">
                 @if (selectedTab == 3)
                 {
-                    <CostsTab AccountNumber="@accountNumber" />
+                    <CostsTab AccountNumber="@accountNumber" DeviceId="@deviceId" />
                 }
             </RadzenTabsItem>
         </Tabs>

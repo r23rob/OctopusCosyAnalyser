@@ -772,6 +772,38 @@ public static class HeatPumpEndpoints
             });
         }).WithName("GetCostOfUsage");
 
+        // ── Stored Cost Data (from background sync) ─────────────────
+
+        group.MapGet("/cost-stored/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, CosyDbContext db) =>
+        {
+            var fromDate = DateOnly.FromDateTime(from ?? DateTime.UtcNow.AddDays(-30));
+            var toDate = DateOnly.FromDateTime(to ?? DateTime.UtcNow);
+
+            var records = await db.DailyCostRecords
+                .AsNoTracking()
+                .Where(r => r.DeviceId == deviceId && r.Date >= fromDate && r.Date <= toDate)
+                .OrderBy(r => r.Date)
+                .Select(r => new
+                {
+                    r.Date,
+                    r.TotalCostPence,
+                    r.TotalUsageKwh,
+                    r.AvgUnitRatePence,
+                    r.StandingChargePence,
+                    r.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Results.Ok(new
+            {
+                deviceId,
+                from = fromDate,
+                to = toDate,
+                totalDays = records.Count,
+                records
+            });
+        }).WithName("GetStoredCostData");
+
         // ── Period Summary (server-side aggregation) ────────────────
 
         group.MapGet("/period-summary/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, CosyDbContext db) =>
@@ -1125,100 +1157,115 @@ public static class HeatPumpEndpoints
                 EnrichAggregatesWithTimeSeries(aggregates, timeSeriesRecords, snapshots);
             }
 
-            // Merge cost data from Octopus API
+            // Merge cost data — prefer stored DB records, fall back to live API
             var costDataStatus = "No account settings found";
-            if (settings is not null)
+            var costFromDate = DateOnly.FromDateTime(from);
+            var costToDate = DateOnly.FromDateTime(to);
+            var storedCosts = await db.DailyCostRecords
+                .AsNoTracking()
+                .Where(r => r.DeviceId == deviceId && r.Date >= costFromDate && r.Date <= costToDate)
+                .ToDictionaryAsync(r => r.Date);
+
+            if (storedCosts.Count > 0)
             {
-                try
+                var mergedCount = 0;
+                foreach (var agg in aggregates)
                 {
-                    logger.LogInformation("Fetching cost data for account {Account} (propertyId={PropertyId}) from {From} to {To}",
-                        device.AccountNumber, device.PropertyId, from, to);
-
-                    var costData = await octopusClient.GetCostOfUsageAsync(settings.ApiKey, device.AccountNumber, from, to, propertyId: device.PropertyId, mpxn: device.Mpan);
-
-                    // Log raw response structure for debugging
-                    if (costData.RootElement.TryGetProperty("data", out var costDataEl))
+                    if (storedCosts.TryGetValue(agg.Date, out var cost))
                     {
-                        if (costDataEl.TryGetProperty("costOfUsage", out var costOfUsageEl))
-                            logger.LogInformation("Cost response structure: costOfUsage type={Type}", costOfUsageEl.ValueKind);
-                        else
-                            logger.LogWarning("Cost response missing costOfUsage field. Data keys: {Keys}",
-                                string.Join(", ", costDataEl.EnumerateObject().Select(p => p.Name)));
-                    }
-
-                    var costRoot = costData.RootElement.GetProperty("data");
-
-                    // Check for GraphQL errors
-                    if (costData.RootElement.TryGetProperty("errors", out var errorsEl)
-                        && errorsEl.ValueKind == JsonValueKind.Array
-                        && errorsEl.GetArrayLength() > 0)
-                    {
-                        var errorMsgs = string.Join("; ", errorsEl.EnumerateArray()
-                            .Select(e => e.TryGetProperty("message", out var m) ? m.GetString() : e.ToString()));
-                        costDataStatus = $"GraphQL errors: {errorMsgs}";
-                        logger.LogWarning("Cost data query returned errors for device {DeviceId}: {Errors}", deviceId, errorMsgs);
-                    }
-                    else if (costRoot.TryGetProperty("costOfUsage", out var costEl)
-                        && costEl.ValueKind != JsonValueKind.Null
-                        && costEl.TryGetProperty("edges", out var edges)
-                        && edges.ValueKind == JsonValueKind.Array)
-                    {
-                        var costByDate = new Dictionary<DateOnly, (double cost, double usage, double unitRate)>();
-                        foreach (var edge in edges.EnumerateArray())
-                        {
-                            if (!edge.TryGetProperty("node", out var node)) continue;
-                            // Try multiple field names — API schema varies
-                            var startAtStr = TryGetString(node, "startAt", "fromDatetime", "from");
-                            if (startAtStr == null || !DateTime.TryParse(startAtStr, out var dt)) continue;
-
-                            var date = DateOnly.FromDateTime(dt);
-                            var cost = TryGetDouble(node, "costInclTax", "totalCost", "cost");
-                            var usage = TryGetDouble(node, "consumptionKwh", "totalConsumption", "consumption");
-                            var unitRate = TryGetDouble(node, "unitRateInclTax", "unitRate");
-
-                            if (costByDate.TryGetValue(date, out var existing))
-                            {
-                                var newCost = existing.cost + cost;
-                                var newUsage = existing.usage + usage;
-                                var newUnitRate = newUsage > 0 ? newCost / newUsage : existing.unitRate;
-                                costByDate[date] = (newCost, newUsage, newUnitRate);
-                            }
-                            else
-                            {
-                                costByDate[date] = (cost, usage, unitRate);
-                            }
-                        }
-
-                        var mergedCount = 0;
-                        foreach (var agg in aggregates)
-                        {
-                            if (costByDate.TryGetValue(agg.Date, out var costInfo))
-                            {
-                                agg.DailyCostPence = costInfo.cost;
-                                agg.DailyUsageKwh = costInfo.usage;
-                                agg.AvgUnitRatePence = costInfo.unitRate;
-                                agg.CostPerKwhHeatPence = agg.TotalHeatOutputKwh > 0
-                                    ? costInfo.cost / agg.TotalHeatOutputKwh
-                                    : null;
-                                mergedCount++;
-                            }
-                        }
-
-                        costDataStatus = $"OK: {costByDate.Count} days of cost data, merged into {mergedCount} aggregates";
-                        logger.LogInformation("Merged cost data for device {DeviceId}: {Status}", deviceId, costDataStatus);
-                    }
-                    else
-                    {
-                        costDataStatus = "costOfUsage returned null or empty";
-                        logger.LogWarning("Cost data query returned null/empty for device {DeviceId}", deviceId);
+                        agg.DailyCostPence = cost.TotalCostPence;
+                        agg.DailyUsageKwh = cost.TotalUsageKwh;
+                        agg.AvgUnitRatePence = cost.AvgUnitRatePence;
+                        agg.CostPerKwhHeatPence = agg.TotalHeatOutputKwh > 0
+                            ? cost.TotalCostPence / agg.TotalHeatOutputKwh
+                            : null;
+                        mergedCount++;
                     }
                 }
-                catch (Exception ex)
-                {
-                    costDataStatus = $"Error: {ex.Message}";
-                    logger.LogWarning(ex, "Failed to merge Octopus cost data for device {DeviceId}", deviceId);
-                }
+                costDataStatus = $"OK (stored): {storedCosts.Count} days of cost data, merged into {mergedCount} aggregates";
+                logger.LogInformation("Merged stored cost data for device {DeviceId}: {Status}", deviceId, costDataStatus);
             }
+            else if (settings is not null)
+            {
+                // Fall back to live API if no stored data
+                try
+                    {
+                        logger.LogInformation("No stored cost data — fetching live from Octopus API for account {Account} from {From} to {To}",
+                            device.AccountNumber, from, to);
+
+                        var costData = await octopusClient.GetCostOfUsageAsync(settings.ApiKey, device.AccountNumber, from, to, propertyId: device.PropertyId, mpxn: device.Mpan);
+
+                        var costRoot = costData.RootElement.GetProperty("data");
+
+                        if (costData.RootElement.TryGetProperty("errors", out var errorsEl)
+                            && errorsEl.ValueKind == JsonValueKind.Array
+                            && errorsEl.GetArrayLength() > 0)
+                        {
+                            var errorMsgs = string.Join("; ", errorsEl.EnumerateArray()
+                                .Select(e => e.TryGetProperty("message", out var m) ? m.GetString() : e.ToString()));
+                            costDataStatus = $"GraphQL errors: {errorMsgs}";
+                            logger.LogWarning("Cost data query returned errors for device {DeviceId}: {Errors}", deviceId, errorMsgs);
+                        }
+                        else if (costRoot.TryGetProperty("costOfUsage", out var costEl)
+                            && costEl.ValueKind != JsonValueKind.Null
+                            && costEl.TryGetProperty("edges", out var edges)
+                            && edges.ValueKind == JsonValueKind.Array)
+                        {
+                            var costByDate = new Dictionary<DateOnly, (double cost, double usage, double unitRate)>();
+                            foreach (var edge in edges.EnumerateArray())
+                            {
+                                if (!edge.TryGetProperty("node", out var node)) continue;
+                                var startAtStr = TryGetString(node, "startAt", "fromDatetime", "from");
+                                if (startAtStr == null || !DateTime.TryParse(startAtStr, out var dt)) continue;
+
+                                var date = DateOnly.FromDateTime(dt);
+                                var cost = TryGetDouble(node, "costInclTax", "totalCost", "cost");
+                                var usage = TryGetDouble(node, "consumptionKwh", "totalConsumption", "consumption");
+                                var unitRate = TryGetDouble(node, "unitRateInclTax", "unitRate");
+
+                                if (costByDate.TryGetValue(date, out var existing))
+                                {
+                                    var newCost = existing.cost + cost;
+                                    var newUsage = existing.usage + usage;
+                                    var newUnitRate = newUsage > 0 ? newCost / newUsage : existing.unitRate;
+                                    costByDate[date] = (newCost, newUsage, newUnitRate);
+                                }
+                                else
+                                {
+                                    costByDate[date] = (cost, usage, unitRate);
+                                }
+                            }
+
+                            var mergedCount = 0;
+                            foreach (var agg in aggregates)
+                            {
+                                if (costByDate.TryGetValue(agg.Date, out var costInfo))
+                                {
+                                    agg.DailyCostPence = costInfo.cost;
+                                    agg.DailyUsageKwh = costInfo.usage;
+                                    agg.AvgUnitRatePence = costInfo.unitRate;
+                                    agg.CostPerKwhHeatPence = agg.TotalHeatOutputKwh > 0
+                                        ? costInfo.cost / agg.TotalHeatOutputKwh
+                                        : null;
+                                    mergedCount++;
+                                }
+                            }
+
+                            costDataStatus = $"OK (live): {costByDate.Count} days of cost data, merged into {mergedCount} aggregates";
+                            logger.LogInformation("Merged live cost data for device {DeviceId}: {Status}", deviceId, costDataStatus);
+                        }
+                        else
+                        {
+                            costDataStatus = "costOfUsage returned null or empty";
+                            logger.LogWarning("Cost data query returned null/empty for device {DeviceId}", deviceId);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        costDataStatus = $"Error: {ex.Message}";
+                        logger.LogWarning(ex, "Failed to merge Octopus cost data for device {DeviceId}", deviceId);
+                    }
+                }
 
             var analysis = await aiService.AnalyseAsync(aggregates, request.Question, settings?.AnthropicApiKey);
 
@@ -1859,7 +1906,7 @@ public static class HeatPumpEndpoints
             .ToList();
     }
 
-    private static string? TryGetString(JsonElement element, params string[] propertyNames)
+    internal static string? TryGetString(JsonElement element, params string[] propertyNames)
     {
         foreach (var propertyName in propertyNames)
         {
@@ -1872,7 +1919,7 @@ public static class HeatPumpEndpoints
         return null;
     }
 
-    private static double TryGetDouble(JsonElement element, params string[] propertyNames)
+    internal static double TryGetDouble(JsonElement element, params string[] propertyNames)
     {
         foreach (var propertyName in propertyNames)
         {

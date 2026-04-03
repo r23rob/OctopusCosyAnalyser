@@ -298,6 +298,17 @@ public class HeatPumpApiClient
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
     }
+
+    public async Task<string> GetStoredCostDataRawAsync(string deviceId, DateTime? from = null, DateTime? to = null)
+    {
+        var fromStr = (from ?? DateTime.UtcNow.AddDays(-30)).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+        var toStr = (to ?? DateTime.UtcNow).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+
+        var response = await _http.GetAsync(
+            $"/api/heatpump/cost-stored/{deviceId}?from={Uri.EscapeDataString(fromStr)}&to={Uri.EscapeDataString(toStr)}");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
 }
 
 /// <summary>View-model for Radzen time-series charts — all numeric properties for chart binding.</summary>

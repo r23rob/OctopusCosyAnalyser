@@ -48,6 +48,9 @@ builder.Services.AddHostedService<HeatPumpSnapshotWorker>();
 // Add Heat Pump Time Series Sync Worker (every 6 hours)
 builder.Services.AddHostedService<HeatPumpTimeSeriesSyncWorker>();
 
+// Add Cost Data Sync Worker (every 6 hours)
+builder.Services.AddHostedService<CostDataSyncWorker>();
+
 // Add services to the container.
 builder.Services.AddProblemDetails();
 
