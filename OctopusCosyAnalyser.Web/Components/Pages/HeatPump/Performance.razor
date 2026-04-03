@@ -160,16 +160,16 @@ else if (summary != null)
             </div>
         </div>
 
-        <!-- Weather Compensation & Flow Temperature Chart -->
+        <!-- WC Weather Compensation Curve & Fixed Flow Setpoint Chart -->
         <div class="row mt-3">
             <div class="col-md-6">
                 <RadzenChart Style="height: 250px;">
                     <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="WeatherCompensationMinCelsius"
-                                     Title="WC Min (°C)" Stroke="rgb(23,162,184)" StrokeWidth="2" LineType="LineType.Dashed" />
+                                     Title="WC Weather Comp Min (°C)" Stroke="rgb(23,162,184)" StrokeWidth="2" LineType="LineType.Dashed" />
                     <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="WeatherCompensationMaxCelsius"
-                                     Title="WC Max (°C)" Stroke="rgb(220,53,69)" StrokeWidth="2" LineType="LineType.Dashed" />
+                                     Title="WC Weather Comp Max (°C)" Stroke="rgb(220,53,69)" StrokeWidth="2" LineType="LineType.Dashed" />
                     <RadzenLineSeries Data="@snapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="HeatingFlowTemperatureCelsius"
-                                     Title="Flow Temp (°C)" Stroke="rgb(255,133,27)" StrokeWidth="2" />
+                                     Title="Fixed Flow Setpoint (°C)" Stroke="rgb(255,133,27)" StrokeWidth="2" />
                     <RadzenCategoryAxis FormatString="{0:dd HH:mm}" />
                     <RadzenValueAxis><RadzenGridLines Visible="true" /></RadzenValueAxis>
                     <RadzenLegend Visible="true" Position="LegendPosition.Bottom" />
@@ -196,8 +196,8 @@ else if (summary != null)
                 <tr><td><strong>Avg Power In</strong></td><td>@AvgOrDash(snapshots.Select(s => s.PowerInputKilowatt)) kW</td></tr>
                 <tr><td><strong>Avg Heat Out</strong></td><td>@AvgOrDash(snapshots.Select(s => s.HeatOutputKilowatt)) kW</td></tr>
                 <tr><td><strong>Avg Outdoor Temp</strong></td><td>@AvgOrDash(snapshots.Select(s => s.OutdoorTemperatureCelsius)) °C</td></tr>
-                <tr><td><strong>Avg Flow Temp</strong></td><td>@AvgOrDash(snapshots.Select(s => s.HeatingFlowTemperatureCelsius)) °C</td></tr>
-                <tr><td><strong>WC Range</strong></td><td>@AvgOrDash(snapshots.Select(s => s.WeatherCompensationMinCelsius)) – @AvgOrDash(snapshots.Select(s => s.WeatherCompensationMaxCelsius)) °C</td></tr>
+                <tr><td><strong>Fixed Flow Setpoint</strong></td><td>@AvgOrDash(snapshots.Where(s => s.FlowTempMode == "FixedFlow").Select(s => s.HeatingFlowTemperatureCelsius)) °C</td></tr>
+                <tr><td><strong>WC Weather Comp Range</strong></td><td>@AvgOrDash(snapshots.Where(s => s.FlowTempMode == "WeatherCompensation").Select(s => s.WeatherCompensationMinCelsius)) – @AvgOrDash(snapshots.Where(s => s.FlowTempMode == "WeatherCompensation").Select(s => s.WeatherCompensationMaxCelsius)) °C</td></tr>
             </tbody>
         </table>
     }

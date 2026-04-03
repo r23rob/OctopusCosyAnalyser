@@ -56,8 +56,16 @@ else
             </span>
         }
 
-        @{ var wcEnabled = summary?.ControllerConfiguration?.HeatPump?.WeatherCompensation?.Enabled == true; }
-        <span class="badge @(wcEnabled ? "bg-success" : "bg-secondary")">WC: @(wcEnabled ? "ON" : "OFF")</span>
+        @{
+            var wcEnabled = summary?.ControllerConfiguration?.HeatPump?.WeatherCompensation?.Enabled;
+            var (wcBadgeClass, wcBadgeText) = wcEnabled switch
+            {
+                true  => ("bg-success", "WC Weather Comp"),
+                false => ("bg-info", "Fixed Flow"),
+                _     => ("bg-secondary", "Mode Unknown")
+            };
+        }
+        <span class="badge @wcBadgeClass">@wcBadgeText</span>
 
         @if (summary?.ControllerStatus?.Zones != null)
         {

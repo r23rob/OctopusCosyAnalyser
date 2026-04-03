@@ -39,7 +39,10 @@ public sealed class HeatPumpSnapshotDto
     public string? RoomSensorCode { get; set; }
 
     // Weather Compensation & Flow Temperature
-    public bool? WeatherCompensationEnabled { get; set; }
+    // "WeatherCompensation" = WC curve active (WC min/max populated, fixed flow null)
+    // "FixedFlow" = fixed setpoint active (HeatingFlowTemperatureCelsius populated, WC min/max null)
+    // null = mode data not available for this snapshot
+    public string? FlowTempMode { get; set; }
     public decimal? WeatherCompensationMinCelsius { get; set; }
     public decimal? WeatherCompensationMaxCelsius { get; set; }
     public decimal? HeatingFlowTemperatureCelsius { get; set; }

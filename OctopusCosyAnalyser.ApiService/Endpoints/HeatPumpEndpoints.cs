@@ -1261,21 +1261,26 @@ public static class HeatPumpEndpoints
                     prevHwDemand = hwDemand;
                 }
 
-                // Weather compensation mode (most frequent non-null value)
-                var wcEnabledMode = day.Where(s => s.WeatherCompensationEnabled.HasValue)
-                    .GroupBy(s => s.WeatherCompensationEnabled!.Value)
+                // Flow temp mode (most frequent non-null value for the day)
+                var flowTempModeForDay = day.Where(s => s.FlowTempMode != null)
+                    .GroupBy(s => s.FlowTempMode!)
                     .OrderByDescending(g2 => g2.Count())
                     .FirstOrDefault()?.Key;
 
-                var wcMinMode = day.Where(s => s.WeatherCompensationMinCelsius.HasValue)
+                // WC curve range — only meaningful when in WeatherCompensation mode
+                var wcSnapshots = day.Where(s => s.FlowTempMode == Shared.Models.FlowTempMode.WeatherCompensation).ToList();
+                var wcMinMode = wcSnapshots.Where(s => s.WeatherCompensationMinCelsius.HasValue)
                     .GroupBy(s => s.WeatherCompensationMinCelsius!.Value)
                     .OrderByDescending(g2 => g2.Count())
                     .FirstOrDefault()?.Key;
 
-                var wcMaxMode = day.Where(s => s.WeatherCompensationMaxCelsius.HasValue)
+                var wcMaxMode = wcSnapshots.Where(s => s.WeatherCompensationMaxCelsius.HasValue)
                     .GroupBy(s => s.WeatherCompensationMaxCelsius!.Value)
                     .OrderByDescending(g2 => g2.Count())
                     .FirstOrDefault()?.Key;
+
+                // Fixed flow snapshots for setpoint average
+                var fixedFlowSnapshots = day.Where(s => s.FlowTempMode == Shared.Models.FlowTempMode.FixedFlow).ToList();
 
                 var flowTempMinMode = day.Where(s => s.HeatingFlowTempAllowableMinCelsius.HasValue)
                     .GroupBy(s => s.HeatingFlowTempAllowableMinCelsius!.Value)
@@ -1310,8 +1315,8 @@ public static class HeatPumpEndpoints
                         ? day.Where(s => s.OutdoorTemperatureCelsius.HasValue)
                             .Select(s => (double)s.OutdoorTemperatureCelsius!.Value).Max()
                         : null,
-                    // NOTE: This is the configured fixed flow temp SETPOINT, not a measured flow temperature
-                    AvgFlowTemp = AvgDecimal(heatingSnapshots, s => s.HeatingFlowTemperatureCelsius),
+                    // Fixed flow temp setpoint — only from FixedFlow-mode snapshots
+                    AvgFlowTemp = AvgDecimal(fixedFlowSnapshots, s => s.HeatingFlowTemperatureCelsius),
                     AvgRoomTemp = AvgDecimal(day, s => s.RoomTemperatureCelsius),
                     AvgSetpoint = AvgDecimal(day, s => s.HeatingZoneSetpointCelsius),
 
@@ -1322,7 +1327,7 @@ public static class HeatPumpEndpoints
                         ? day.Count(s => s.HotWaterZoneHeatDemand == true) * 100.0 / day.Count
                         : 0,
 
-                    WeatherCompEnabled = wcEnabledMode,
+                    FlowTempMode = flowTempModeForDay,
                     WeatherCompMin = wcMinMode.HasValue ? (double)wcMinMode.Value : null,
                     WeatherCompMax = wcMaxMode.HasValue ? (double)wcMaxMode.Value : null,
 
@@ -1389,15 +1394,15 @@ public static class HeatPumpEndpoints
                 .Select(r => (double)r.OutdoorTemperatureCelsius!.Value)
                 .ToList();
 
-            // Find weather comp settings from nearest snapshots (within 30 min window)
-            var wcValues = new List<(bool? enabled, decimal? min, decimal? max, decimal? flowTemp, decimal? flowTempAllowableMin, decimal? flowTempAllowableMax)>();
+            // Find flow temp mode and settings from nearest snapshots (within 30 min window)
+            var wcValues = new List<(string? flowTempMode, decimal? min, decimal? max, decimal? flowTemp, decimal? flowTempAllowableMin, decimal? flowTempAllowableMax)>();
             foreach (var rec in records)
             {
                 var nearest = FindNearestSnapshot(snapshotsByTime, rec.StartAt, TimeSpan.FromMinutes(30));
                 if (nearest is not null)
                 {
                     wcValues.Add((
-                        nearest.WeatherCompensationEnabled,
+                        nearest.FlowTempMode,
                         nearest.WeatherCompensationMinCelsius,
                         nearest.WeatherCompensationMaxCelsius,
                         nearest.HeatingFlowTemperatureCelsius,
@@ -1407,27 +1412,29 @@ public static class HeatPumpEndpoints
                 }
             }
 
-            // Compute weather comp mode values for the day from matched snapshots
-            var wcEnabledMode = wcValues
-                .Where(v => v.enabled.HasValue)
-                .GroupBy(v => v.enabled!.Value)
+            // Flow temp mode (most frequent non-null)
+            var flowTempModeForDay = wcValues
+                .Where(v => v.flowTempMode != null)
+                .GroupBy(v => v.flowTempMode!)
                 .OrderByDescending(g => g.Count())
                 .FirstOrDefault()?.Key;
 
+            // WC curve range — only from WeatherCompensation-mode snapshots
             var wcMinMode = wcValues
-                .Where(v => v.min.HasValue)
+                .Where(v => v.flowTempMode == Shared.Models.FlowTempMode.WeatherCompensation && v.min.HasValue)
                 .GroupBy(v => v.min!.Value)
                 .OrderByDescending(g => g.Count())
                 .FirstOrDefault()?.Key;
 
             var wcMaxMode = wcValues
-                .Where(v => v.max.HasValue)
+                .Where(v => v.flowTempMode == Shared.Models.FlowTempMode.WeatherCompensation && v.max.HasValue)
                 .GroupBy(v => v.max!.Value)
                 .OrderByDescending(g => g.Count())
                 .FirstOrDefault()?.Key;
 
+            // Fixed flow setpoint — only from FixedFlow-mode snapshots
             var avgFlowTemp = wcValues
-                .Where(v => v.flowTemp.HasValue)
+                .Where(v => v.flowTempMode == Shared.Models.FlowTempMode.FixedFlow && v.flowTemp.HasValue)
                 .Select(v => (double)v.flowTemp!.Value)
                 .ToList();
 
@@ -1459,9 +1466,9 @@ public static class HeatPumpEndpoints
                 if (!existing.MaxOutdoorTemp.HasValue && tsOutdoorTemps.Count > 0)
                     existing.MaxOutdoorTemp = tsOutdoorTemps.Max();
 
-                // Supplement weather comp from time-series-correlated snapshots if not already set
-                if (!existing.WeatherCompEnabled.HasValue && wcEnabledMode.HasValue)
-                    existing.WeatherCompEnabled = wcEnabledMode.Value;
+                // Supplement flow temp mode from time-series-correlated snapshots if not already set
+                if (existing.FlowTempMode == null && flowTempModeForDay != null)
+                    existing.FlowTempMode = flowTempModeForDay;
                 if (!existing.WeatherCompMin.HasValue && wcMinMode.HasValue)
                     existing.WeatherCompMin = (double)wcMinMode.Value;
                 if (!existing.WeatherCompMax.HasValue && wcMaxMode.HasValue)
@@ -1490,7 +1497,7 @@ public static class HeatPumpEndpoints
                     MinOutdoorTemp = tsOutdoorTemps.Count > 0 ? tsOutdoorTemps.Min() : null,
                     MaxOutdoorTemp = tsOutdoorTemps.Count > 0 ? tsOutdoorTemps.Max() : null,
                     AvgCopHeating = tsEnergyIn > 0 ? tsEnergyOut / tsEnergyIn : null,
-                    WeatherCompEnabled = wcEnabledMode,
+                    FlowTempMode = flowTempModeForDay,
                     WeatherCompMin = wcMinMode.HasValue ? (double)wcMinMode.Value : null,
                     WeatherCompMax = wcMaxMode.HasValue ? (double)wcMaxMode.Value : null,
                     AvgFlowTemp = avgFlowTemp.Count > 0 ? avgFlowTemp.Average() : null,

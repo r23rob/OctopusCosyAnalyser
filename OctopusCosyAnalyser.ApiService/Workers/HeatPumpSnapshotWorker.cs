@@ -1,6 +1,7 @@
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.ApiService.Services;
+using OctopusCosyAnalyser.Shared.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
@@ -198,32 +199,41 @@ public class HeatPumpSnapshotWorker : BackgroundService
                 // Extract weather compensation & flow temperature from heatPump config
                 if (config.TryGetProperty("heatPump", out var heatPump))
                 {
-                    // Weather compensation enabled + current range (min/max)
                     if (heatPump.TryGetProperty("weatherCompensation", out var weatherComp))
                     {
-                        if (weatherComp.TryGetProperty("enabled", out var wcEnabled))
-                            snapshot.WeatherCompensationEnabled = wcEnabled.ValueKind == JsonValueKind.True;
+                        bool? wcEnabled = null;
+                        if (weatherComp.TryGetProperty("enabled", out var wcEnabledEl))
+                            wcEnabled = wcEnabledEl.ValueKind == JsonValueKind.True;
 
-                        if (weatherComp.TryGetProperty("currentRange", out var wcRange))
+                        if (wcEnabled == true)
                         {
-                            if (wcRange.TryGetProperty("minimum", out var wcMin) && wcMin.TryGetProperty("value", out var wcMinVal))
-                                if (decimal.TryParse(wcMinVal.GetString() ?? "", out var wcMinDec))
-                                    snapshot.WeatherCompensationMinCelsius = wcMinDec;
+                            // WC Weather Compensation mode: store curve range, null fixed flow setpoint
+                            snapshot.FlowTempMode = FlowTempMode.WeatherCompensation;
+                            if (weatherComp.TryGetProperty("currentRange", out var wcRange))
+                            {
+                                if (wcRange.TryGetProperty("minimum", out var wcMin) && wcMin.TryGetProperty("value", out var wcMinVal))
+                                    if (decimal.TryParse(wcMinVal.GetString() ?? "", out var wcMinDec))
+                                        snapshot.WeatherCompensationMinCelsius = wcMinDec;
 
-                            if (wcRange.TryGetProperty("maximum", out var wcMax) && wcMax.TryGetProperty("value", out var wcMaxVal))
-                                if (decimal.TryParse(wcMaxVal.GetString() ?? "", out var wcMaxDec))
-                                    snapshot.WeatherCompensationMaxCelsius = wcMaxDec;
+                                if (wcRange.TryGetProperty("maximum", out var wcMax) && wcMax.TryGetProperty("value", out var wcMaxVal))
+                                    if (decimal.TryParse(wcMaxVal.GetString() ?? "", out var wcMaxDec))
+                                        snapshot.WeatherCompensationMaxCelsius = wcMaxDec;
+                            }
+                            snapshot.HeatingFlowTemperatureCelsius = null;
                         }
+                        else if (wcEnabled == false)
+                        {
+                            // Fixed Flow mode: null WC curve range, store fixed setpoint below
+                            snapshot.FlowTempMode = FlowTempMode.FixedFlow;
+                            snapshot.WeatherCompensationMinCelsius = null;
+                            snapshot.WeatherCompensationMaxCelsius = null;
+                        }
+                        // wcEnabled == null: FlowTempMode stays null, no conditional fields stored
                     }
 
-                    // Current heating flow temperature and allowable range
+                    // Allowable range is hardware limits — always relevant regardless of mode
                     if (heatPump.TryGetProperty("heatingFlowTemperature", out var flowTemp))
                     {
-                        if (flowTemp.TryGetProperty("currentTemperature", out var currentFlow)
-                            && currentFlow.TryGetProperty("value", out var flowVal)
-                            && decimal.TryParse(flowVal.GetString() ?? "", out var flowDec))
-                            snapshot.HeatingFlowTemperatureCelsius = flowDec;
-
                         if (flowTemp.TryGetProperty("allowableRange", out var flowRange))
                         {
                             if (flowRange.TryGetProperty("minimum", out var flowMin) && flowMin.TryGetProperty("value", out var flowMinVal)
@@ -233,6 +243,15 @@ public class HeatPumpSnapshotWorker : BackgroundService
                             if (flowRange.TryGetProperty("maximum", out var flowMax) && flowMax.TryGetProperty("value", out var flowMaxVal)
                                 && decimal.TryParse(flowMaxVal.GetString() ?? "", out var flowMaxDec))
                                 snapshot.HeatingFlowTempAllowableMaxCelsius = flowMaxDec;
+                        }
+
+                        // Fixed flow setpoint only stored when in Fixed Flow mode
+                        if (snapshot.FlowTempMode == FlowTempMode.FixedFlow)
+                        {
+                            if (flowTemp.TryGetProperty("currentTemperature", out var currentFlow)
+                                && currentFlow.TryGetProperty("value", out var flowVal)
+                                && decimal.TryParse(flowVal.GetString() ?? "", out var flowDec))
+                                snapshot.HeatingFlowTemperatureCelsius = flowDec;
                         }
                     }
                 }
