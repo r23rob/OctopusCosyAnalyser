@@ -10,27 +10,24 @@
 
 @if (!isSetup)
 {
-    <h1>Heat Pump Dashboard</h1>
-    <div class="card mt-4">
-        <div class="card-body">
-            <h3>Initial Setup</h3>
-            <p>Save your account number and API key in <a href="/settings">Account Settings</a>, then set up the device.</p>
-            <button @onclick="SetupDevice" class="btn btn-primary" disabled="@isLoading">
-                @if (isLoading)
-                {
-                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-                    <span>Setting up...</span>
-                }
-                else
-                {
-                    <span>Setup Device</span>
-                }
-            </button>
-            @if (!string.IsNullOrEmpty(errorMessage))
+    <div class="setup-card">
+        <h3>Heat Pump Dashboard</h3>
+        <p>Save your account number and API key in <a href="/settings">Account Settings</a>, then set up the device.</p>
+        <button @onclick="SetupDevice" class="btn btn-primary" disabled="@isLoading">
+            @if (isLoading)
             {
-                <div class="alert alert-danger mt-3">@errorMessage</div>
+                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                <span>Setting up...</span>
             }
-        </div>
+            else
+            {
+                <span>Setup Device</span>
+            }
+        </button>
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger mt-3">@errorMessage</div>
+        }
     </div>
 }
 else
@@ -40,237 +37,284 @@ else
         <div class="alert alert-danger">@errorMessage</div>
     }
 
-    <!-- ═══ STATUS BAR (compact live status) ═══ -->
-    <div class="status-bar">
+    <!-- ═══ HERO GAUGES ═══ -->
+    <div class="gauge-section">
+        <div class="gauge-card">
+            <div class="gauge-card-label">Live COP</div>
+            <RadzenRadialGauge Style="width: 180px; height: 140px;">
+                <RadzenRadialGaugeScale StartAngle="-150" EndAngle="150"
+                                        Min="0" Max="6" Step="2" MinorStep="1"
+                                        TickPosition="GaugeTickPosition.Outside"
+                                        Radius="0.8" ShowLastLabel="true"
+                                        Stroke="transparent" Fill="transparent">
+                    <RadzenRadialGaugeScaleRange From="0" To="2.5" Fill="#ef4444" Height="12" />
+                    <RadzenRadialGaugeScaleRange From="2.5" To="3.5" Fill="#f59e0b" Height="12" />
+                    <RadzenRadialGaugeScaleRange From="3.5" To="6" Fill="#22c55e" Height="12" />
+                    <RadzenRadialGaugeScalePointer Value="@(_parsedCop ?? 0)" ShowValue="false"
+                                                   Length="0.6" Fill="rgba(255,255,255,0.85)" />
+                </RadzenRadialGaugeScale>
+            </RadzenRadialGauge>
+            <div class="gauge-card-value @CopColorClass">@CopDisplay</div>
+        </div>
+
+        <div class="gauge-card">
+            <div class="gauge-card-label">Power Input</div>
+            <RadzenRadialGauge Style="width: 180px; height: 140px;">
+                <RadzenRadialGaugeScale StartAngle="-150" EndAngle="150"
+                                        Min="0" Max="@PowerGaugeMax" Step="@(PowerGaugeMax / 4)" MinorStep="0"
+                                        TickPosition="GaugeTickPosition.Outside"
+                                        Radius="0.8" ShowLastLabel="true"
+                                        Stroke="transparent" Fill="transparent">
+                    <RadzenRadialGaugeScaleRange From="0" To="@PowerGaugeMax" Fill="#3b82f6" Height="12" />
+                    <RadzenRadialGaugeScalePointer Value="@(_parsedPowerInput ?? 0)" ShowValue="false"
+                                                   Length="0.6" Fill="rgba(255,255,255,0.85)" />
+                </RadzenRadialGaugeScale>
+            </RadzenRadialGauge>
+            <div class="gauge-card-value" style="color: var(--color-primary);">@PowerInputDisplay</div>
+            <div class="gauge-card-unit">kW</div>
+        </div>
+
+        <div class="gauge-card">
+            <div class="gauge-card-label">Heat Output</div>
+            <RadzenRadialGauge Style="width: 180px; height: 140px;">
+                <RadzenRadialGaugeScale StartAngle="-150" EndAngle="150"
+                                        Min="0" Max="@HeatGaugeMax" Step="@(HeatGaugeMax / 4)" MinorStep="0"
+                                        TickPosition="GaugeTickPosition.Outside"
+                                        Radius="0.8" ShowLastLabel="true"
+                                        Stroke="transparent" Fill="transparent">
+                    <RadzenRadialGaugeScaleRange From="0" To="@HeatGaugeMax" Fill="#22c55e" Height="12" />
+                    <RadzenRadialGaugeScalePointer Value="@(_parsedHeatOutput ?? 0)" ShowValue="false"
+                                                   Length="0.6" Fill="rgba(255,255,255,0.85)" />
+                </RadzenRadialGaugeScale>
+            </RadzenRadialGauge>
+            <div class="gauge-card-value" style="color: var(--color-success);">@HeatOutputDisplay</div>
+            <div class="gauge-card-unit">kW</div>
+        </div>
+    </div>
+
+    <!-- ═══ STATUS PILLS ═══ -->
+    <div class="status-pills">
         @{ var controllerState = summary?.ControllerConfiguration?.Controller?.State; }
         @if (controllerState?.Count > 0)
         {
             var isHeating = controllerState.Any(s => s.Contains("HEAT", StringComparison.OrdinalIgnoreCase));
-            <span class="badge @(isHeating ? "bg-danger" : "bg-info")">@(isHeating ? "HEATING" : "IDLE")</span>
-        }
-
-        @if (_parsedCop.HasValue)
-        {
-            <span class="badge @(CopColorClass == "cop-green" ? "bg-success" : CopColorClass == "cop-amber" ? "bg-warning text-dark" : "bg-danger")">
-                Live COP: @CopDisplay
+            <span class="status-pill">
+                <span class="status-dot @(isHeating ? "status-dot-danger status-dot-pulse" : "status-dot-info")"></span>
+                @(isHeating ? "HEATING" : "IDLE")
             </span>
         }
 
         @{
-            var wcEnabled = summary?.ControllerConfiguration?.HeatPump?.WeatherCompensation?.Enabled;
-            var (wcBadgeClass, wcBadgeText) = wcEnabled switch
+            var wcStatus = summary?.ControllerConfiguration?.HeatPump?.WeatherCompensation?.Enabled;
+            var (wcDotClass, wcText) = wcStatus switch
             {
-                true  => ("bg-success", "WC Weather Comp"),
-                false => ("bg-info", "Fixed Flow"),
-                _     => ("bg-secondary", "Mode Unknown")
+                true  => ("status-dot-success", "Weather Comp"),
+                false => ("status-dot-info", "Fixed Flow"),
+                _     => ("status-dot-muted", "Mode Unknown")
             };
         }
-        <span class="badge @wcBadgeClass">@wcBadgeText</span>
+        <span class="status-pill">
+            <span class="status-dot @wcDotClass"></span>
+            @wcText
+        </span>
 
         @if (summary?.ControllerStatus?.Zones != null)
         {
             @foreach (var zone in summary.ControllerStatus.Zones.Where(z => z.Telemetry?.HeatDemand == true))
             {
-                <span class="badge bg-warning text-dark">@(zone.Zone ?? "Zone") demand</span>
+                <span class="status-pill">
+                    <span class="status-dot status-dot-warning status-dot-pulse"></span>
+                    @(zone.Zone ?? "Zone") demand
+                </span>
             }
         }
 
         @if (latestSnapshot != null)
         {
-            <span class="badge @SnapshotHealthBadge">
+            <span class="status-pill">
+                <span class="status-dot @SnapshotHealthDot"></span>
                 Worker: @SnapshotHealthText
             </span>
         }
 
-        <span class="badge bg-light text-muted border ms-auto">
+        <span class="status-pill" style="color: var(--text-muted); font-size: 0.7rem;">
             @(summary?.LivePerformance?.ReadAt ?? "—")
-            <button class="btn btn-link btn-sm p-0 ms-1" @onclick="RefreshDashboard" disabled="@isLoading" style="font-size: 0.75rem; text-decoration: none;">
-                @(isLoading ? "..." : "Refresh")
+            <button class="btn btn-link btn-sm p-0 ms-1" @onclick="RefreshDashboard" disabled="@isLoading"
+                    style="font-size: 0.7rem; text-decoration: none; color: var(--color-primary);">
+                @(isLoading ? "..." : "↻")
             </button>
         </span>
     </div>
 
     <!-- ═══ PERIOD SELECTOR ═══ -->
     <div class="period-selector">
-        <div class="btn-group" role="group">
-            <button class="btn @(selectedPeriodDays == 1 ? "btn-primary" : "btn-outline-primary") btn-sm" @onclick="() => SetPeriod(1)">1 Day</button>
-            <button class="btn @(selectedPeriodDays == 7 ? "btn-primary" : "btn-outline-primary") btn-sm" @onclick="() => SetPeriod(7)">1 Week</button>
-            <button class="btn @(selectedPeriodDays == 30 ? "btn-primary" : "btn-outline-primary") btn-sm" @onclick="() => SetPeriod(30)">1 Month</button>
-            <button class="btn @(selectedPeriodDays == 365 ? "btn-primary" : "btn-outline-primary") btn-sm" @onclick="() => SetPeriod(365)">1 Year</button>
-        </div>
+        <button class="period-pill @(selectedPeriodDays == 1 ? "period-pill-active" : "")" @onclick="() => SetPeriod(1)">1D</button>
+        <button class="period-pill @(selectedPeriodDays == 7 ? "period-pill-active" : "")" @onclick="() => SetPeriod(7)">1W</button>
+        <button class="period-pill @(selectedPeriodDays == 30 ? "period-pill-active" : "")" @onclick="() => SetPeriod(30)">1M</button>
+        <button class="period-pill @(selectedPeriodDays == 365 ? "period-pill-active" : "")" @onclick="() => SetPeriod(365)">1Y</button>
         @if (periodLoading)
         {
-            <span class="spinner-border spinner-border-sm ms-2" role="status"></span>
+            <span class="spinner-border spinner-border-sm ms-2" role="status" style="width: 1rem; height: 1rem;"></span>
         }
+    </div>
+
+    <!-- ═══ METRICS STRIP ═══ -->
+    <div class="metrics-strip">
+        <div class="metric-item">
+            <div class="metric-label">Avg COP</div>
+            <div class="metric-value @PeriodCopColorClass">@FmtDec(periodSummary?.AvgCop)</div>
+            <div class="metric-range">@FmtDec(periodSummary?.MinCop) – @FmtDec(periodSummary?.MaxCop)</div>
+        </div>
+        <div class="metric-item">
+            <div class="metric-label">Energy In</div>
+            <div class="metric-value" style="color: var(--color-primary);">@FmtKwh(periodSummary?.TotalInputKwh)</div>
+            <div class="metric-range">kWh</div>
+        </div>
+        <div class="metric-item">
+            <div class="metric-label">Heat Out</div>
+            <div class="metric-value" style="color: var(--color-success);">@FmtKwh(periodSummary?.TotalOutputKwh)</div>
+            <div class="metric-range">kWh</div>
+        </div>
+        <div class="metric-item">
+            <div class="metric-label">Outdoor</div>
+            <div class="metric-value" style="color: var(--color-warning);">@FmtTemp(periodSummary?.AvgOutdoorTemp)</div>
+            <div class="metric-range">@FmtTemp(periodSummary?.MinOutdoorTemp) – @FmtTemp(periodSummary?.MaxOutdoorTemp)</div>
+        </div>
+        <div class="metric-item">
+            <div class="metric-label">Room</div>
+            <div class="metric-value">@FmtTemp(periodSummary?.AvgRoomTemp)</div>
+            <div class="metric-range">@FmtTemp(periodSummary?.MinRoomTemp) – @FmtTemp(periodSummary?.MaxRoomTemp)</div>
+        </div>
         @if (periodSummary?.SnapshotCount > 0)
         {
-            <span class="small text-muted ms-2">@periodSummary.SnapshotCount snapshots</span>
+            <div class="metric-item">
+                <div class="metric-label">Heating</div>
+                <div class="metric-value">@periodSummary.HeatingDutyCyclePercent.ToString("F0")%</div>
+                <div class="metric-range">duty cycle</div>
+            </div>
         }
     </div>
 
-    <!-- ═══ KEY INDICATORS ═══ -->
-    <div class="row g-2 mb-2">
-        <div class="col-6 col-md-3">
-            <div class="summary-card">
-                <div class="summary-label">Avg COP</div>
-                <div class="summary-value @PeriodCopColorClass">@FmtDec(periodSummary?.AvgCop)</div>
-                <div class="summary-range">@FmtDec(periodSummary?.MinCop) – @FmtDec(periodSummary?.MaxCop)</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="summary-card">
-                <div class="summary-label">Input Energy</div>
-                <div class="summary-value text-primary">@FmtKwh(periodSummary?.TotalInputKwh)</div>
-                <div class="summary-range">total kWh</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="summary-card">
-                <div class="summary-label">Heat Output</div>
-                <div class="summary-value text-danger">@FmtKwh(periodSummary?.TotalOutputKwh)</div>
-                <div class="summary-range">total kWh</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="summary-card">
-                <div class="summary-label">Outdoor Temp</div>
-                <div class="summary-value text-warning">@FmtTemp(periodSummary?.AvgOutdoorTemp)</div>
-                <div class="summary-range">@FmtTemp(periodSummary?.MinOutdoorTemp) – @FmtTemp(periodSummary?.MaxOutdoorTemp)</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ═══ SENSOR SUMMARIES ═══ -->
-    <div class="row g-2 mb-3">
-        <div class="col-6 col-md-3">
-            <div class="summary-card summary-card-sensor">
-                <div class="summary-label">Room Temp</div>
-                <div class="summary-value">@FmtTemp(periodSummary?.AvgRoomTemp)</div>
-                <div class="summary-range">@FmtTemp(periodSummary?.MinRoomTemp) – @FmtTemp(periodSummary?.MaxRoomTemp)</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="summary-card summary-card-sensor">
-                <div class="summary-label">Room Humidity</div>
-                <div class="summary-value">@FmtPct(periodSummary?.AvgRoomHumidity)</div>
-                <div class="summary-range">@FmtPct(periodSummary?.MinRoomHumidity) – @FmtPct(periodSummary?.MaxRoomHumidity)</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="summary-card summary-card-sensor">
-                <div class="summary-label">Hot Water</div>
-                <div class="summary-value">@FmtTemp(periodSummary?.AvgHotWaterSetpoint)</div>
-                <div class="summary-range">@FmtTemp(periodSummary?.MinHotWaterSetpoint) – @FmtTemp(periodSummary?.MaxHotWaterSetpoint)</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="summary-card summary-card-sensor">
-                <div class="summary-label">Flow Temp</div>
-                <div class="summary-value">@FmtTemp(periodSummary?.AvgFlowTemp)</div>
-                <div class="summary-range">@FmtTemp(periodSummary?.MinFlowTemp) – @FmtTemp(periodSummary?.MaxFlowTemp)</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ═══ DUTY CYCLE BAR ═══ -->
-    @if (periodSummary?.SnapshotCount > 0)
-    {
-        <div class="row g-2 mb-3">
-            <div class="col-6">
-                <div class="summary-card summary-card-sensor">
-                    <div class="summary-label">Heating Duty Cycle</div>
-                    <div class="summary-value">@periodSummary.HeatingDutyCyclePercent.ToString("F1")%</div>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="summary-card summary-card-sensor">
-                    <div class="summary-label">Hot Water Duty Cycle</div>
-                    <div class="summary-value">@periodSummary.HotWaterDutyCyclePercent.ToString("F1")%</div>
-                </div>
-            </div>
-        </div>
-    }
-
-    <!-- ═══ COP TREND CHART ═══ -->
+    <!-- ═══ UNIFIED CHART ═══ -->
     @if (trendSnapshots.Count > 0)
     {
-        <div class="card mb-3">
-            <div class="card-header bg-light">
-                <strong>COP Trend — @PeriodLabel</strong>
-                <span class="small text-muted ms-2">@trendSnapshots.Count data points</span>
+        <div class="chart-section">
+            <div class="chart-header">
+                <span class="chart-title">@PeriodLabel — @trendSnapshots.Count points</span>
+                <div class="chart-toggles">
+                    <button class="series-toggle @(showCop ? "series-toggle-active" : "")" @onclick="() => showCop = !showCop">
+                        <span class="series-dot" style="background: #22c55e;"></span> COP
+                    </button>
+                    <button class="series-toggle @(showPowerIn ? "series-toggle-active" : "")" @onclick="() => showPowerIn = !showPowerIn">
+                        <span class="series-dot" style="background: #3b82f6;"></span> Power In
+                    </button>
+                    <button class="series-toggle @(showHeatOut ? "series-toggle-active" : "")" @onclick="() => showHeatOut = !showHeatOut">
+                        <span class="series-dot" style="background: #f59e0b;"></span> Heat Out
+                    </button>
+                    <button class="series-toggle @(showOutdoor ? "series-toggle-active" : "")" @onclick="() => showOutdoor = !showOutdoor">
+                        <span class="series-dot" style="background: #06b6d4;"></span> Outdoor
+                    </button>
+                </div>
             </div>
-            <div class="card-body p-2">
-                <RadzenChart Style="height: 200px;">
-                    <RadzenLineSeries Data="@trendSnapshots" CategoryProperty="SnapshotTakenAt" ValueProperty="CoefficientOfPerformance"
-                                     Stroke="rgb(40,167,69)" StrokeWidth="2" />
+            <RadzenChart Style="height: 350px;">
+                @if (showCop)
+                {
+                    <RadzenLineSeries Data="@trendSnapshots" CategoryProperty="SnapshotTakenAt"
+                                     ValueProperty="CoefficientOfPerformance"
+                                     Stroke="#22c55e" StrokeWidth="2" Title="COP" />
                     <RadzenLineSeries Data="@cop3RefLine" CategoryProperty="Time" ValueProperty="Value"
-                                     Stroke="rgba(220,53,69,0.4)" StrokeWidth="1" LineType="LineType.Dashed" />
-                    <RadzenCategoryAxis FormatString="@TrendAxisFormat" Visible="true" />
-                    <RadzenValueAxis Min="0" Visible="true">
-                        <RadzenGridLines Visible="true" />
-                    </RadzenValueAxis>
-                    <RadzenLegend Visible="false" />
-                </RadzenChart>
-            </div>
+                                     Stroke="rgba(239,68,68,0.3)" StrokeWidth="1" LineType="LineType.Dashed" Title="COP 3.0" />
+                }
+                @if (showPowerIn)
+                {
+                    <RadzenLineSeries Data="@trendSnapshots" CategoryProperty="SnapshotTakenAt"
+                                     ValueProperty="PowerInputKilowatt"
+                                     Stroke="#3b82f6" StrokeWidth="2" Title="Power In (kW)" />
+                }
+                @if (showHeatOut)
+                {
+                    <RadzenLineSeries Data="@trendSnapshots" CategoryProperty="SnapshotTakenAt"
+                                     ValueProperty="HeatOutputKilowatt"
+                                     Stroke="#f59e0b" StrokeWidth="2" Title="Heat Out (kW)" />
+                }
+                @if (showOutdoor)
+                {
+                    <RadzenLineSeries Data="@trendSnapshots" CategoryProperty="SnapshotTakenAt"
+                                     ValueProperty="OutdoorTemperature"
+                                     Stroke="#06b6d4" StrokeWidth="2" Title="Outdoor (°C)" />
+                }
+                <RadzenCategoryAxis FormatString="@TrendAxisFormat" Visible="true" />
+                <RadzenValueAxis Min="0" Visible="true">
+                    <RadzenGridLines Visible="true" />
+                </RadzenValueAxis>
+                <RadzenLegend Visible="false" />
+            </RadzenChart>
         </div>
     }
     else if (!periodLoading && periodSummary != null)
     {
-        <div class="alert alert-info">No snapshot data available for this period.</div>
+        <div class="alert alert-info" style="text-align: center;">No snapshot data available for this period.</div>
     }
 
-    <!-- ═══ AI SUMMARY ═══ -->
-    <div class="ai-summary-card">
-        <div class="ai-summary-header">
-            <span class="ai-summary-title">AI Performance Summary</span>
-            <div>
+    <!-- ═══ AI SUMMARY (Collapsible) ═══ -->
+    <div class="ai-panel">
+        <div class="ai-panel-header" @onclick="() => aiExpanded = !aiExpanded">
+            <span class="ai-panel-title">
+                AI Performance Summary
+            </span>
+            <div class="ai-panel-meta">
                 @if (aiSummary is not null && aiSummary.GeneratedAt != default)
                 {
-                    <span class="small text-muted me-2">@aiSummary.GeneratedAt.ToString("dd MMM HH:mm")</span>
+                    <span style="font-size: 0.7rem; color: var(--text-muted);">@aiSummary.GeneratedAt.ToString("dd MMM HH:mm")</span>
                 }
-                <button class="btn btn-outline-secondary btn-sm" @onclick="RefreshAiSummary" disabled="@aiLoading">
-                    @(aiLoading ? "Generating..." : "Refresh")
+                <button class="btn btn-outline-secondary btn-sm" style="font-size: 0.7rem; padding: 0.15rem 0.5rem;"
+                        @onclick="RefreshAiSummary" @onclick:stopPropagation="true" disabled="@aiLoading">
+                    @(aiLoading ? "..." : "Refresh")
                 </button>
+                <span class="ai-panel-chevron @(aiExpanded ? "ai-panel-chevron-open" : "")">▼</span>
             </div>
         </div>
 
-        @if (aiLoading && aiSummary == null)
+        @if (aiExpanded)
         {
-            <div class="d-flex align-items-center p-3">
-                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
-                <span class="text-muted">Generating AI summary...</span>
-            </div>
-        }
-        else if (aiSummary != null && !string.IsNullOrEmpty(aiSummary.WeekSummary))
-        {
-            <div class="ai-summary-body">
-                @if (!string.IsNullOrEmpty(aiSummary.WeekSummary))
+            <div class="ai-panel-body">
+                @if (aiLoading && aiSummary == null)
                 {
-                    <div class="ai-section">
-                        <div class="ai-section-label">Last 7 Days</div>
-                        <div class="ai-section-text">@aiSummary.WeekSummary</div>
+                    <div class="d-flex align-items-center p-2">
+                        <div class="spinner-border spinner-border-sm me-2" role="status" style="width: 1rem; height: 1rem;"></div>
+                        <span style="color: var(--text-muted); font-size: 0.85rem;">Generating AI summary...</span>
                     </div>
                 }
-                @if (!string.IsNullOrEmpty(aiSummary.MonthSummary))
+                else if (aiSummary != null && !string.IsNullOrEmpty(aiSummary.WeekSummary))
                 {
-                    <div class="ai-section">
-                        <div class="ai-section-label">Last 30 Days</div>
-                        <div class="ai-section-text">@aiSummary.MonthSummary</div>
-                    </div>
-                }
-                @if (!string.IsNullOrEmpty(aiSummary.YearSummary))
-                {
-                    <div class="ai-section">
-                        <div class="ai-section-label">Last 12 Months</div>
-                        <div class="ai-section-text">@aiSummary.YearSummary</div>
-                    </div>
-                }
-                @if (!string.IsNullOrEmpty(aiSummary.Suggestions))
-                {
-                    <div class="ai-section ai-suggestions">
-                        <div class="ai-section-label">Suggestions</div>
-                        <div class="ai-section-text">@aiSummary.Suggestions</div>
-                    </div>
+                    @if (!string.IsNullOrEmpty(aiSummary.WeekSummary))
+                    {
+                        <div class="ai-section">
+                            <div class="ai-section-label">Last 7 Days</div>
+                            <div class="ai-section-text">@aiSummary.WeekSummary</div>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(aiSummary.MonthSummary))
+                    {
+                        <div class="ai-section">
+                            <div class="ai-section-label">Last 30 Days</div>
+                            <div class="ai-section-text">@aiSummary.MonthSummary</div>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(aiSummary.YearSummary))
+                    {
+                        <div class="ai-section">
+                            <div class="ai-section-label">Last 12 Months</div>
+                            <div class="ai-section-text">@aiSummary.YearSummary</div>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(aiSummary.Suggestions))
+                    {
+                        <div class="ai-section ai-suggestions">
+                            <div class="ai-section-label">Suggestions</div>
+                            <div class="ai-section-text">@aiSummary.Suggestions</div>
+                        </div>
+                    }
                 }
             </div>
         }
@@ -321,6 +365,7 @@ else
     // AI Summary
     private AiSummaryDto? aiSummary;
     private bool aiLoading;
+    private bool aiExpanded;
 
     // Period summary
     private PeriodSummaryDto? periodSummary;
@@ -332,12 +377,27 @@ else
     private List<HeatPumpSnapshotDto> trendSnapshots = [];
     private List<RefPoint> cop3RefLine = [];
 
+    // Chart toggles
+    private bool showCop = true;
+    private bool showPowerIn;
+    private bool showHeatOut;
+    private bool showOutdoor;
+
     // Auto-refresh timer
     private System.Threading.Timer? _refreshTimer;
 
-    // COP parsing (live)
+    // Parsed live values
     private double? _parsedCop;
+    private double? _parsedPowerInput;
+    private double? _parsedHeatOutput;
+
     private string CopDisplay => _parsedCop.HasValue ? _parsedCop.Value.ToString("F2") : "—";
+    private string PowerInputDisplay => _parsedPowerInput.HasValue ? _parsedPowerInput.Value.ToString("F2") : "—";
+    private string HeatOutputDisplay => _parsedHeatOutput.HasValue ? _parsedHeatOutput.Value.ToString("F2") : "—";
+
+    private double PowerGaugeMax => Math.Max(8, Math.Ceiling((_parsedPowerInput ?? 4) * 1.5));
+    private double HeatGaugeMax => Math.Max(16, Math.Ceiling((_parsedHeatOutput ?? 8) * 1.5));
+
     private string CopColorClass => _parsedCop switch
     {
         >= 3.5 => "cop-green",
@@ -346,7 +406,6 @@ else
         _ => ""
     };
 
-    // Period COP color
     private string PeriodCopColorClass => periodSummary?.AvgCop switch
     {
         >= 3.5 => "cop-green",
@@ -366,15 +425,15 @@ else
 
     private string TrendAxisFormat => selectedPeriodDays <= 1 ? "{0:HH:mm}" : selectedPeriodDays <= 7 ? "{0:ddd HH:mm}" : "{0:MMM dd}";
 
-    private string SnapshotHealthBadge
+    private string SnapshotHealthDot
     {
         get
         {
-            if (latestSnapshot?.HasData != true) return "bg-warning text-dark";
+            if (latestSnapshot?.HasData != true) return "status-dot-warning";
             var mins = latestSnapshot.MinutesAgo ?? double.MaxValue;
-            if (mins < 20) return "bg-success";
-            if (mins < 60) return "bg-warning text-dark";
-            return "bg-danger";
+            if (mins < 20) return "status-dot-success";
+            if (mins < 60) return "status-dot-warning";
+            return "status-dot-danger";
         }
     }
 
@@ -456,9 +515,8 @@ else
 
             summary = summaryTask.Result;
             latestSnapshot = latestTask.Result;
-            ParseCop();
+            ParseLiveValues();
 
-            // Load period data and AI summary in parallel (don't block main dashboard)
             _ = LoadPeriodDataAsync();
             _ = LoadAiSummaryAsync();
         }
@@ -487,13 +545,11 @@ else
             var snapshotsTask = Api.GetSnapshotsAsync(deviceId, from, to);
             await Task.WhenAll(periodTask, snapshotsTask);
 
-            // Discard results if a newer request was started while we were loading
             if (thisVersion != _periodLoadVersion) return;
 
             periodSummary = periodTask.Result;
             var allSnapshots = snapshotsTask.Result?.Snapshots?.OrderBy(s => s.SnapshotTakenAt).ToList() ?? [];
 
-            // Downsample for long periods to keep chart responsive
             trendSnapshots = selectedPeriodDays > 7 ? DownsampleSnapshots(allSnapshots, maxPoints: 500) : allSnapshots;
             BuildCop3RefLine();
         }
@@ -529,20 +585,24 @@ else
         {
             summary = await Api.GetSummaryAsync(deviceId);
             latestSnapshot = await Api.GetLatestSnapshotAsync(deviceId);
-            ParseCop();
+            ParseLiveValues();
         }
         catch { }
     }
 
-    private void ParseCop()
+    private void ParseLiveValues()
     {
-        _parsedCop = null;
-        if (summary?.LivePerformance?.CoefficientOfPerformance != null
-            && double.TryParse(summary.LivePerformance.CoefficientOfPerformance, System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out var cop))
-        {
-            _parsedCop = cop;
-        }
+        _parsedCop = TryParseValue(summary?.LivePerformance?.CoefficientOfPerformance);
+        _parsedPowerInput = TryParseValue(summary?.LivePerformance?.PowerInput?.Value);
+        _parsedHeatOutput = TryParseValue(summary?.LivePerformance?.HeatOutput?.Value);
+    }
+
+    private static double? TryParseValue(string? value)
+    {
+        if (value != null && double.TryParse(value, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var result))
+            return result;
+        return null;
     }
 
     private void BuildCop3RefLine()
@@ -575,7 +635,7 @@ else
     }
 
     private static string FmtDec(double? v) => v.HasValue ? v.Value.ToString("F2") : "—";
-    private static string FmtTemp(double? v) => v.HasValue ? $"{v.Value:F1} °C" : "—";
+    private static string FmtTemp(double? v) => v.HasValue ? $"{v.Value:F1}°" : "—";
     private static string FmtPct(double? v) => v.HasValue ? $"{v.Value:F1}%" : "—";
     private static string FmtKwh(double? v) => v.HasValue ? $"{v.Value:F1}" : "—";
 
