@@ -100,7 +100,8 @@ public class HeatPumpAiService
         sb.AppendLine("You are an expert heat pump analyst. Analyse the following heat pump performance data and provide a concise, helpful summary.");
         sb.AppendLine("The user is a UK homeowner monitoring their Octopus Energy Cosy heat pump.");
         sb.AppendLine("A COP (Coefficient of Performance) above 3.0 is good, above 3.5 is excellent, below 2.5 is poor.");
-        sb.AppendLine("Weather compensation (WC) adjusts flow temperature based on outdoor conditions — lower flow temps = higher efficiency.");
+        sb.AppendLine("Flow temp mode is either 'WC Weather Compensation' (flow temp varies with outdoor conditions — lower flow = higher efficiency) or 'Fixed Flow' (constant setpoint).");
+        sb.AppendLine("If flow temp mode data is absent for a period, that data was unavailable from the sensor and should not affect the analysis.");
         sb.AppendLine();
         sb.AppendLine("=== LAST 7 DAYS ===");
         AppendStats(sb, weekStats);
@@ -162,9 +163,9 @@ public class HeatPumpAiService
             AvgRoomTemp = withRoom.Count > 0 ? (double)withRoom.Average(s => s.RoomTemperatureCelsius!.Value) : null,
             AvgSetpoint = withSetpoint.Count > 0 ? (double)withSetpoint.Average(s => s.HeatingZoneSetpointCelsius!.Value) : null,
             DutyCyclePercent = withDemand.Count > 0 ? withDemand.Count(s => s.HeatingZoneHeatDemand == true) * 100.0 / withDemand.Count : null,
-            WeatherCompEnabled = snapshots.LastOrDefault()?.WeatherCompensationEnabled,
-            WcMin = snapshots.LastOrDefault()?.WeatherCompensationMinCelsius.HasValue == true ? (double)snapshots.Last().WeatherCompensationMinCelsius!.Value : null,
-            WcMax = snapshots.LastOrDefault()?.WeatherCompensationMaxCelsius.HasValue == true ? (double)snapshots.Last().WeatherCompensationMaxCelsius!.Value : null,
+            FlowTempMode = snapshots.MaxBy(s => s.SnapshotTakenAt)?.FlowTempMode,
+            WcMin = snapshots.MaxBy(s => s.SnapshotTakenAt)?.WeatherCompensationMinCelsius is { } wcMin ? (double)wcMin : null,
+            WcMax = snapshots.MaxBy(s => s.SnapshotTakenAt)?.WeatherCompensationMaxCelsius is { } wcMax ? (double)wcMax : null,
         };
     }
 
@@ -180,12 +181,26 @@ public class HeatPumpAiService
         if (stats.AvgFlowTemp.HasValue) sb.AppendLine($"Avg flow temp: {stats.AvgFlowTemp:F1}°C");
         if (stats.AvgRoomTemp.HasValue && stats.AvgSetpoint.HasValue) sb.AppendLine($"Room temp: avg {stats.AvgRoomTemp:F1}°C vs setpoint {stats.AvgSetpoint:F1}°C");
         if (stats.DutyCyclePercent.HasValue) sb.AppendLine($"Heating duty cycle: {stats.DutyCyclePercent:F1}%");
-        if (stats.WeatherCompEnabled.HasValue)
+        if (stats.FlowTempMode != null)
         {
-            sb.Append($"Weather compensation: {(stats.WeatherCompEnabled.Value ? "enabled" : "disabled")}");
-            if (stats.WcMin.HasValue && stats.WcMax.HasValue) sb.Append($" (range {stats.WcMin:F0}–{stats.WcMax:F0}°C)");
+            if (stats.FlowTempMode == Shared.Models.FlowTempMode.WeatherCompensation)
+            {
+                sb.Append("Flow temp mode: WC Weather Compensation");
+                if (stats.WcMin.HasValue && stats.WcMax.HasValue) sb.Append($" (curve {stats.WcMin:F0}–{stats.WcMax:F0}°C)");
+            }
+            else if (stats.FlowTempMode == Shared.Models.FlowTempMode.FixedFlow)
+            {
+                sb.Append("Flow temp mode: Fixed Flow");
+                if (stats.AvgFlowTemp.HasValue) sb.Append($" ({stats.AvgFlowTemp:F1}°C setpoint)");
+            }
+            else
+            {
+                sb.Append($"Flow temp mode: unrecognized ({stats.FlowTempMode})");
+            }
             sb.AppendLine();
         }
+        else
+            sb.AppendLine("Flow temp mode: not available for this period");
     }
 
     private static AiSummaryDto ParseResponse(string response)
@@ -241,7 +256,7 @@ public class HeatPumpAiService
         public double? AvgRoomTemp { get; set; }
         public double? AvgSetpoint { get; set; }
         public double? DutyCyclePercent { get; set; }
-        public bool? WeatherCompEnabled { get; set; }
+        public string? FlowTempMode { get; set; }
         public double? WcMin { get; set; }
         public double? WcMax { get; set; }
     }

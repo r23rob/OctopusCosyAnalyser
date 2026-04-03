@@ -381,7 +381,8 @@ public class AiAnalysisService
     private static string BuildCsv(List<DailyAggregateDto> aggregates)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Date,Snapshots,AvgCOP_Heating,AvgCOP_HotWater,AvgCOP_SpaceHeatingOnly,ElecKwh,HeatKwh,AvgOutdoorC,MinOutdoorC,MaxOutdoorC,FixedFlowSetpointC,AvgRoomC,AvgSetpointC,HeatingDuty%,HotWaterDuty%,WC_Enabled,WC_MinC,WC_MaxC,FlowTempAllowableMinC,FlowTempAllowableMaxC,StateTransitions,CostPence,UsageKwh,AvgUnitRateP,CostPerKwhHeatP,HW_RunCount,HW_TotalMins,AvgHW_SetpointC");
+        sb.AppendLine("Date,Snapshots,AvgCOP_Heating,AvgCOP_HotWater,AvgCOP_SpaceHeatingOnly,ElecKwh,HeatKwh,AvgOutdoorC,MinOutdoorC,MaxOutdoorC,FixedFlowSetpointC,AvgRoomC,AvgSetpointC,HeatingDuty%,HotWaterDuty%,FlowTempMode,WC_MinC,WC_MaxC,FlowTempAllowableMinC,FlowTempAllowableMaxC,StateTransitions,CostPence,UsageKwh,AvgUnitRateP,CostPerKwhHeatP,HW_RunCount,HW_TotalMins,AvgHW_SetpointC");
+        // FlowTempMode values: 'WeatherCompensation' (WC curve active, WC_MinC/WC_MaxC populated), 'FixedFlow' (fixed setpoint, FixedFlowSetpointC populated), empty = data not available for that day
 
         foreach (var a in aggregates)
         {
@@ -401,7 +402,7 @@ public class AiAnalysisService
                 Fmt(a.AvgSetpoint),
                 a.HeatingDutyCyclePercent.ToString("F1", CultureInfo.InvariantCulture),
                 a.HotWaterDutyCyclePercent.ToString("F1", CultureInfo.InvariantCulture),
-                a.WeatherCompEnabled.HasValue ? (a.WeatherCompEnabled.Value ? "true" : "false") : "",
+                a.FlowTempMode ?? "",
                 Fmt(a.WeatherCompMin),
                 Fmt(a.WeatherCompMax),
                 Fmt(a.FlowTempAllowableMin),
