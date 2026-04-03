@@ -28,6 +28,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ── React frontend type-check + build ────────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: octopus-cosy-web/package-lock.json
+
+      - name: Install React frontend dependencies
+        run: npm ci
+        working-directory: octopus-cosy-web
+
+      - name: Build React frontend (type-check + bundle)
+        run: npm run build
+        working-directory: octopus-cosy-web
+
       # QEMU lets the builder emulate ARM on the GitHub-hosted x86 runner
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -68,7 +84,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # ── Web frontend ─────────────────────────────────────────────────────
+      # ── Web frontend (React + nginx) ─────────────────────────────────────
 
       - name: Extract metadata for Web frontend image
         id: meta-web
@@ -83,8 +99,8 @@ jobs:
       - name: Build and push Web frontend image
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ./OctopusCosyAnalyser.Web/Dockerfile
+          context: ./octopus-cosy-web
+          file: ./octopus-cosy-web/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta-web.outputs.tags }}
