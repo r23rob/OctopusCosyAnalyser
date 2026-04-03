@@ -247,15 +247,28 @@ public static class HeatPumpEndpoints
             var safeSkip = Math.Max(skip ?? 0, 0);
             var actualTake = Math.Clamp(take ?? 10000, 1, 50000);
 
-            var readings = await db.ConsumptionReadings
+            var query = db.ConsumptionReadings
                 .AsNoTracking()
-                .Where(r => r.DeviceId == deviceId && r.ReadAt >= from && r.ReadAt <= to)
+                .Where(r => r.DeviceId == deviceId && r.ReadAt >= from && r.ReadAt <= to);
+
+            var totalCount = await query.CountAsync();
+
+            var readings = await query
                 .OrderBy(r => r.ReadAt)
                 .Skip(safeSkip)
                 .Take(actualTake)
                 .ToListAsync();
 
-            return Results.Ok(readings);
+            return Results.Ok(new
+            {
+                deviceId,
+                from,
+                to,
+                totalCount,
+                count = readings.Count,
+                hasMore = safeSkip + readings.Count < totalCount,
+                readings
+            });
         }).WithName("GetConsumption");
 
         // Get devices
@@ -417,9 +430,13 @@ public static class HeatPumpEndpoints
             var safeSkip = Math.Max(skip ?? 0, 0);
             var actualTake = Math.Clamp(take ?? 10000, 1, 50000);
 
-            var snapshots = await db.HeatPumpSnapshots
+            var query = db.HeatPumpSnapshots
                 .AsNoTracking()
-                .Where(s => s.DeviceId == deviceId && s.SnapshotTakenAt >= from && s.SnapshotTakenAt <= to)
+                .Where(s => s.DeviceId == deviceId && s.SnapshotTakenAt >= from && s.SnapshotTakenAt <= to);
+
+            var totalCount = await query.CountAsync();
+
+            var snapshots = await query
                 .OrderBy(s => s.SnapshotTakenAt)
                 .Skip(safeSkip)
                 .Take(actualTake)
@@ -430,7 +447,9 @@ public static class HeatPumpEndpoints
                 deviceId,
                 from,
                 to,
+                totalCount,
                 count = snapshots.Count,
+                hasMore = safeSkip + snapshots.Count < totalCount,
                 snapshots
             });
         }).WithName("GetHeatPumpSnapshots");
@@ -528,11 +547,17 @@ public static class HeatPumpEndpoints
             var fromUtc = DateTime.SpecifyKind(from.Value, DateTimeKind.Utc);
             var toUtc = DateTime.SpecifyKind(to.Value, DateTimeKind.Utc);
 
-            var records = await db.HeatPumpTimeSeriesRecords
+            const int maxRecords = 50000;
+
+            var query = db.HeatPumpTimeSeriesRecords
                 .AsNoTracking()
-                .Where(r => r.DeviceId == deviceId && r.StartAt >= fromUtc && r.StartAt <= toUtc)
+                .Where(r => r.DeviceId == deviceId && r.StartAt >= fromUtc && r.StartAt <= toUtc);
+
+            var totalCount = await query.CountAsync();
+
+            var records = await query
                 .OrderBy(r => r.StartAt)
-                .Take(50000)
+                .Take(maxRecords)
                 .ToListAsync();
 
             return Results.Ok(new
@@ -540,7 +565,9 @@ public static class HeatPumpEndpoints
                 deviceId,
                 from = fromUtc,
                 to = toUtc,
+                totalCount,
                 count = records.Count,
+                hasMore = totalCount > maxRecords,
                 records = records.Select(r => new
                 {
                     r.StartAt,
@@ -892,6 +919,12 @@ public static class HeatPumpEndpoints
         {
             from ??= DateTime.UtcNow.AddDays(-30);
             to ??= DateTime.UtcNow;
+
+            // Cap at 366 days to prevent loading unbounded data into memory.
+            // At 15-min intervals, 366 days = ~35,000 snapshots which is manageable.
+            var maxSpan = TimeSpan.FromDays(366);
+            if (to.Value - from.Value > maxSpan)
+                from = to.Value - maxSpan;
 
             var snapshots = await db.HeatPumpSnapshots
                 .AsNoTracking()

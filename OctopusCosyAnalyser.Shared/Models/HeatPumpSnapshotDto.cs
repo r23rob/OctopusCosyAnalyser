@@ -80,6 +80,8 @@ public sealed class SnapshotsResponseDto
     public string DeviceId { get; set; } = string.Empty;
     public DateTime From { get; set; }
     public DateTime To { get; set; }
+    public int TotalCount { get; set; }
     public int Count { get; set; }
+    public bool HasMore { get; set; }
     public List<HeatPumpSnapshotDto> Snapshots { get; set; } = [];
 }

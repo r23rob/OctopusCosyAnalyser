@@ -193,23 +193,44 @@ public class OctopusEnergyClient
 
     /// <summary>
     /// Gets historical half-hourly consumption data via REST API (Basic auth, not GraphQL).
+    /// Follows pagination automatically to retrieve all results across all pages.
     /// </summary>
     public async Task<JsonDocument> GetConsumptionHistoryAsync(string apiKey, string mpan, string serialNumber, DateTime from, DateTime to)
     {
         var fromStr = from.ToString("yyyy-MM-ddTHH:mm:ssZ");
         var toStr = to.ToString("yyyy-MM-ddTHH:mm:ssZ");
 
-        var url = $"https://api.octopus.energy/v1/electricity-meter-points/{mpan}/meters/{serialNumber}/consumption/?period_from={fromStr}&period_to={toStr}&page_size=25000";
-
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Basic",
+        var allResults = new List<JsonElement>();
+        string? url = $"https://api.octopus.energy/v1/electricity-meter-points/{mpan}/meters/{serialNumber}/consumption/?period_from={fromStr}&period_to={toStr}&page_size=25000";
+        var authHeader = new AuthenticationHeaderValue("Basic",
             Convert.ToBase64String(Encoding.ASCII.GetBytes($"{apiKey}:")));
 
-        using var response = await _httpClient.SendAsync(request);
-        response.EnsureSuccessStatusCode();
+        while (url is not null)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = authHeader;
 
-        var result = await response.Content.ReadAsStringAsync();
-        return JsonDocument.Parse(result);
+            using var response = await _httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+
+            var body = await response.Content.ReadAsStringAsync();
+            using var page = JsonDocument.Parse(body);
+
+            if (page.RootElement.TryGetProperty("results", out var results))
+            {
+                foreach (var item in results.EnumerateArray())
+                    allResults.Add(item.Clone());
+            }
+
+            // Follow the "next" URL for additional pages
+            url = page.RootElement.TryGetProperty("next", out var next) && next.ValueKind == JsonValueKind.String
+                ? next.GetString()
+                : null;
+        }
+
+        // Reconstruct a response matching the original single-page shape
+        var combined = JsonSerializer.Serialize(new { count = allResults.Count, next = (string?)null, previous = (string?)null, results = allResults });
+        return JsonDocument.Parse(combined);
     }
 
     // ── Heat Pump – Live Status (Basic) ──────────────────────────────

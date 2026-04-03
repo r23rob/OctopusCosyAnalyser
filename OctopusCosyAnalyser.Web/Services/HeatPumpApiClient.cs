@@ -216,12 +216,13 @@ public class HeatPumpApiClient
 
     // ── Consumption (smart meter readings) ───────────────────────────
 
-    public async Task<ConsumptionReadingDto[]> GetConsumptionAsync(string deviceId, DateTime? from = null, DateTime? to = null)
+    public async Task<ConsumptionResponseDto> GetConsumptionAsync(string deviceId, DateTime? from = null, DateTime? to = null)
     {
         var fromStr = (from ?? DateTime.UtcNow.AddDays(-7)).ToString("o");
         var toStr = (to ?? DateTime.UtcNow).ToString("o");
-        return await _http.GetFromJsonAsync<ConsumptionReadingDto[]>(
-            $"/api/heatpump/consumption/{deviceId}?from={Uri.EscapeDataString(fromStr)}&to={Uri.EscapeDataString(toStr)}") ?? [];
+        return await _http.GetFromJsonAsync<ConsumptionResponseDto>(
+            $"/api/heatpump/consumption/{deviceId}?from={Uri.EscapeDataString(fromStr)}&to={Uri.EscapeDataString(toStr)}")
+            ?? new ConsumptionResponseDto { DeviceId = deviceId };
     }
 
     public async Task SyncConsumptionAsync(string deviceId, DateTime? from = null, DateTime? to = null)

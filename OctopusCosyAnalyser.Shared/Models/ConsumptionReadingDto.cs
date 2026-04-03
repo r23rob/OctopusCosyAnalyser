@@ -14,3 +14,17 @@ public sealed class ConsumptionReadingDto
     public DateTime CreatedAt { get; set; }
 }
 
+/// <summary>
+/// Paginated response wrapper for consumption readings.
+/// </summary>
+public sealed class ConsumptionResponseDto
+{
+    public string DeviceId { get; set; } = string.Empty;
+    public DateTime From { get; set; }
+    public DateTime To { get; set; }
+    public int TotalCount { get; set; }
+    public int Count { get; set; }
+    public bool HasMore { get; set; }
+    public List<ConsumptionReadingDto> Readings { get; set; } = [];
+}
+
