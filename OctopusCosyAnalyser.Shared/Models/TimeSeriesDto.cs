@@ -2,7 +2,7 @@ namespace OctopusCosyAnalyser.Shared.Models;
 
 /// <summary>
 /// A single point in a time-series performance chart.
-/// Parsed from octoHeatPumpTimeSeriesPerformance array items.
+/// Parsed from heatPumpTimeSeriesPerformance array items.
 /// </summary>
 public sealed class TimeSeriesPointDto
 {

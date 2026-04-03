@@ -90,27 +90,36 @@ public class HeatPumpSnapshotWorker : BackgroundService
                 CreatedAt = DateTime.UtcNow
             };
 
-            // Extract live performance
-            if (root.TryGetProperty("octoHeatPumpLivePerformance", out var live))
+            // Extract live performance — new API returns a LIVE time series array; take the most recent bucket
+            if (root.TryGetProperty("heatPumpTimeSeriesPerformance", out var liveArray)
+                && liveArray.ValueKind == JsonValueKind.Array
+                && liveArray.GetArrayLength() > 0)
             {
-                if (decimal.TryParse(live.GetProperty("coefficientOfPerformance").GetString() ?? "", out var cop))
-                    snapshot.CoefficientOfPerformance = cop;
+                var live = liveArray.EnumerateArray().Last();
+
+                // COP is not returned directly — compute from energyOutput / energyInput
+                if (live.TryGetProperty("energyInput", out var energyIn) && energyIn.TryGetProperty("value", out var eiVal)
+                    && live.TryGetProperty("energyOutput", out var energyOut) && energyOut.TryGetProperty("value", out var eoVal))
+                {
+                    if (decimal.TryParse(eiVal.GetString() ?? "", out var eiDec)
+                        && decimal.TryParse(eoVal.GetString() ?? "", out var eoDec)
+                        && eiDec > 0)
+                        snapshot.CoefficientOfPerformance = eoDec / eiDec;
+
+                    if (decimal.TryParse(eoVal.GetString() ?? "", out var heatDec))
+                        snapshot.HeatOutputKilowatt = heatDec;
+
+                    if (decimal.TryParse(eiVal.GetString() ?? "", out var powerDec))
+                        snapshot.PowerInputKilowatt = powerDec;
+                }
 
                 if (live.TryGetProperty("outdoorTemperature", out var outdoorTemp) && outdoorTemp.TryGetProperty("value", out var tempVal))
                     if (decimal.TryParse(tempVal.GetString() ?? "", out var tempDec))
                         snapshot.OutdoorTemperatureCelsius = tempDec;
-
-                if (live.TryGetProperty("heatOutput", out var heatOut) && heatOut.TryGetProperty("value", out var heatVal))
-                    if (decimal.TryParse(heatVal.GetString() ?? "", out var heatDec))
-                        snapshot.HeatOutputKilowatt = heatDec;
-
-                if (live.TryGetProperty("powerInput", out var powerIn) && powerIn.TryGetProperty("value", out var powerVal))
-                    if (decimal.TryParse(powerVal.GetString() ?? "", out var powerDec))
-                        snapshot.PowerInputKilowatt = powerDec;
             }
 
             // Extract lifetime performance
-            if (root.TryGetProperty("octoHeatPumpLifetimePerformance", out var lifetime))
+            if (root.TryGetProperty("heatPumpLifetimePerformance", out var lifetime))
             {
                 if (decimal.TryParse(lifetime.GetProperty("seasonalCoefficientOfPerformance").GetString() ?? "", out var scop))
                     snapshot.SeasonalCoefficientOfPerformance = scop;
@@ -125,7 +134,7 @@ public class HeatPumpSnapshotWorker : BackgroundService
             }
 
             // Extract controller status
-            if (root.TryGetProperty("octoHeatPumpControllerStatus", out var status))
+            if (root.TryGetProperty("heatPumpControllerStatus", out var status))
             {
                 // Get primary zone telemetry
                 if (status.TryGetProperty("zones", out var zones) && zones.GetArrayLength() > 0)
@@ -174,7 +183,7 @@ public class HeatPumpSnapshotWorker : BackgroundService
             }
 
             // Extract controller configuration
-            if (root.TryGetProperty("octoHeatPumpControllerConfiguration", out var config))
+            if (root.TryGetProperty("heatPumpControllerConfiguration", out var config))
             {
                 if (config.TryGetProperty("controller", out var controller))
                 {
@@ -263,7 +272,7 @@ public class HeatPumpSnapshotWorker : BackgroundService
                 }
 
                 // Find zones from config, look them up in status zones
-                if (root.TryGetProperty("octoHeatPumpControllerStatus", out var statusForZone)
+                if (root.TryGetProperty("heatPumpControllerStatus", out var statusForZone)
                     && config.TryGetProperty("zones", out var configZones)
                     && statusForZone.TryGetProperty("zones", out var statusZones)
                     && configZones.ValueKind == JsonValueKind.Array
@@ -350,7 +359,7 @@ public class HeatPumpSnapshotWorker : BackgroundService
             }
 
             // Serialize all sensor readings to JSONB
-            if (root.TryGetProperty("octoHeatPumpControllerStatus", out var statusForSensors)
+            if (root.TryGetProperty("heatPumpControllerStatus", out var statusForSensors)
                 && statusForSensors.TryGetProperty("sensors", out var allSensorsForJson)
                 && allSensorsForJson.ValueKind == JsonValueKind.Array)
             {

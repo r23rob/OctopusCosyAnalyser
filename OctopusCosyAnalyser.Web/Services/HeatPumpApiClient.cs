@@ -98,7 +98,7 @@ public class HeatPumpApiClient
         var doc = JsonDocument.Parse(raw);
         var root = doc.RootElement.GetProperty("data");
 
-        if (root.TryGetProperty("octoHeatPumpTimeSeriesPerformance", out var seriesEl)
+        if (root.TryGetProperty("heatPumpTimeSeriesPerformance", out var seriesEl)
             && seriesEl.ValueKind == JsonValueKind.Array)
         {
             var points = new List<TimeSeriesChartPoint>();
@@ -122,7 +122,7 @@ public class HeatPumpApiClient
             }
             return new TimeSeriesResult { Points = points, Status = TimeSeriesStatus.Ok };
         }
-        else if (root.TryGetProperty("octoHeatPumpTimeSeriesPerformance", out var nullEl)
+        else if (root.TryGetProperty("heatPumpTimeSeriesPerformance", out var nullEl)
                  && nullEl.ValueKind == JsonValueKind.Null)
         {
             return new TimeSeriesResult { Points = [], Status = TimeSeriesStatus.NoData };
