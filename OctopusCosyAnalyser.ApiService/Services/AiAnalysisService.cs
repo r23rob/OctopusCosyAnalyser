@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Endpoints;
+using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.Shared.Models;
 
 namespace OctopusCosyAnalyser.ApiService.Services;
@@ -237,6 +238,19 @@ public class AiAnalysisService
             var monthAggs = HeatPumpEndpoints.ComputeDailyAggregates(monthSnapshots);
             var yearAggs = HeatPumpEndpoints.ComputeDailyAggregates(snapshots);
 
+            // Merge stored cost data into aggregates
+            var costRecords = await db.DailyCostRecords
+                .AsNoTracking()
+                .Where(r => r.DeviceId == deviceId && r.Date >= DateOnly.FromDateTime(now.AddDays(-365)))
+                .ToDictionaryAsync(r => r.Date);
+
+            if (costRecords.Count > 0)
+            {
+                MergeCostData(weekAggs, costRecords);
+                MergeCostData(monthAggs, costRecords);
+                MergeCostData(yearAggs, costRecords);
+            }
+
             var prompt = new StringBuilder();
             prompt.AppendLine("Provide a BRIEF dashboard summary of this heat pump's performance across three time periods.");
             prompt.AppendLine("Each section should be 2-3 sentences max. Be specific with numbers. Use plain English.");
@@ -407,4 +421,20 @@ public class AiAnalysisService
     }
 
     private static string Fmt(double? value) => value.HasValue ? value.Value.ToString("F2", CultureInfo.InvariantCulture) : "";
+
+    private static void MergeCostData(List<DailyAggregateDto> aggregates, Dictionary<DateOnly, DailyCostRecord> costRecords)
+    {
+        foreach (var agg in aggregates)
+        {
+            if (costRecords.TryGetValue(agg.Date, out var cost))
+            {
+                agg.DailyCostPence = cost.TotalCostPence;
+                agg.DailyUsageKwh = cost.TotalUsageKwh;
+                agg.AvgUnitRatePence = cost.AvgUnitRatePence;
+                agg.CostPerKwhHeatPence = agg.TotalHeatOutputKwh > 0
+                    ? cost.TotalCostPence / agg.TotalHeatOutputKwh
+                    : null;
+            }
+        }
+    }
 }
