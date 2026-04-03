@@ -24,9 +24,19 @@ else
                 <input @bind="accountNumber" class="form-control" placeholder="A-1234-5678" />
             </div>
             <div class="mb-3">
-                <label class="form-label">API Key</label>
+                <label class="form-label">Email</label>
+                <input @bind="email" type="email" class="form-control" placeholder="your@email.com" />
+                <div class="form-text">The email address you use to log in to Octopus Energy.</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Password</label>
+                <input @bind="octopusPassword" type="password" class="form-control" />
+                <div class="form-text">Your Octopus Energy account password. Used for GraphQL API authentication.</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">API Key <span class="text-muted">(optional)</span></label>
                 <input @bind="apiKey" type="password" class="form-control" placeholder="sk_live_..." />
-                <div class="form-text">Your Octopus Energy API key. Found at <a href="https://octopus.energy/dashboard/new/accounts/personal-details/api-access" target="_blank">octopus.energy/dashboard</a>.</div>
+                <div class="form-text">Only needed for smart meter consumption data. Found at <a href="https://octopus.energy/dashboard/new/accounts/personal-details/api-access" target="_blank">octopus.energy/dashboard</a>.</div>
             </div>
 
             <h5 class="card-title mb-3 mt-4">AI Analysis</h5>
@@ -58,6 +68,8 @@ else
 
 @code {
     private string accountNumber = string.Empty;
+    private string email = string.Empty;
+    private string octopusPassword = string.Empty;
     private string apiKey = string.Empty;
     private string anthropicApiKey = string.Empty;
     private bool isLoading = true;
@@ -73,6 +85,8 @@ else
             if (current is not null)
             {
                 accountNumber = current.AccountNumber;
+                email = current.Email ?? string.Empty;
+                octopusPassword = current.OctopusPassword ?? string.Empty;
                 apiKey = current.ApiKey;
                 anthropicApiKey = current.AnthropicApiKey ?? string.Empty;
             }
@@ -89,9 +103,9 @@ else
 
     private async Task SaveSettings()
     {
-        if (string.IsNullOrWhiteSpace(accountNumber) || string.IsNullOrWhiteSpace(apiKey))
+        if (string.IsNullOrWhiteSpace(accountNumber) || string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(octopusPassword))
         {
-            statusMessage = "Account number and API key are required.";
+            statusMessage = "Account number, email, and password are required.";
             return;
         }
 
@@ -103,7 +117,9 @@ else
             var result = await Api.UpsertSettingsAsync(new AccountSettingsRequestDto
             {
                 AccountNumber = accountNumber.Trim(),
-                ApiKey = apiKey.Trim(),
+                Email = email.Trim(),
+                OctopusPassword = octopusPassword.Trim(),
+                ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim(),
                 AnthropicApiKey = string.IsNullOrWhiteSpace(anthropicApiKey) ? null : anthropicApiKey.Trim()
             });
 

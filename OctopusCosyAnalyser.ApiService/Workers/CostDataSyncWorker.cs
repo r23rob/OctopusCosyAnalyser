@@ -86,7 +86,7 @@ public class CostDataSyncWorker : BackgroundService
                 device.DeviceId, daysToSync, !hasExisting);
 
             var costData = await client.GetCostOfUsageAsync(
-                settings.ApiKey, device.AccountNumber, from, to,
+                settings.Email!, settings.OctopusPassword!, device.AccountNumber, from, to,
                 propertyId: device.PropertyId, mpxn: device.Mpan);
 
             // Check for GraphQL errors

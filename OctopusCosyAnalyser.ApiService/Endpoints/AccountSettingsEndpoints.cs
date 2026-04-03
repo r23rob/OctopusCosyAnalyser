@@ -34,8 +34,11 @@ public static class AccountSettingsEndpoints
             if (string.IsNullOrWhiteSpace(request.AccountNumber))
                 return Results.BadRequest("Account number is required");
 
-            if (string.IsNullOrWhiteSpace(request.ApiKey))
-                return Results.BadRequest("API key is required");
+            if (string.IsNullOrWhiteSpace(request.Email))
+                return Results.BadRequest("Email is required");
+
+            if (string.IsNullOrWhiteSpace(request.OctopusPassword))
+                return Results.BadRequest("Octopus password is required");
 
             var settings = await db.OctopusAccountSettings
                 .FirstOrDefaultAsync(s => s.AccountNumber == request.AccountNumber);
@@ -45,7 +48,9 @@ public static class AccountSettingsEndpoints
                 settings = new OctopusAccountSettings
                 {
                     AccountNumber = request.AccountNumber.Trim(),
-                    ApiKey = request.ApiKey.Trim(),
+                    ApiKey = request.ApiKey?.Trim() ?? string.Empty,
+                    Email = request.Email.Trim(),
+                    OctopusPassword = request.OctopusPassword.Trim(),
                     AnthropicApiKey = request.AnthropicApiKey?.Trim(),
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
@@ -55,7 +60,9 @@ public static class AccountSettingsEndpoints
             }
             else
             {
-                settings.ApiKey = request.ApiKey.Trim();
+                settings.ApiKey = request.ApiKey?.Trim() ?? string.Empty;
+                settings.Email = request.Email.Trim();
+                settings.OctopusPassword = request.OctopusPassword.Trim();
                 settings.AnthropicApiKey = request.AnthropicApiKey?.Trim();
                 settings.UpdatedAt = DateTime.UtcNow;
             }
@@ -66,6 +73,6 @@ public static class AccountSettingsEndpoints
         }).WithName("UpsertAccountSettings");
     }
 
-    public sealed record AccountSettingsRequest(string AccountNumber, string ApiKey, string? AnthropicApiKey);
+    public sealed record AccountSettingsRequest(string AccountNumber, string? ApiKey, string Email, string OctopusPassword, string? AnthropicApiKey);
 }
 
