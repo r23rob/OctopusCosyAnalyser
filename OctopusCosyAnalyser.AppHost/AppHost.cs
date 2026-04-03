@@ -19,7 +19,7 @@ builder.AddViteApp("webfrontend", "../octopus-cosy-web")
     .WithReference(apiService)
     .WaitFor(apiService)
     .WithEnvironment("VITE_API_TARGET", apiService.GetEndpoint("http"))
-    .WithHttpEndpoint(env: "VITE_PORT", port: 5173)
+    .WithHttpEndpoint(env: "VITE_PORT", port: 5173, name: "vite")
     .WithExternalHttpEndpoints()
     .PublishAsDockerFile();
 
