@@ -8,6 +8,8 @@ public sealed class AccountSettingsDto
     public int Id { get; set; }
     public string AccountNumber { get; set; } = string.Empty;
     public string ApiKey { get; set; } = string.Empty;
+    public string? Email { get; set; }
+    public string? OctopusPassword { get; set; }
     public string? AnthropicApiKey { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
@@ -19,7 +21,9 @@ public sealed class AccountSettingsDto
 public sealed class AccountSettingsRequestDto
 {
     public string AccountNumber { get; set; } = string.Empty;
-    public string ApiKey { get; set; } = string.Empty;
+    public string? ApiKey { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public string OctopusPassword { get; set; } = string.Empty;
     public string? AnthropicApiKey { get; set; }
 }
 

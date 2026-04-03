@@ -83,7 +83,7 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
             var existingSet = new HashSet<DateTime>(existing);
 
             var data = await client.GetHeatPumpTimeSeriesPerformanceAsync(
-                settings.ApiKey, device.AccountNumber, device.Euid!, from, to, "DAY");
+                settings.Email!, settings.OctopusPassword!, device.AccountNumber, device.Euid!, from, to, "DAY");
             var root = data.RootElement.GetProperty("data");
 
             var synced = 0;
