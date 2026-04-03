@@ -28,7 +28,7 @@ public class AiAnalysisService
 
         The CSV data is built from two sources:
         1. **Snapshots** — periodic readings (every ~15 min) capturing live COP, power input, heat output, room temp, setpoint, zone demand, weather compensation settings, flow temperature, and controller state.
-        2. **Synced hourly history** — energy input/output and outdoor temperature from the Octopus `octoHeatPumpTimeSeriesPerformance` API, covering up to 12 months. Weather compensation values (WC_MinC, WC_MaxC) on history-only days are correlated from the nearest snapshot within a 30-minute window.
+        2. **Synced hourly history** — energy input/output and outdoor temperature from the Octopus `heatPumpTimeSeriesPerformance` API, covering up to 12 months. Weather compensation values (WC_MinC, WC_MaxC) on history-only days are correlated from the nearest snapshot within a 30-minute window.
 
         Days with `SnapshotCount=0` have data from history records only — they will have energy totals and outdoor temperature but may lack duty cycle, room temperature, and zone demand data. Treat these days as having less granular data but still useful for energy trends and WC analysis.
 

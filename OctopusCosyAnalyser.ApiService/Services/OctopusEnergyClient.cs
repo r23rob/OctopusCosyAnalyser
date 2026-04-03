@@ -29,7 +29,7 @@ public class OctopusEnergyClient
     {
         _httpClient = httpClient;
         _logger = logger;
-        _httpClient.BaseAddress = new Uri("https://api.octopus.energy/v1/graphql/");
+        _httpClient.BaseAddress = new Uri("https://api.backend.octopus.energy/v1/graphql/");
     }
 
     // ── Authentication ───────────────────────────────────────────────
@@ -49,7 +49,7 @@ public class OctopusEnergyClient
         });
 
         var content = new StringContent(payload, Encoding.UTF8, "application/json");
-        var response = await _httpClient.PostAsync("", content);
+        var response = await _httpClient.PostAsync("https://api.octopus.energy/v1/graphql/", content);
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadAsStringAsync();
@@ -122,7 +122,7 @@ public class OctopusEnergyClient
 
         var query = """
         query GetEuids($accountNumber: String!) {
-          octoHeatPumpControllerEuids(accountNumber: $accountNumber)
+          heatPumpControllerEuids(accountNumber: $accountNumber)
         }
         """;
 
@@ -149,7 +149,7 @@ public class OctopusEnergyClient
 
     /// <summary>
     /// Gets viewer properties including heat pump device details and EUIDs.
-    /// NOTE: This queries the viewer/properties, not the octoHeatPumpControllerConfiguration API.
+    /// NOTE: This queries the viewer/properties, not the heatPumpControllerConfiguration API.
     /// </summary>
     public async Task<JsonDocument> GetViewerPropertiesWithDevicesAsync(string apiKey)
     {
@@ -302,17 +302,21 @@ public class OctopusEnergyClient
 
     /// <summary>
     /// PRIMARY QUERY — batches 4 GraphQL queries in one call:
-    ///   1. octoHeatPumpControllerStatus  — sensors (temp, humidity, connectivity), zone telemetry
-    ///   2. octoHeatPumpControllerConfiguration — controller state, heat pump details, flow temps, weather comp, zones
-    ///   3. octoHeatPumpLivePerformance — live COP, power input, heat output, outdoor temp
-    ///   4. octoHeatPumpLifetimePerformance — seasonal COP, lifetime energy totals
+    ///   1. heatPumpControllerStatus      — sensors (temp, humidity, connectivity), zone telemetry
+    ///   2. heatPumpControllerConfiguration — controller state, heat pump details, flow temps, weather comp, zones
+    ///   3. heatPumpTimeSeriesPerformance (LIVE) — recent energy in/out, outdoor temp (COP computed client-side)
+    ///   4. heatPumpLifetimePerformance   — seasonal COP, lifetime energy totals
     /// Used by /summary endpoint and the HeatPumpSnapshotWorker.
     /// </summary>
     public async Task<JsonDocument> GetHeatPumpStatusAndConfigAsync(string apiKey, string accountNumber, string euid)
     {
+        var now = DateTime.UtcNow;
+        var liveStartAt = now.AddMinutes(-30).ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+        var liveEndAt = now.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
+
         var query = """
-        query HeatPumpStatusAndConfig($accountNumber: String!, $euid: ID!) {
-          octoHeatPumpControllerStatus(accountNumber: $accountNumber, euid: $euid) {
+        query HeatPumpStatusAndConfig($accountNumber: String!, $euid: ID!, $liveStartAt: DateTime!, $liveEndAt: DateTime!) {
+          heatPumpControllerStatus(accountNumber: $accountNumber, euid: $euid) {
             sensors {
               code
               connectivity { online retrievedAt }
@@ -323,7 +327,7 @@ public class OctopusEnergyClient
               telemetry { setpointInCelsius mode relaySwitchedOn heatDemand retrievedAt }
             }
           }
-          octoHeatPumpControllerConfiguration(accountNumber: $accountNumber, euid: $euid) {
+          heatPumpControllerConfiguration(accountNumber: $accountNumber, euid: $euid) {
             controller { state heatPumpTimezone connected }
             heatPump {
               serialNumber model hardwareVersion maxWaterSetpoint minWaterSetpoint
@@ -348,14 +352,14 @@ public class OctopusEnergyClient
               }
             }
           }
-          octoHeatPumpLivePerformance(euid: $euid) {
-            coefficientOfPerformance
+          heatPumpTimeSeriesPerformance(accountNumber: $accountNumber, euid: $euid, startAt: $liveStartAt, endAt: $liveEndAt, performanceGrouping: LIVE) {
+            startAt
+            endAt
+            energyInput { value unit }
+            energyOutput { value unit }
             outdoorTemperature { value unit }
-            heatOutput { value unit }
-            powerInput { value unit }
-            readAt
           }
-          octoHeatPumpLifetimePerformance(euid: $euid) {
+          heatPumpLifetimePerformance(accountNumber: $accountNumber, euid: $euid) {
             seasonalCoefficientOfPerformance
             heatOutput { value unit }
             energyInput { value unit }
@@ -364,7 +368,7 @@ public class OctopusEnergyClient
         }
         """;
 
-        var variables = new { accountNumber, euid };
+        var variables = new { accountNumber, euid, liveStartAt, liveEndAt };
 
         return await ExecuteRawQueryAsync(apiKey, query, JsonSerializer.SerializeToElement(variables));
     }
@@ -376,18 +380,20 @@ public class OctopusEnergyClient
     /// Returns: coefficientOfPerformance, energyOutput, energyInput.
     /// NOTE: Does NOT have a performanceGrouping parameter.
     /// </summary>
-    public async Task<JsonDocument> GetHeatPumpTimeRangedPerformanceAsync(string apiKey, string euid, DateTime from, DateTime to)
+    public async Task<JsonDocument> GetHeatPumpTimeRangedPerformanceAsync(string apiKey, string accountNumber, string euid, DateTime from, DateTime to)
     {
         var fromStr = from.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
         var toStr = to.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
 
         var query = """
-        query OctoHeatPumpTimeRangedPerformance(
+        query HeatPumpTimeRangedPerformance(
+          $accountNumber: String!,
           $euid: ID!,
           $startAt: DateTime!,
           $endAt: DateTime!
         ) {
-          octoHeatPumpTimeRangedPerformance(
+          heatPumpTimeRangedPerformance(
+            accountNumber: $accountNumber,
             euid: $euid,
             startAt: $startAt,
             endAt: $endAt
@@ -401,6 +407,7 @@ public class OctopusEnergyClient
 
         var variables = new
         {
+            accountNumber,
             euid,
             startAt = fromStr,
             endAt = toStr
@@ -421,7 +428,7 @@ public class OctopusEnergyClient
     ///   MONTH → 1-day buckets     (e.g. 30 rows for a month)
     ///   YEAR  → 1-month buckets   (e.g. 12 rows for a year)
     /// </summary>
-    public async Task<JsonDocument> GetHeatPumpTimeSeriesPerformanceAsync(string apiKey, string euid, DateTime from, DateTime to, string? performanceGroupingOverride = null)
+    public async Task<JsonDocument> GetHeatPumpTimeSeriesPerformanceAsync(string apiKey, string accountNumber, string euid, DateTime from, DateTime to, string? performanceGroupingOverride = null)
     {
         var fromStr = from.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
         var toStr = to.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
@@ -446,13 +453,15 @@ public class OctopusEnergyClient
         }
 
         var query = """
-        query OctoHeatPumpTimeSeriesPerformance(
+        query HeatPumpTimeSeriesPerformance(
+          $accountNumber: String!,
           $euid: ID!,
           $startAt: DateTime!,
           $endAt: DateTime!,
           $performanceGrouping: PerformanceGrouping!
         ) {
-          octoHeatPumpTimeSeriesPerformance(
+          heatPumpTimeSeriesPerformance(
+            accountNumber: $accountNumber,
             euid: $euid,
             startAt: $startAt,
             endAt: $endAt,
@@ -469,6 +478,7 @@ public class OctopusEnergyClient
 
         var variables = new
         {
+            accountNumber,
             euid,
             startAt = fromStr,
             endAt = toStr,
@@ -488,7 +498,7 @@ public class OctopusEnergyClient
     {
         var query = """
         query GetControllersAtLocation($accountNumber: String!, $propertyId: Int!) {
-          octoHeatPumpControllersAtLocation(accountNumber: $accountNumber, propertyId: $propertyId)
+          heatPumpControllersAtLocation(accountNumber: $accountNumber, propertyId: $propertyId)
         }
         """;
 
@@ -1097,7 +1107,7 @@ public class OctopusEnergyClient
         var token = await GetAuthTokenAsync(apiKey);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "");
-        request.Headers.Authorization = new AuthenticationHeaderValue("JWT", token);
+        request.Headers.TryAddWithoutValidation("Authorization", token);
         request.Content = new StringContent(query, Encoding.UTF8, "application/json");
 
         using var response = await _httpClient.SendAsync(request);

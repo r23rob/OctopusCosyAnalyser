@@ -120,7 +120,7 @@ public static class HeatPumpEndpoints
                 {
                     var controllerEuids = await client.GetHeatPumpControllerEuidsAsync(settings.ApiKey, accountNumber);
                     if (controllerEuids.RootElement.TryGetProperty("data", out var controllerData)
-                        && controllerData.TryGetProperty("octoHeatPumpControllerEuids", out var euids)
+                        && controllerData.TryGetProperty("heatPumpControllerEuids", out var euids)
                         && euids.ValueKind == JsonValueKind.Array
                         && euids.GetArrayLength() > 0)
                     {
@@ -133,14 +133,14 @@ public static class HeatPumpEndpoints
                 }
             }
 
-            // Third fallback: try octoHeatPumpControllersAtLocation if we have a propertyId
+            // Third fallback: try heatPumpControllersAtLocation if we have a propertyId
             if (string.IsNullOrWhiteSpace(euid) && propertyId.HasValue)
             {
                 try
                 {
                     var controllersData = await client.GetHeatPumpControllersAtLocationAsync(settings.ApiKey, accountNumber, propertyId.Value);
                     if (controllersData.RootElement.TryGetProperty("data", out var locData)
-                        && locData.TryGetProperty("octoHeatPumpControllersAtLocation", out var controllers)
+                        && locData.TryGetProperty("heatPumpControllersAtLocation", out var controllers)
                         && controllers.ValueKind == JsonValueKind.Array
                         && controllers.GetArrayLength() > 0)
                     {
@@ -483,7 +483,7 @@ public static class HeatPumpEndpoints
             from ??= DateTime.UtcNow.AddDays(-7);
             to ??= DateTime.UtcNow;
 
-            var data = await client.GetHeatPumpTimeRangedPerformanceAsync(settings!.ApiKey, euid, from.Value, to.Value);
+            var data = await client.GetHeatPumpTimeRangedPerformanceAsync(settings!.ApiKey, accountNumber, euid, from.Value, to.Value);
             var root = data.RootElement.GetProperty("data");
             
             return Results.Ok(new
@@ -519,7 +519,7 @@ public static class HeatPumpEndpoints
             if (validationError is not null)
                 return Results.BadRequest(new { error = validationError });
 
-            var data = await client.GetHeatPumpTimeSeriesPerformanceAsync(settings!.ApiKey, euid, from.Value, to.Value, grouping);
+            var data = await client.GetHeatPumpTimeSeriesPerformanceAsync(settings!.ApiKey, accountNumber, euid, from.Value, to.Value, grouping);
             var root = data.RootElement.GetProperty("data");
             
             return Results.Ok(new
@@ -620,11 +620,11 @@ public static class HeatPumpEndpoints
                 try
                 {
                     var data = await client.GetHeatPumpTimeSeriesPerformanceAsync(
-                        settings!.ApiKey, device.Euid, chunkStart, chunkEnd, "MONTH");
+                        settings!.ApiKey, device.AccountNumber, device.Euid, chunkStart, chunkEnd, "MONTH");
                     var root = data.RootElement.GetProperty("data");
 
                     var chunkSynced = 0;
-                    if (root.TryGetProperty("octoHeatPumpTimeSeriesPerformance", out var series)
+                    if (root.TryGetProperty("heatPumpTimeSeriesPerformance", out var series)
                         && series.ValueKind == JsonValueKind.Array)
                     {
                         foreach (var item in series.EnumerateArray())
@@ -1053,10 +1053,10 @@ public static class HeatPumpEndpoints
                             try
                             {
                                 var tsData = await octopusClient.GetHeatPumpTimeSeriesPerformanceAsync(
-                                    settings.ApiKey, device.Euid, chunkStart, chunkEnd, "MONTH");
+                                    settings.ApiKey, device.AccountNumber, device.Euid, chunkStart, chunkEnd, "MONTH");
                                 var tsRoot = tsData.RootElement.GetProperty("data");
 
-                                if (tsRoot.TryGetProperty("octoHeatPumpTimeSeriesPerformance", out var tsSeries)
+                                if (tsRoot.TryGetProperty("heatPumpTimeSeriesPerformance", out var tsSeries)
                                     && tsSeries.ValueKind == JsonValueKind.Array)
                                 {
                                     foreach (var item in tsSeries.EnumerateArray())
@@ -1648,7 +1648,7 @@ public static class HeatPumpEndpoints
 
     private static HeatPumpControllerStatus? MapControllerStatus(JsonElement data)
     {
-        if (!data.TryGetProperty("octoHeatPumpControllerStatus", out var status))
+        if (!data.TryGetProperty("heatPumpControllerStatus", out var status))
             return null;
 
         var sensors = status.TryGetProperty("sensors", out var sensorsEl)
@@ -1709,7 +1709,7 @@ public static class HeatPumpEndpoints
 
     private static HeatPumpControllerConfiguration? MapControllerConfiguration(JsonElement data)
     {
-        if (!data.TryGetProperty("octoHeatPumpControllerConfiguration", out var configuration))
+        if (!data.TryGetProperty("heatPumpControllerConfiguration", out var configuration))
             return null;
 
         var controller = configuration.TryGetProperty("controller", out var controllerEl)
@@ -1817,22 +1817,37 @@ public static class HeatPumpEndpoints
 
     private static HeatPumpLivePerformance? MapLivePerformance(JsonElement data)
     {
-        if (!data.TryGetProperty("octoHeatPumpLivePerformance", out var live))
+        if (!data.TryGetProperty("heatPumpTimeSeriesPerformance", out var liveArray)
+            || liveArray.ValueKind != JsonValueKind.Array
+            || liveArray.GetArrayLength() == 0)
             return null;
+
+        // Take the most recent bucket (last element in the LIVE time series)
+        var live = liveArray.EnumerateArray().Last();
+
+        // COP is not returned by the new API — compute client-side from energyOutput / energyInput
+        string? cop = null;
+        if (live.TryGetProperty("energyInput", out var eiEl) && live.TryGetProperty("energyOutput", out var eoEl))
+        {
+            var eIn = GetDecimal(eiEl, "value");
+            var eOut = GetDecimal(eoEl, "value");
+            if (eIn is > 0 && eOut.HasValue)
+                cop = (eOut.Value / eIn.Value).ToString("F2");
+        }
 
         return new HeatPumpLivePerformance
         {
-            CoefficientOfPerformance = GetString(live, "coefficientOfPerformance"),
+            CoefficientOfPerformance = cop,
             OutdoorTemperature = MapValueAndUnit(live, "outdoorTemperature"),
-            HeatOutput = MapValueAndUnit(live, "heatOutput"),
-            PowerInput = MapValueAndUnit(live, "powerInput"),
-            ReadAt = GetString(live, "readAt")
+            HeatOutput = MapValueAndUnit(live, "energyOutput"),
+            PowerInput = MapValueAndUnit(live, "energyInput"),
+            ReadAt = GetString(live, "startAt")
         };
     }
 
     private static HeatPumpLifetimePerformance? MapLifetimePerformance(JsonElement data)
     {
-        if (!data.TryGetProperty("octoHeatPumpLifetimePerformance", out var lifetime))
+        if (!data.TryGetProperty("heatPumpLifetimePerformance", out var lifetime))
             return null;
 
         return new HeatPumpLifetimePerformance

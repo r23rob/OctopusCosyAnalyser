@@ -1,7 +1,8 @@
 ### Octopus Energy API Direct Requests
 ### Documentation: https://developer.octopus.energy/
 
-@graphqlUrl = https://api.octopus.energy/v1/graphql/
+@graphqlUrl = https://api.backend.octopus.energy/v1/graphql/
+@authUrl = https://api.octopus.energy/v1/graphql/
 @restUrl = https://api.octopus.energy/v1
 @apiKey = {{OCTOPUS_API_KEY}}
 @accountNumber = {{OCTOPUS_ACCOUNT_NUMBER}}
