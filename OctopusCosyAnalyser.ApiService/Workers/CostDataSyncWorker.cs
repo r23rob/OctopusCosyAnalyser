@@ -54,6 +54,7 @@ public class CostDataSyncWorker : BackgroundService
 
         foreach (var device in devices)
         {
+            stoppingToken.ThrowIfCancellationRequested();
             await SyncDeviceAsync(db, client, device, stoppingToken);
         }
     }

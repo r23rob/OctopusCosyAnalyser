@@ -173,7 +173,10 @@ else
                     return;
                 }
             }
-            catch { /* Fall through to live API */ }
+            catch (Exception ex)
+            {
+                statusMessage = $"Stored cost data unavailable ({ex.Message}), trying live API...";
+            }
         }
 
         // Fall back to live Octopus API

@@ -1126,37 +1126,36 @@ public static class HeatPumpEndpoints
 
             // Merge cost data — prefer stored DB records, fall back to live API
             var costDataStatus = "No account settings found";
-            {
-                var fromDate = DateOnly.FromDateTime(from);
-                var toDate = DateOnly.FromDateTime(to);
-                var storedCosts = await db.DailyCostRecords
-                    .AsNoTracking()
-                    .Where(r => r.DeviceId == deviceId && r.Date >= fromDate && r.Date <= toDate)
-                    .ToDictionaryAsync(r => r.Date);
+            var costFromDate = DateOnly.FromDateTime(from);
+            var costToDate = DateOnly.FromDateTime(to);
+            var storedCosts = await db.DailyCostRecords
+                .AsNoTracking()
+                .Where(r => r.DeviceId == deviceId && r.Date >= costFromDate && r.Date <= costToDate)
+                .ToDictionaryAsync(r => r.Date);
 
-                if (storedCosts.Count > 0)
+            if (storedCosts.Count > 0)
+            {
+                var mergedCount = 0;
+                foreach (var agg in aggregates)
                 {
-                    var mergedCount = 0;
-                    foreach (var agg in aggregates)
+                    if (storedCosts.TryGetValue(agg.Date, out var cost))
                     {
-                        if (storedCosts.TryGetValue(agg.Date, out var cost))
-                        {
-                            agg.DailyCostPence = cost.TotalCostPence;
-                            agg.DailyUsageKwh = cost.TotalUsageKwh;
-                            agg.AvgUnitRatePence = cost.AvgUnitRatePence;
-                            agg.CostPerKwhHeatPence = agg.TotalHeatOutputKwh > 0
-                                ? cost.TotalCostPence / agg.TotalHeatOutputKwh
-                                : null;
-                            mergedCount++;
-                        }
+                        agg.DailyCostPence = cost.TotalCostPence;
+                        agg.DailyUsageKwh = cost.TotalUsageKwh;
+                        agg.AvgUnitRatePence = cost.AvgUnitRatePence;
+                        agg.CostPerKwhHeatPence = agg.TotalHeatOutputKwh > 0
+                            ? cost.TotalCostPence / agg.TotalHeatOutputKwh
+                            : null;
+                        mergedCount++;
                     }
-                    costDataStatus = $"OK (stored): {storedCosts.Count} days of cost data, merged into {mergedCount} aggregates";
-                    logger.LogInformation("Merged stored cost data for device {DeviceId}: {Status}", deviceId, costDataStatus);
                 }
-                else if (settings is not null)
-                {
-                    // Fall back to live API if no stored data
-                    try
+                costDataStatus = $"OK (stored): {storedCosts.Count} days of cost data, merged into {mergedCount} aggregates";
+                logger.LogInformation("Merged stored cost data for device {DeviceId}: {Status}", deviceId, costDataStatus);
+            }
+            else if (settings is not null)
+            {
+                // Fall back to live API if no stored data
+                try
                     {
                         logger.LogInformation("No stored cost data — fetching live from Octopus API for account {Account} from {From} to {To}",
                             device.AccountNumber, from, to);
@@ -1234,7 +1233,6 @@ public static class HeatPumpEndpoints
                         logger.LogWarning(ex, "Failed to merge Octopus cost data for device {DeviceId}", deviceId);
                     }
                 }
-            }
 
             var analysis = await aiService.AnalyseAsync(aggregates, request.Question, settings?.AnthropicApiKey);
 
