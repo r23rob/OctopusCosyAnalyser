@@ -15,7 +15,7 @@ var apiService = builder.AddProject<Projects.OctopusCosyAnalyser_ApiService>("ap
 // React + Vite frontend (replaces the Blazor Web project)
 // In dev: runs `npm run dev` and injects the API URL via VITE_API_TARGET
 // In publish: builds the Dockerfile in octopus-cosy-web/ for the production image
-builder.AddNpmApp("webfrontend", "../octopus-cosy-web", "dev")
+builder.AddViteApp("webfrontend", "../octopus-cosy-web")
     .WithReference(apiService)
     .WaitFor(apiService)
     .WithEnvironment("VITE_API_TARGET", apiService.GetEndpoint("http"))
