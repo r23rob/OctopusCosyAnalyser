@@ -1,0 +1,29 @@
+@* Toggles a single chart series on/off. Renders as an accessible button with a coloured dot. *@
+
+<button class="series-toggle @(Active ? "series-toggle-active" : "")"
+        @onclick="Toggle"
+        role="checkbox"
+        aria-checked="@Active.ToString().ToLower()"
+        aria-label="Toggle @Label series">
+    <span class="series-dot" style="background: @Color;" aria-hidden="true"></span>
+    @Label
+</button>
+
+@code {
+    /// <summary>CSS colour value for the series dot, e.g. "var(--chart-1)" or "#3b82f6".</summary>
+    [Parameter] public string Color { get; set; } = "var(--chart-1)";
+
+    /// <summary>Series label shown in the button and used for aria-label.</summary>
+    [Parameter] public string Label { get; set; } = "";
+
+    /// <summary>Whether this series is currently visible.</summary>
+    [Parameter] public bool Active { get; set; }
+
+    [Parameter] public EventCallback<bool> ActiveChanged { get; set; }
+
+    private async Task Toggle()
+    {
+        Active = !Active;
+        await ActiveChanged.InvokeAsync(Active);
+    }
+}

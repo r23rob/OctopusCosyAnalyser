@@ -1,0 +1,47 @@
+@* Time-period picker rendered as pill buttons. Supports two-way binding on SelectedDays. *@
+
+<div class="period-selector" role="group" aria-label="Select time period">
+    @foreach (var option in Options)
+    {
+        <button class="period-pill @(SelectedDays == option.Days ? "period-pill-active" : "")"
+                @onclick="() => SelectPeriod(option.Days)"
+                aria-pressed="@(SelectedDays == option.Days ? "true" : "false")">
+            @option.Label
+        </button>
+    }
+    @if (IsLoading)
+    {
+        <span class="spinner-border spinner-border-sm ms-2" role="status" aria-label="Loading"
+              style="width: 1rem; height: 1rem;"></span>
+    }
+</div>
+
+@code {
+    /// <summary>Currently selected period in days.</summary>
+    [Parameter] public int SelectedDays { get; set; } = 7;
+
+    [Parameter] public EventCallback<int> SelectedDaysChanged { get; set; }
+
+    /// <summary>Shows a loading spinner next to the pills when true.</summary>
+    [Parameter] public bool IsLoading { get; set; }
+
+    /// <summary>
+    /// The period options to display. Defaults to 1D / 1W / 1M / 1Y.
+    /// Supply your own list to customise the available periods.
+    /// </summary>
+    [Parameter] public List<PeriodOption> Options { get; set; } =
+    [
+        new(1, "1D"),
+        new(7, "1W"),
+        new(30, "1M"),
+        new(365, "1Y"),
+    ];
+
+    private async Task SelectPeriod(int days)
+    {
+        SelectedDays = days;
+        await SelectedDaysChanged.InvokeAsync(days);
+    }
+
+    public record PeriodOption(int Days, string Label);
+}

@@ -22,6 +22,10 @@
     --color-info: #06b6d4;
     --color-accent: #8b5cf6;
 
+    /* Extended Palette */
+    --color-primary-light: #60a5fa;
+    --color-danger-light:  #f87171;
+
     /* Borders */
     --border-subtle: rgba(255,255,255,0.06);
     --border-card: rgba(255,255,255,0.08);
@@ -30,6 +34,29 @@
     --radius-sm: 0.5rem;
     --radius-md: 0.75rem;
     --radius-lg: 1rem;
+
+    /* Chart Series Colors */
+    --chart-1: #3b82f6;   /* power / electricity (blue) */
+    --chart-2: #ef4444;   /* heat output (red) */
+    --chart-3: #f59e0b;   /* outdoor / warning (amber) */
+    --chart-4: #22c55e;   /* COP / success (green) */
+    --chart-5: #f97316;   /* cost (orange) */
+    --chart-6: #06b6d4;   /* flow temp / WC (cyan) */
+    --chart-7: #8b5cf6;   /* setpoint / zone (violet) */
+    --chart-8: #93c5fd;   /* secondary / light blue */
+
+    /* Typography Scale */
+    --font-size-2xs:     0.6rem;
+    --font-size-xs:      0.65rem;
+    --font-size-sm:      0.7rem;
+    --font-size-base:    0.75rem;
+    --font-size-md:      0.8rem;
+    --font-size-lg:      0.85rem;
+    --font-size-xl:      0.9rem;
+    --font-size-2xl:     1.1rem;
+    --font-size-metric:  1.25rem;
+    --font-size-summary: 1.5rem;
+    --font-size-gauge:   2rem;
 }
 
 /* ── Base ─────────────────────────────────────────────────── */
@@ -47,7 +74,7 @@ a, .btn-link {
 }
 
 a:hover {
-    color: #60a5fa;
+    color: var(--color-primary-light);
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -157,7 +184,7 @@ h1:focus {
     border-bottom-color: var(--border-card);
     color: var(--text-secondary);
     font-weight: 600;
-    font-size: 0.75rem;
+    font-size: var(--font-size-base);
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
@@ -404,7 +431,7 @@ h1:focus {
 }
 
 .gauge-card-label {
-    font-size: 0.7rem;
+    font-size: var(--font-size-sm);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -413,14 +440,14 @@ h1:focus {
 }
 
 .gauge-card-value {
-    font-size: 2rem;
+    font-size: var(--font-size-gauge);
     font-weight: 700;
     line-height: 1;
     margin-top: 0.25rem;
 }
 
 .gauge-card-unit {
-    font-size: 0.75rem;
+    font-size: var(--font-size-base);
     color: var(--text-muted);
     font-weight: 500;
     margin-top: 0.25rem;
@@ -442,7 +469,7 @@ h1:focus {
     gap: 0.4rem;
     padding: 0.3rem 0.75rem;
     border-radius: 100px;
-    font-size: 0.75rem;
+    font-size: var(--font-size-base);
     font-weight: 500;
     background: var(--bg-elevated);
     border: 1px solid var(--border-card);
@@ -469,6 +496,12 @@ h1:focus {
 
 .status-dot-pulse {
     animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .status-dot-pulse {
+        animation: none;
+    }
 }
 
 /* ── Metrics Strip ────────────────────────────────────────── */
@@ -500,7 +533,7 @@ h1:focus {
 }
 
 .metric-label {
-    font-size: 0.65rem;
+    font-size: var(--font-size-xs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -509,13 +542,13 @@ h1:focus {
 }
 
 .metric-value {
-    font-size: 1.25rem;
+    font-size: var(--font-size-metric);
     font-weight: 700;
     line-height: 1.2;
 }
 
 .metric-range {
-    font-size: 0.6rem;
+    font-size: var(--font-size-2xs);
     color: var(--text-muted);
     margin-top: 0.1rem;
 }
@@ -533,7 +566,7 @@ h1:focus {
 .period-pill {
     padding: 0.35rem 0.85rem;
     border-radius: 100px;
-    font-size: 0.75rem;
+    font-size: var(--font-size-base);
     font-weight: 600;
     border: 1px solid var(--border-card);
     background: transparent;
@@ -575,7 +608,7 @@ h1:focus {
 }
 
 .chart-title {
-    font-size: 0.8rem;
+    font-size: var(--font-size-md);
     font-weight: 600;
     color: var(--text-secondary);
 }
@@ -592,7 +625,7 @@ h1:focus {
     gap: 0.35rem;
     padding: 0.25rem 0.65rem;
     border-radius: 100px;
-    font-size: 0.7rem;
+    font-size: var(--font-size-sm);
     font-weight: 500;
     border: 1px solid var(--border-card);
     background: transparent;
@@ -644,7 +677,7 @@ h1:focus {
 
 .ai-panel-title {
     font-weight: 600;
-    font-size: 0.85rem;
+    font-size: var(--font-size-lg);
     color: var(--color-accent);
     display: flex;
     align-items: center;
@@ -652,7 +685,7 @@ h1:focus {
 }
 
 .ai-panel-chevron {
-    font-size: 0.75rem;
+    font-size: var(--font-size-base);
     color: var(--text-muted);
     transition: transform 0.2s ease;
 }
@@ -681,7 +714,7 @@ h1:focus {
 }
 
 .ai-section-label {
-    font-size: 0.7rem;
+    font-size: var(--font-size-sm);
     font-weight: 600;
     color: var(--color-primary);
     text-transform: uppercase;
@@ -691,7 +724,7 @@ h1:focus {
 }
 
 .ai-section-text {
-    font-size: 0.85rem;
+    font-size: var(--font-size-lg);
     line-height: 1.6;
     color: var(--text-secondary);
 }
@@ -741,12 +774,12 @@ h1:focus {
 }
 
 .compare-value-a {
-    color: #60a5fa;
+    color: var(--color-primary-light);
     font-weight: 600;
 }
 
 .compare-value-b {
-    color: #f87171;
+    color: var(--color-danger-light);
     font-weight: 600;
 }
 
@@ -781,7 +814,7 @@ h1:focus {
 }
 
 .delta-value {
-    font-size: 1.1rem;
+    font-size: var(--font-size-2xl);
     font-weight: 700;
 }
 
@@ -808,21 +841,21 @@ h1:focus {
 }
 
 .summary-card .summary-label {
-    font-size: 0.7rem;
+    font-size: var(--font-size-sm);
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 
 .summary-card .summary-value {
-    font-size: 1.5rem;
+    font-size: var(--font-size-summary);
     font-weight: 700;
     line-height: 1.2;
     margin: 0.25rem 0;
 }
 
 .summary-card .summary-range {
-    font-size: 0.65rem;
+    font-size: var(--font-size-xs);
     color: var(--text-muted);
 }
 
@@ -849,7 +882,7 @@ h1:focus {
 }
 
 .mini-trend-header .title {
-    font-size: 0.8rem;
+    font-size: var(--font-size-md);
     font-weight: 600;
     color: var(--text-secondary);
 }
@@ -867,13 +900,13 @@ h1:focus {
 }
 
 .setup-card h3 {
-    font-size: 1.1rem;
+    font-size: var(--font-size-2xl);
     margin-bottom: 0.75rem;
 }
 
 .setup-card p {
     color: var(--text-secondary);
-    font-size: 0.9rem;
+    font-size: var(--font-size-xl);
     margin-bottom: 1.25rem;
 }
 
@@ -890,7 +923,7 @@ h1:focus {
     }
 
     .gauge-card-value {
-        font-size: 1.5rem;
+        font-size: var(--font-size-summary);
     }
 
     .metrics-strip {

@@ -39,9 +39,9 @@ else
 
     <!-- ═══ HERO GAUGES ═══ -->
     <div class="gauge-section">
-        <div class="gauge-card">
-            <div class="gauge-card-label">Live COP</div>
-            <RadzenRadialGauge Style="width: 180px; height: 140px;">
+        <div class="gauge-card" role="figure" aria-label="Live COP: @CopDisplay">
+            <div class="gauge-card-label" aria-hidden="true">Live COP</div>
+            <RadzenRadialGauge Style="width: 180px; height: 140px;" aria-hidden="true">
                 <RadzenRadialGaugeScale StartAngle="-150" EndAngle="150"
                                         Min="0" Max="6" Step="2" MinorStep="1"
                                         TickPosition="GaugeTickPosition.Outside"
@@ -57,9 +57,9 @@ else
             <div class="gauge-card-value @CopColorClass">@CopDisplay</div>
         </div>
 
-        <div class="gauge-card">
-            <div class="gauge-card-label">Power Input</div>
-            <RadzenRadialGauge Style="width: 180px; height: 140px;">
+        <div class="gauge-card" role="figure" aria-label="Power Input: @PowerInputDisplay kW">
+            <div class="gauge-card-label" aria-hidden="true">Power Input</div>
+            <RadzenRadialGauge Style="width: 180px; height: 140px;" aria-hidden="true">
                 <RadzenRadialGaugeScale StartAngle="-150" EndAngle="150"
                                         Min="0" Max="@PowerGaugeMax" Step="@(PowerGaugeMax / 4)" MinorStep="0"
                                         TickPosition="GaugeTickPosition.Outside"
@@ -74,9 +74,9 @@ else
             <div class="gauge-card-unit">kW</div>
         </div>
 
-        <div class="gauge-card">
-            <div class="gauge-card-label">Heat Output</div>
-            <RadzenRadialGauge Style="width: 180px; height: 140px;">
+        <div class="gauge-card" role="figure" aria-label="Heat Output: @HeatOutputDisplay kW">
+            <div class="gauge-card-label" aria-hidden="true">Heat Output</div>
+            <RadzenRadialGauge Style="width: 180px; height: 140px;" aria-hidden="true">
                 <RadzenRadialGaugeScale StartAngle="-150" EndAngle="150"
                                         Min="0" Max="@HeatGaugeMax" Step="@(HeatGaugeMax / 4)" MinorStep="0"
                                         TickPosition="GaugeTickPosition.Outside"
@@ -93,13 +93,13 @@ else
     </div>
 
     <!-- ═══ STATUS PILLS ═══ -->
-    <div class="status-pills">
+    <div class="status-pills" role="status" aria-live="polite" aria-label="System status">
         @{ var controllerState = summary?.ControllerConfiguration?.Controller?.State; }
         @if (controllerState?.Count > 0)
         {
             var isHeating = controllerState.Any(s => s.Contains("HEAT", StringComparison.OrdinalIgnoreCase));
-            <span class="status-pill">
-                <span class="status-dot @(isHeating ? "status-dot-danger status-dot-pulse" : "status-dot-info")"></span>
+            <span class="status-pill" aria-label="@(isHeating ? "Controller: heating" : "Controller: idle")">
+                <span class="status-dot @(isHeating ? "status-dot-danger status-dot-pulse" : "status-dot-info")" aria-hidden="true"></span>
                 @(isHeating ? "HEATING" : "IDLE")
             </span>
         }
@@ -113,8 +113,8 @@ else
                 _     => ("status-dot-muted", "Mode Unknown")
             };
         }
-        <span class="status-pill">
-            <span class="status-dot @wcDotClass"></span>
+        <span class="status-pill" aria-label="Flow mode: @wcText">
+            <span class="status-dot @wcDotClass" aria-hidden="true"></span>
             @wcText
         </span>
 
@@ -122,8 +122,8 @@ else
         {
             @foreach (var zone in summary.ControllerStatus.Zones.Where(z => z.Telemetry?.HeatDemand == true))
             {
-                <span class="status-pill">
-                    <span class="status-dot status-dot-warning status-dot-pulse"></span>
+                <span class="status-pill" aria-label="@(zone.Zone ?? "Zone") has heat demand">
+                    <span class="status-dot status-dot-warning status-dot-pulse" aria-hidden="true"></span>
                     @(zone.Zone ?? "Zone") demand
                 </span>
             }
@@ -131,32 +131,26 @@ else
 
         @if (latestSnapshot != null)
         {
-            <span class="status-pill">
-                <span class="status-dot @SnapshotHealthDot"></span>
+            <span class="status-pill" aria-label="Snapshot worker: @SnapshotHealthText">
+                <span class="status-dot @SnapshotHealthDot" aria-hidden="true"></span>
                 Worker: @SnapshotHealthText
             </span>
         }
 
-        <span class="status-pill" style="color: var(--text-muted); font-size: 0.7rem;">
+        <span class="status-pill" style="color: var(--text-muted); font-size: var(--font-size-sm);">
             @(summary?.LivePerformance?.ReadAt ?? "—")
             <button class="btn btn-link btn-sm p-0 ms-1" @onclick="RefreshDashboard" disabled="@isLoading"
-                    style="font-size: 0.7rem; text-decoration: none; color: var(--color-primary);">
+                    aria-label="Refresh dashboard"
+                    style="font-size: var(--font-size-sm); text-decoration: none; color: var(--color-primary);">
                 @(isLoading ? "..." : "↻")
             </button>
         </span>
     </div>
 
     <!-- ═══ PERIOD SELECTOR ═══ -->
-    <div class="period-selector">
-        <button class="period-pill @(selectedPeriodDays == 1 ? "period-pill-active" : "")" @onclick="() => SetPeriod(1)">1D</button>
-        <button class="period-pill @(selectedPeriodDays == 7 ? "period-pill-active" : "")" @onclick="() => SetPeriod(7)">1W</button>
-        <button class="period-pill @(selectedPeriodDays == 30 ? "period-pill-active" : "")" @onclick="() => SetPeriod(30)">1M</button>
-        <button class="period-pill @(selectedPeriodDays == 365 ? "period-pill-active" : "")" @onclick="() => SetPeriod(365)">1Y</button>
-        @if (periodLoading)
-        {
-            <span class="spinner-border spinner-border-sm ms-2" role="status" style="width: 1rem; height: 1rem;"></span>
-        }
-    </div>
+    <PeriodSelector SelectedDays="@selectedPeriodDays"
+                    SelectedDaysChanged="SetPeriod"
+                    IsLoading="@periodLoading" />
 
     <!-- ═══ METRICS STRIP ═══ -->
     <div class="metrics-strip">
@@ -202,18 +196,10 @@ else
             <div class="chart-header">
                 <span class="chart-title">@PeriodLabel — @trendSnapshots.Count points</span>
                 <div class="chart-toggles">
-                    <button class="series-toggle @(showCop ? "series-toggle-active" : "")" @onclick="() => showCop = !showCop">
-                        <span class="series-dot" style="background: #22c55e;"></span> COP
-                    </button>
-                    <button class="series-toggle @(showPowerIn ? "series-toggle-active" : "")" @onclick="() => showPowerIn = !showPowerIn">
-                        <span class="series-dot" style="background: #3b82f6;"></span> Power In
-                    </button>
-                    <button class="series-toggle @(showHeatOut ? "series-toggle-active" : "")" @onclick="() => showHeatOut = !showHeatOut">
-                        <span class="series-dot" style="background: #f59e0b;"></span> Heat Out
-                    </button>
-                    <button class="series-toggle @(showOutdoor ? "series-toggle-active" : "")" @onclick="() => showOutdoor = !showOutdoor">
-                        <span class="series-dot" style="background: #06b6d4;"></span> Outdoor
-                    </button>
+                    <SeriesToggle Color="var(--chart-4)" Label="COP"       @bind-Active="showCop" />
+                    <SeriesToggle Color="var(--chart-1)" Label="Power In"  @bind-Active="showPowerIn" />
+                    <SeriesToggle Color="var(--chart-3)" Label="Heat Out"  @bind-Active="showHeatOut" />
+                    <SeriesToggle Color="var(--chart-6)" Label="Outdoor"   @bind-Active="showOutdoor" />
                 </div>
             </div>
             <RadzenChart Style="height: 350px;">
@@ -258,26 +244,32 @@ else
 
     <!-- ═══ AI SUMMARY (Collapsible) ═══ -->
     <div class="ai-panel">
-        <div class="ai-panel-header" @onclick="() => aiExpanded = !aiExpanded">
+        <div class="ai-panel-header"
+             @onclick="() => aiExpanded = !aiExpanded"
+             role="button"
+             tabindex="0"
+             aria-expanded="@aiExpanded.ToString().ToLower()"
+             aria-controls="ai-panel-body">
             <span class="ai-panel-title">
                 AI Performance Summary
             </span>
             <div class="ai-panel-meta">
                 @if (aiSummary is not null && aiSummary.GeneratedAt != default)
                 {
-                    <span style="font-size: 0.7rem; color: var(--text-muted);">@aiSummary.GeneratedAt.ToString("dd MMM HH:mm")</span>
+                    <span style="font-size: var(--font-size-sm); color: var(--text-muted);">@aiSummary.GeneratedAt.ToString("dd MMM HH:mm")</span>
                 }
-                <button class="btn btn-outline-secondary btn-sm" style="font-size: 0.7rem; padding: 0.15rem 0.5rem;"
-                        @onclick="RefreshAiSummary" @onclick:stopPropagation="true" disabled="@aiLoading">
+                <button class="btn btn-outline-secondary btn-sm" style="font-size: var(--font-size-sm); padding: 0.15rem 0.5rem;"
+                        @onclick="RefreshAiSummary" @onclick:stopPropagation="true" disabled="@aiLoading"
+                        aria-label="Refresh AI summary">
                     @(aiLoading ? "..." : "Refresh")
                 </button>
-                <span class="ai-panel-chevron @(aiExpanded ? "ai-panel-chevron-open" : "")">▼</span>
+                <span class="ai-panel-chevron @(aiExpanded ? "ai-panel-chevron-open" : "")" aria-hidden="true">▼</span>
             </div>
         </div>
 
         @if (aiExpanded)
         {
-            <div class="ai-panel-body">
+            <div class="ai-panel-body" id="ai-panel-body">
                 @if (aiLoading && aiSummary == null)
                 {
                     <div class="d-flex align-items-center p-2">
