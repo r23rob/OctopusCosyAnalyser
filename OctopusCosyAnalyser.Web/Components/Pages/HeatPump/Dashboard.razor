@@ -104,10 +104,18 @@ else
             </span>
         }
 
-        @{ var wcEnabled = summary?.ControllerConfiguration?.HeatPump?.WeatherCompensation?.Enabled == true; }
+        @{
+            var wcStatus = summary?.ControllerConfiguration?.HeatPump?.WeatherCompensation?.Enabled;
+            var (wcDotClass, wcText) = wcStatus switch
+            {
+                true  => ("status-dot-success", "Weather Comp"),
+                false => ("status-dot-info", "Fixed Flow"),
+                _     => ("status-dot-muted", "Mode Unknown")
+            };
+        }
         <span class="status-pill">
-            <span class="status-dot @(wcEnabled ? "status-dot-success" : "status-dot-muted")"></span>
-            WC: @(wcEnabled ? "ON" : "OFF")
+            <span class="status-dot @wcDotClass"></span>
+            @wcText
         </span>
 
         @if (summary?.ControllerStatus?.Zones != null)
@@ -336,7 +344,7 @@ else
             <RadzenTabsItem Text="Costs" Icon="payments">
                 @if (selectedTab == 3)
                 {
-                    <CostsTab AccountNumber="@accountNumber" />
+                    <CostsTab AccountNumber="@accountNumber" DeviceId="@deviceId" />
                 }
             </RadzenTabsItem>
         </Tabs>

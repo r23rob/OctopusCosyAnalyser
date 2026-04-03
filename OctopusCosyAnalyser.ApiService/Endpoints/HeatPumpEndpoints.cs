@@ -247,15 +247,28 @@ public static class HeatPumpEndpoints
             var safeSkip = Math.Max(skip ?? 0, 0);
             var actualTake = Math.Clamp(take ?? 10000, 1, 50000);
 
-            var readings = await db.ConsumptionReadings
+            var query = db.ConsumptionReadings
                 .AsNoTracking()
-                .Where(r => r.DeviceId == deviceId && r.ReadAt >= from && r.ReadAt <= to)
+                .Where(r => r.DeviceId == deviceId && r.ReadAt >= from && r.ReadAt <= to);
+
+            var totalCount = await query.CountAsync();
+
+            var readings = await query
                 .OrderBy(r => r.ReadAt)
                 .Skip(safeSkip)
                 .Take(actualTake)
                 .ToListAsync();
 
-            return Results.Ok(readings);
+            return Results.Ok(new
+            {
+                deviceId,
+                from,
+                to,
+                totalCount,
+                count = readings.Count,
+                hasMore = safeSkip + readings.Count < totalCount,
+                readings
+            });
         }).WithName("GetConsumption");
 
         // Get devices
@@ -417,9 +430,13 @@ public static class HeatPumpEndpoints
             var safeSkip = Math.Max(skip ?? 0, 0);
             var actualTake = Math.Clamp(take ?? 10000, 1, 50000);
 
-            var snapshots = await db.HeatPumpSnapshots
+            var query = db.HeatPumpSnapshots
                 .AsNoTracking()
-                .Where(s => s.DeviceId == deviceId && s.SnapshotTakenAt >= from && s.SnapshotTakenAt <= to)
+                .Where(s => s.DeviceId == deviceId && s.SnapshotTakenAt >= from && s.SnapshotTakenAt <= to);
+
+            var totalCount = await query.CountAsync();
+
+            var snapshots = await query
                 .OrderBy(s => s.SnapshotTakenAt)
                 .Skip(safeSkip)
                 .Take(actualTake)
@@ -430,7 +447,9 @@ public static class HeatPumpEndpoints
                 deviceId,
                 from,
                 to,
+                totalCount,
                 count = snapshots.Count,
+                hasMore = safeSkip + snapshots.Count < totalCount,
                 snapshots
             });
         }).WithName("GetHeatPumpSnapshots");
@@ -528,11 +547,17 @@ public static class HeatPumpEndpoints
             var fromUtc = DateTime.SpecifyKind(from.Value, DateTimeKind.Utc);
             var toUtc = DateTime.SpecifyKind(to.Value, DateTimeKind.Utc);
 
-            var records = await db.HeatPumpTimeSeriesRecords
+            const int maxRecords = 50000;
+
+            var query = db.HeatPumpTimeSeriesRecords
                 .AsNoTracking()
-                .Where(r => r.DeviceId == deviceId && r.StartAt >= fromUtc && r.StartAt <= toUtc)
+                .Where(r => r.DeviceId == deviceId && r.StartAt >= fromUtc && r.StartAt <= toUtc);
+
+            var totalCount = await query.CountAsync();
+
+            var records = await query
                 .OrderBy(r => r.StartAt)
-                .Take(50000)
+                .Take(maxRecords)
                 .ToListAsync();
 
             return Results.Ok(new
@@ -540,7 +565,9 @@ public static class HeatPumpEndpoints
                 deviceId,
                 from = fromUtc,
                 to = toUtc,
+                totalCount,
                 count = records.Count,
+                hasMore = totalCount > maxRecords,
                 records = records.Select(r => new
                 {
                     r.StartAt,
@@ -745,6 +772,38 @@ public static class HeatPumpEndpoints
             });
         }).WithName("GetCostOfUsage");
 
+        // ── Stored Cost Data (from background sync) ─────────────────
+
+        group.MapGet("/cost-stored/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, CosyDbContext db) =>
+        {
+            var fromDate = DateOnly.FromDateTime(from ?? DateTime.UtcNow.AddDays(-30));
+            var toDate = DateOnly.FromDateTime(to ?? DateTime.UtcNow);
+
+            var records = await db.DailyCostRecords
+                .AsNoTracking()
+                .Where(r => r.DeviceId == deviceId && r.Date >= fromDate && r.Date <= toDate)
+                .OrderBy(r => r.Date)
+                .Select(r => new
+                {
+                    r.Date,
+                    r.TotalCostPence,
+                    r.TotalUsageKwh,
+                    r.AvgUnitRatePence,
+                    r.StandingChargePence,
+                    r.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Results.Ok(new
+            {
+                deviceId,
+                from = fromDate,
+                to = toDate,
+                totalDays = records.Count,
+                records
+            });
+        }).WithName("GetStoredCostData");
+
         // ── Period Summary (server-side aggregation) ────────────────
 
         group.MapGet("/period-summary/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, CosyDbContext db) =>
@@ -892,6 +951,12 @@ public static class HeatPumpEndpoints
         {
             from ??= DateTime.UtcNow.AddDays(-30);
             to ??= DateTime.UtcNow;
+
+            // Cap at 366 days to prevent loading unbounded data into memory.
+            // At 15-min intervals, 366 days = ~35,000 snapshots which is manageable.
+            var maxSpan = TimeSpan.FromDays(366);
+            if (to.Value - from.Value > maxSpan)
+                from = to.Value - maxSpan;
 
             var snapshots = await db.HeatPumpSnapshots
                 .AsNoTracking()
@@ -1092,100 +1157,115 @@ public static class HeatPumpEndpoints
                 EnrichAggregatesWithTimeSeries(aggregates, timeSeriesRecords, snapshots);
             }
 
-            // Merge cost data from Octopus API
+            // Merge cost data — prefer stored DB records, fall back to live API
             var costDataStatus = "No account settings found";
-            if (settings is not null)
+            var costFromDate = DateOnly.FromDateTime(from);
+            var costToDate = DateOnly.FromDateTime(to);
+            var storedCosts = await db.DailyCostRecords
+                .AsNoTracking()
+                .Where(r => r.DeviceId == deviceId && r.Date >= costFromDate && r.Date <= costToDate)
+                .ToDictionaryAsync(r => r.Date);
+
+            if (storedCosts.Count > 0)
             {
-                try
+                var mergedCount = 0;
+                foreach (var agg in aggregates)
                 {
-                    logger.LogInformation("Fetching cost data for account {Account} (propertyId={PropertyId}) from {From} to {To}",
-                        device.AccountNumber, device.PropertyId, from, to);
-
-                    var costData = await octopusClient.GetCostOfUsageAsync(settings.ApiKey, device.AccountNumber, from, to, propertyId: device.PropertyId, mpxn: device.Mpan);
-
-                    // Log raw response structure for debugging
-                    if (costData.RootElement.TryGetProperty("data", out var costDataEl))
+                    if (storedCosts.TryGetValue(agg.Date, out var cost))
                     {
-                        if (costDataEl.TryGetProperty("costOfUsage", out var costOfUsageEl))
-                            logger.LogInformation("Cost response structure: costOfUsage type={Type}", costOfUsageEl.ValueKind);
-                        else
-                            logger.LogWarning("Cost response missing costOfUsage field. Data keys: {Keys}",
-                                string.Join(", ", costDataEl.EnumerateObject().Select(p => p.Name)));
-                    }
-
-                    var costRoot = costData.RootElement.GetProperty("data");
-
-                    // Check for GraphQL errors
-                    if (costData.RootElement.TryGetProperty("errors", out var errorsEl)
-                        && errorsEl.ValueKind == JsonValueKind.Array
-                        && errorsEl.GetArrayLength() > 0)
-                    {
-                        var errorMsgs = string.Join("; ", errorsEl.EnumerateArray()
-                            .Select(e => e.TryGetProperty("message", out var m) ? m.GetString() : e.ToString()));
-                        costDataStatus = $"GraphQL errors: {errorMsgs}";
-                        logger.LogWarning("Cost data query returned errors for device {DeviceId}: {Errors}", deviceId, errorMsgs);
-                    }
-                    else if (costRoot.TryGetProperty("costOfUsage", out var costEl)
-                        && costEl.ValueKind != JsonValueKind.Null
-                        && costEl.TryGetProperty("edges", out var edges)
-                        && edges.ValueKind == JsonValueKind.Array)
-                    {
-                        var costByDate = new Dictionary<DateOnly, (double cost, double usage, double unitRate)>();
-                        foreach (var edge in edges.EnumerateArray())
-                        {
-                            if (!edge.TryGetProperty("node", out var node)) continue;
-                            // Try multiple field names — API schema varies
-                            var startAtStr = TryGetString(node, "startAt", "fromDatetime", "from");
-                            if (startAtStr == null || !DateTime.TryParse(startAtStr, out var dt)) continue;
-
-                            var date = DateOnly.FromDateTime(dt);
-                            var cost = TryGetDouble(node, "costInclTax", "totalCost", "cost");
-                            var usage = TryGetDouble(node, "consumptionKwh", "totalConsumption", "consumption");
-                            var unitRate = TryGetDouble(node, "unitRateInclTax", "unitRate");
-
-                            if (costByDate.TryGetValue(date, out var existing))
-                            {
-                                var newCost = existing.cost + cost;
-                                var newUsage = existing.usage + usage;
-                                var newUnitRate = newUsage > 0 ? newCost / newUsage : existing.unitRate;
-                                costByDate[date] = (newCost, newUsage, newUnitRate);
-                            }
-                            else
-                            {
-                                costByDate[date] = (cost, usage, unitRate);
-                            }
-                        }
-
-                        var mergedCount = 0;
-                        foreach (var agg in aggregates)
-                        {
-                            if (costByDate.TryGetValue(agg.Date, out var costInfo))
-                            {
-                                agg.DailyCostPence = costInfo.cost;
-                                agg.DailyUsageKwh = costInfo.usage;
-                                agg.AvgUnitRatePence = costInfo.unitRate;
-                                agg.CostPerKwhHeatPence = agg.TotalHeatOutputKwh > 0
-                                    ? costInfo.cost / agg.TotalHeatOutputKwh
-                                    : null;
-                                mergedCount++;
-                            }
-                        }
-
-                        costDataStatus = $"OK: {costByDate.Count} days of cost data, merged into {mergedCount} aggregates";
-                        logger.LogInformation("Merged cost data for device {DeviceId}: {Status}", deviceId, costDataStatus);
-                    }
-                    else
-                    {
-                        costDataStatus = "costOfUsage returned null or empty";
-                        logger.LogWarning("Cost data query returned null/empty for device {DeviceId}", deviceId);
+                        agg.DailyCostPence = cost.TotalCostPence;
+                        agg.DailyUsageKwh = cost.TotalUsageKwh;
+                        agg.AvgUnitRatePence = cost.AvgUnitRatePence;
+                        agg.CostPerKwhHeatPence = agg.TotalHeatOutputKwh > 0
+                            ? cost.TotalCostPence / agg.TotalHeatOutputKwh
+                            : null;
+                        mergedCount++;
                     }
                 }
-                catch (Exception ex)
-                {
-                    costDataStatus = $"Error: {ex.Message}";
-                    logger.LogWarning(ex, "Failed to merge Octopus cost data for device {DeviceId}", deviceId);
-                }
+                costDataStatus = $"OK (stored): {storedCosts.Count} days of cost data, merged into {mergedCount} aggregates";
+                logger.LogInformation("Merged stored cost data for device {DeviceId}: {Status}", deviceId, costDataStatus);
             }
+            else if (settings is not null)
+            {
+                // Fall back to live API if no stored data
+                try
+                    {
+                        logger.LogInformation("No stored cost data — fetching live from Octopus API for account {Account} from {From} to {To}",
+                            device.AccountNumber, from, to);
+
+                        var costData = await octopusClient.GetCostOfUsageAsync(settings.ApiKey, device.AccountNumber, from, to, propertyId: device.PropertyId, mpxn: device.Mpan);
+
+                        var costRoot = costData.RootElement.GetProperty("data");
+
+                        if (costData.RootElement.TryGetProperty("errors", out var errorsEl)
+                            && errorsEl.ValueKind == JsonValueKind.Array
+                            && errorsEl.GetArrayLength() > 0)
+                        {
+                            var errorMsgs = string.Join("; ", errorsEl.EnumerateArray()
+                                .Select(e => e.TryGetProperty("message", out var m) ? m.GetString() : e.ToString()));
+                            costDataStatus = $"GraphQL errors: {errorMsgs}";
+                            logger.LogWarning("Cost data query returned errors for device {DeviceId}: {Errors}", deviceId, errorMsgs);
+                        }
+                        else if (costRoot.TryGetProperty("costOfUsage", out var costEl)
+                            && costEl.ValueKind != JsonValueKind.Null
+                            && costEl.TryGetProperty("edges", out var edges)
+                            && edges.ValueKind == JsonValueKind.Array)
+                        {
+                            var costByDate = new Dictionary<DateOnly, (double cost, double usage, double unitRate)>();
+                            foreach (var edge in edges.EnumerateArray())
+                            {
+                                if (!edge.TryGetProperty("node", out var node)) continue;
+                                var startAtStr = TryGetString(node, "startAt", "fromDatetime", "from");
+                                if (startAtStr == null || !DateTime.TryParse(startAtStr, out var dt)) continue;
+
+                                var date = DateOnly.FromDateTime(dt);
+                                var cost = TryGetDouble(node, "costInclTax", "totalCost", "cost");
+                                var usage = TryGetDouble(node, "consumptionKwh", "totalConsumption", "consumption");
+                                var unitRate = TryGetDouble(node, "unitRateInclTax", "unitRate");
+
+                                if (costByDate.TryGetValue(date, out var existing))
+                                {
+                                    var newCost = existing.cost + cost;
+                                    var newUsage = existing.usage + usage;
+                                    var newUnitRate = newUsage > 0 ? newCost / newUsage : existing.unitRate;
+                                    costByDate[date] = (newCost, newUsage, newUnitRate);
+                                }
+                                else
+                                {
+                                    costByDate[date] = (cost, usage, unitRate);
+                                }
+                            }
+
+                            var mergedCount = 0;
+                            foreach (var agg in aggregates)
+                            {
+                                if (costByDate.TryGetValue(agg.Date, out var costInfo))
+                                {
+                                    agg.DailyCostPence = costInfo.cost;
+                                    agg.DailyUsageKwh = costInfo.usage;
+                                    agg.AvgUnitRatePence = costInfo.unitRate;
+                                    agg.CostPerKwhHeatPence = agg.TotalHeatOutputKwh > 0
+                                        ? costInfo.cost / agg.TotalHeatOutputKwh
+                                        : null;
+                                    mergedCount++;
+                                }
+                            }
+
+                            costDataStatus = $"OK (live): {costByDate.Count} days of cost data, merged into {mergedCount} aggregates";
+                            logger.LogInformation("Merged live cost data for device {DeviceId}: {Status}", deviceId, costDataStatus);
+                        }
+                        else
+                        {
+                            costDataStatus = "costOfUsage returned null or empty";
+                            logger.LogWarning("Cost data query returned null/empty for device {DeviceId}", deviceId);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        costDataStatus = $"Error: {ex.Message}";
+                        logger.LogWarning(ex, "Failed to merge Octopus cost data for device {DeviceId}", deviceId);
+                    }
+                }
 
             var analysis = await aiService.AnalyseAsync(aggregates, request.Question, settings?.AnthropicApiKey);
 
@@ -1261,21 +1341,26 @@ public static class HeatPumpEndpoints
                     prevHwDemand = hwDemand;
                 }
 
-                // Weather compensation mode (most frequent non-null value)
-                var wcEnabledMode = day.Where(s => s.WeatherCompensationEnabled.HasValue)
-                    .GroupBy(s => s.WeatherCompensationEnabled!.Value)
+                // Flow temp mode (most frequent non-null value for the day)
+                var flowTempModeForDay = day.Where(s => s.FlowTempMode != null)
+                    .GroupBy(s => s.FlowTempMode!)
                     .OrderByDescending(g2 => g2.Count())
                     .FirstOrDefault()?.Key;
 
-                var wcMinMode = day.Where(s => s.WeatherCompensationMinCelsius.HasValue)
+                // WC curve range — only meaningful when in WeatherCompensation mode
+                var wcSnapshots = day.Where(s => s.FlowTempMode == Shared.Models.FlowTempMode.WeatherCompensation).ToList();
+                var wcMinMode = wcSnapshots.Where(s => s.WeatherCompensationMinCelsius.HasValue)
                     .GroupBy(s => s.WeatherCompensationMinCelsius!.Value)
                     .OrderByDescending(g2 => g2.Count())
                     .FirstOrDefault()?.Key;
 
-                var wcMaxMode = day.Where(s => s.WeatherCompensationMaxCelsius.HasValue)
+                var wcMaxMode = wcSnapshots.Where(s => s.WeatherCompensationMaxCelsius.HasValue)
                     .GroupBy(s => s.WeatherCompensationMaxCelsius!.Value)
                     .OrderByDescending(g2 => g2.Count())
                     .FirstOrDefault()?.Key;
+
+                // Fixed flow snapshots for setpoint average
+                var fixedFlowSnapshots = day.Where(s => s.FlowTempMode == Shared.Models.FlowTempMode.FixedFlow).ToList();
 
                 var flowTempMinMode = day.Where(s => s.HeatingFlowTempAllowableMinCelsius.HasValue)
                     .GroupBy(s => s.HeatingFlowTempAllowableMinCelsius!.Value)
@@ -1310,8 +1395,8 @@ public static class HeatPumpEndpoints
                         ? day.Where(s => s.OutdoorTemperatureCelsius.HasValue)
                             .Select(s => (double)s.OutdoorTemperatureCelsius!.Value).Max()
                         : null,
-                    // NOTE: This is the configured fixed flow temp SETPOINT, not a measured flow temperature
-                    AvgFlowTemp = AvgDecimal(heatingSnapshots, s => s.HeatingFlowTemperatureCelsius),
+                    // Fixed flow temp setpoint — only from FixedFlow-mode snapshots
+                    AvgFlowTemp = AvgDecimal(fixedFlowSnapshots, s => s.HeatingFlowTemperatureCelsius),
                     AvgRoomTemp = AvgDecimal(day, s => s.RoomTemperatureCelsius),
                     AvgSetpoint = AvgDecimal(day, s => s.HeatingZoneSetpointCelsius),
 
@@ -1322,7 +1407,7 @@ public static class HeatPumpEndpoints
                         ? day.Count(s => s.HotWaterZoneHeatDemand == true) * 100.0 / day.Count
                         : 0,
 
-                    WeatherCompEnabled = wcEnabledMode,
+                    FlowTempMode = flowTempModeForDay,
                     WeatherCompMin = wcMinMode.HasValue ? (double)wcMinMode.Value : null,
                     WeatherCompMax = wcMaxMode.HasValue ? (double)wcMaxMode.Value : null,
 
@@ -1389,15 +1474,15 @@ public static class HeatPumpEndpoints
                 .Select(r => (double)r.OutdoorTemperatureCelsius!.Value)
                 .ToList();
 
-            // Find weather comp settings from nearest snapshots (within 30 min window)
-            var wcValues = new List<(bool? enabled, decimal? min, decimal? max, decimal? flowTemp, decimal? flowTempAllowableMin, decimal? flowTempAllowableMax)>();
+            // Find flow temp mode and settings from nearest snapshots (within 30 min window)
+            var wcValues = new List<(string? flowTempMode, decimal? min, decimal? max, decimal? flowTemp, decimal? flowTempAllowableMin, decimal? flowTempAllowableMax)>();
             foreach (var rec in records)
             {
                 var nearest = FindNearestSnapshot(snapshotsByTime, rec.StartAt, TimeSpan.FromMinutes(30));
                 if (nearest is not null)
                 {
                     wcValues.Add((
-                        nearest.WeatherCompensationEnabled,
+                        nearest.FlowTempMode,
                         nearest.WeatherCompensationMinCelsius,
                         nearest.WeatherCompensationMaxCelsius,
                         nearest.HeatingFlowTemperatureCelsius,
@@ -1407,27 +1492,29 @@ public static class HeatPumpEndpoints
                 }
             }
 
-            // Compute weather comp mode values for the day from matched snapshots
-            var wcEnabledMode = wcValues
-                .Where(v => v.enabled.HasValue)
-                .GroupBy(v => v.enabled!.Value)
+            // Flow temp mode (most frequent non-null)
+            var flowTempModeForDay = wcValues
+                .Where(v => v.flowTempMode != null)
+                .GroupBy(v => v.flowTempMode!)
                 .OrderByDescending(g => g.Count())
                 .FirstOrDefault()?.Key;
 
+            // WC curve range — only from WeatherCompensation-mode snapshots
             var wcMinMode = wcValues
-                .Where(v => v.min.HasValue)
+                .Where(v => v.flowTempMode == Shared.Models.FlowTempMode.WeatherCompensation && v.min.HasValue)
                 .GroupBy(v => v.min!.Value)
                 .OrderByDescending(g => g.Count())
                 .FirstOrDefault()?.Key;
 
             var wcMaxMode = wcValues
-                .Where(v => v.max.HasValue)
+                .Where(v => v.flowTempMode == Shared.Models.FlowTempMode.WeatherCompensation && v.max.HasValue)
                 .GroupBy(v => v.max!.Value)
                 .OrderByDescending(g => g.Count())
                 .FirstOrDefault()?.Key;
 
+            // Fixed flow setpoint — only from FixedFlow-mode snapshots
             var avgFlowTemp = wcValues
-                .Where(v => v.flowTemp.HasValue)
+                .Where(v => v.flowTempMode == Shared.Models.FlowTempMode.FixedFlow && v.flowTemp.HasValue)
                 .Select(v => (double)v.flowTemp!.Value)
                 .ToList();
 
@@ -1459,9 +1546,9 @@ public static class HeatPumpEndpoints
                 if (!existing.MaxOutdoorTemp.HasValue && tsOutdoorTemps.Count > 0)
                     existing.MaxOutdoorTemp = tsOutdoorTemps.Max();
 
-                // Supplement weather comp from time-series-correlated snapshots if not already set
-                if (!existing.WeatherCompEnabled.HasValue && wcEnabledMode.HasValue)
-                    existing.WeatherCompEnabled = wcEnabledMode.Value;
+                // Supplement flow temp mode from time-series-correlated snapshots if not already set
+                if (existing.FlowTempMode == null && flowTempModeForDay != null)
+                    existing.FlowTempMode = flowTempModeForDay;
                 if (!existing.WeatherCompMin.HasValue && wcMinMode.HasValue)
                     existing.WeatherCompMin = (double)wcMinMode.Value;
                 if (!existing.WeatherCompMax.HasValue && wcMaxMode.HasValue)
@@ -1490,7 +1577,7 @@ public static class HeatPumpEndpoints
                     MinOutdoorTemp = tsOutdoorTemps.Count > 0 ? tsOutdoorTemps.Min() : null,
                     MaxOutdoorTemp = tsOutdoorTemps.Count > 0 ? tsOutdoorTemps.Max() : null,
                     AvgCopHeating = tsEnergyIn > 0 ? tsEnergyOut / tsEnergyIn : null,
-                    WeatherCompEnabled = wcEnabledMode,
+                    FlowTempMode = flowTempModeForDay,
                     WeatherCompMin = wcMinMode.HasValue ? (double)wcMinMode.Value : null,
                     WeatherCompMax = wcMaxMode.HasValue ? (double)wcMaxMode.Value : null,
                     AvgFlowTemp = avgFlowTemp.Count > 0 ? avgFlowTemp.Average() : null,
@@ -1826,7 +1913,7 @@ public static class HeatPumpEndpoints
             .ToList();
     }
 
-    private static string? TryGetString(JsonElement element, params string[] propertyNames)
+    internal static string? TryGetString(JsonElement element, params string[] propertyNames)
     {
         foreach (var propertyName in propertyNames)
         {
@@ -1839,7 +1926,7 @@ public static class HeatPumpEndpoints
         return null;
     }
 
-    private static double TryGetDouble(JsonElement element, params string[] propertyNames)
+    internal static double TryGetDouble(JsonElement element, params string[] propertyNames)
     {
         foreach (var propertyName in propertyNames)
         {

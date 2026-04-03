@@ -111,6 +111,7 @@ else
 
 @code {
     [Parameter] public string? AccountNumber { get; set; }
+    [Parameter] public string? DeviceId { get; set; }
 
     private string? errorMessage;
     private string? statusMessage;
@@ -143,12 +144,47 @@ else
 
     private async Task LoadCostOfUsage()
     {
+        // Try stored data first if DeviceId is available
+        if (!string.IsNullOrEmpty(DeviceId))
+        {
+            try
+            {
+                var storedRaw = await Api.GetStoredCostDataRawAsync(DeviceId, fromDate, toDate);
+                var storedDoc = System.Text.Json.JsonDocument.Parse(storedRaw);
+                if (storedDoc.RootElement.TryGetProperty("records", out var recordsEl)
+                    && recordsEl.ValueKind == System.Text.Json.JsonValueKind.Array
+                    && recordsEl.GetArrayLength() > 0)
+                {
+                    costRates.Clear(); double totalCost = 0, totalUsage = 0;
+                    foreach (var record in recordsEl.EnumerateArray())
+                    {
+                        var dateStr = record.TryGetProperty("date", out var dateEl) ? dateEl.GetString() : null;
+                        var label = dateStr ?? "—";
+                        if (DateOnly.TryParse(dateStr, out var d)) label = d.ToString("MMM dd");
+                        var cost = GetDouble(record, "totalCostPence");
+                        var usage = GetDouble(record, "totalUsageKwh");
+                        totalCost += cost; totalUsage += usage;
+                        costRates.Add(new() { Label = label, CostInclTax = cost, UsageKwh = usage });
+                    }
+                    totalCostInclTax = totalCost; totalUsageKwh = totalUsage;
+                    avgDailyCost = costRates.Count > 0 ? totalCostInclTax / costRates.Count : 0;
+                    costLoaded = true;
+                    statusMessage = $"Loaded {costRates.Count} days of stored cost data.";
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                statusMessage = $"Stored cost data unavailable ({ex.Message}), trying live API...";
+            }
+        }
+
+        // Fall back to live Octopus API
         try
         {
             var raw = await Api.GetCostOfUsageRawAsync(AccountNumber!, fromDate, toDate);
             var doc = System.Text.Json.JsonDocument.Parse(raw);
 
-            // Check for GraphQL errors surfaced by the endpoint
             if (doc.RootElement.TryGetProperty("errors", out var errorsEl)
                 && errorsEl.ValueKind == System.Text.Json.JsonValueKind.Array
                 && errorsEl.GetArrayLength() > 0)

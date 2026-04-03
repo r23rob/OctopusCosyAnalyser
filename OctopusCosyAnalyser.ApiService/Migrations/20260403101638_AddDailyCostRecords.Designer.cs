@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OctopusCosyAnalyser.ApiService.Data;
@@ -11,9 +12,11 @@ using OctopusCosyAnalyser.ApiService.Data;
 namespace OctopusCosyAnalyser.ApiService.Migrations
 {
     [DbContext(typeof(CosyDbContext))]
-    partial class CosyDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260403101638_AddDailyCostRecords")]
+    partial class AddDailyCostRecords
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -182,9 +185,6 @@ namespace OctopusCosyAnalyser.ApiService.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<string>("FlowTempMode")
-                        .HasColumnType("text");
-
                     b.Property<decimal?>("HeatOutputKilowatt")
                         .HasPrecision(10, 3)
                         .HasColumnType("numeric(10,3)");
@@ -265,6 +265,9 @@ namespace OctopusCosyAnalyser.ApiService.Migrations
 
                     b.Property<DateTime>("SnapshotTakenAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("WeatherCompensationEnabled")
+                        .HasColumnType("boolean");
 
                     b.Property<decimal?>("WeatherCompensationMaxCelsius")
                         .HasPrecision(10, 2)

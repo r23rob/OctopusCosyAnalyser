@@ -89,15 +89,27 @@ else if (summary != null)
         </div>
         <div class="col-md-4">
             <div class="card h-100">
-                <div class="card-header">Weather Compensation</div>
+                <div class="card-header">Flow Temp Mode</div>
                 <div class="card-body text-center">
                     @{
                         var wc = summary.ControllerConfiguration?.HeatPump?.WeatherCompensation;
                     }
-                    <h3>@(wc?.Enabled == true ? "✅ Enabled" : "❌ Disabled")</h3>
-                    @if (wc?.CurrentRange != null)
+                    @if (wc?.Enabled == true)
                     {
-                        <p class="mt-2"><strong>Range:</strong> @Fmt(wc.CurrentRange.Minimum) – @Fmt(wc.CurrentRange.Maximum)</p>
+                        <h3>WC Weather Compensation</h3>
+                        @if (wc.CurrentRange != null)
+                        {
+                            <p class="mt-2"><strong>Curve Range:</strong> @Fmt(wc.CurrentRange.Minimum) – @Fmt(wc.CurrentRange.Maximum)</p>
+                        }
+                    }
+                    else if (wc?.Enabled == false)
+                    {
+                        <h3>Fixed Flow</h3>
+                        <p class="mt-2"><strong>Setpoint:</strong> @Fmt(summary.ControllerConfiguration?.HeatPump?.HeatingFlowTemperature?.CurrentTemperature)</p>
+                    }
+                    else
+                    {
+                        <h3 class="text-muted">Mode Unknown</h3>
                     }
                 </div>
             </div>

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OctopusCosyAnalyser.ApiService.Data;
@@ -11,9 +12,11 @@ using OctopusCosyAnalyser.ApiService.Data;
 namespace OctopusCosyAnalyser.ApiService.Migrations
 {
     [DbContext(typeof(CosyDbContext))]
-    partial class CosyDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260403102343_AddFlowTempMode")]
+    partial class AddFlowTempMode
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -59,48 +62,6 @@ namespace OctopusCosyAnalyser.ApiService.Migrations
                         .IsUnique();
 
                     b.ToTable("ConsumptionReadings");
-                });
-
-            modelBuilder.Entity("OctopusCosyAnalyser.ApiService.Models.DailyCostRecord", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<double>("AvgUnitRatePence")
-                        .HasColumnType("double precision");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateOnly>("Date")
-                        .HasColumnType("date");
-
-                    b.Property<string>("DeviceId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<double?>("StandingChargePence")
-                        .HasColumnType("double precision");
-
-                    b.Property<double>("TotalCostPence")
-                        .HasColumnType("double precision");
-
-                    b.Property<double>("TotalUsageKwh")
-                        .HasColumnType("double precision");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DeviceId", "Date")
-                        .IsUnique();
-
-                    b.ToTable("DailyCostRecords");
                 });
 
             modelBuilder.Entity("OctopusCosyAnalyser.ApiService.Models.HeatPumpDevice", b =>
