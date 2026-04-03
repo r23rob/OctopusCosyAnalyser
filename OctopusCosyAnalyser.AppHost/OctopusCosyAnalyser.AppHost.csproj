@@ -10,10 +10,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OctopusCosyAnalyser.ApiService\OctopusCosyAnalyser.ApiService.csproj" />
-    <ProjectReference Include="..\OctopusCosyAnalyser.Web\OctopusCosyAnalyser.Web.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.JavaScript" Version="13.1.1" />
     <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.1.1" />
   </ItemGroup>
 
