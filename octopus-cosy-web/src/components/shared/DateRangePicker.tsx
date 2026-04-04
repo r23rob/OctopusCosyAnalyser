@@ -8,7 +8,6 @@ interface Props {
 }
 
 function toInputValue(d: Date): string {
-  // datetime-local input expects "YYYY-MM-DDTHH:mm"
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
@@ -16,7 +15,7 @@ function toInputValue(d: Date): string {
 export function DateRangePicker({ from, to, onChange, className }: Props) {
   return (
     <div className={cn('flex items-center gap-2 text-xs', className)}>
-      <label className="text-white/40">From</label>
+      <label className="text-ink3">From</label>
       <input
         type="datetime-local"
         value={toInputValue(from)}
@@ -24,9 +23,9 @@ export function DateRangePicker({ from, to, onChange, className }: Props) {
           const d = new Date(e.target.value)
           if (!isNaN(d.getTime())) onChange(d, to)
         }}
-        className="rounded border border-white/10 bg-white/[0.04] px-2 py-1 text-white/80 text-xs focus:outline-none focus:border-blue-500/50"
+        className="rounded border border-border-subtle bg-bg-base px-2 py-1 text-ink text-xs focus:outline-none focus:border-primary/50"
       />
-      <label className="text-white/40">To</label>
+      <label className="text-ink3">To</label>
       <input
         type="datetime-local"
         value={toInputValue(to)}
@@ -34,7 +33,7 @@ export function DateRangePicker({ from, to, onChange, className }: Props) {
           const d = new Date(e.target.value)
           if (!isNaN(d.getTime())) onChange(from, d)
         }}
-        className="rounded border border-white/10 bg-white/[0.04] px-2 py-1 text-white/80 text-xs focus:outline-none focus:border-blue-500/50"
+        className="rounded border border-border-subtle bg-bg-base px-2 py-1 text-ink text-xs focus:outline-none focus:border-primary/50"
       />
     </div>
   )

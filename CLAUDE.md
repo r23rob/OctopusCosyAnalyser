@@ -286,3 +286,9 @@ These were in the original design but not yet built:
 - **JSONB for sensor readings**: all sensor data stored as a single JSONB column (`SensorReadingsJson`) on snapshot rows rather than a child table — keeps the schema flat with no joins
 - **Raw GraphQL endpoint gated to Development**: `/api/heatpump/graphql` only registers in `IsDevelopment()` to prevent arbitrary query proxying in production
 - **Per-request HTTP auth headers**: `OctopusEnergyClient` uses `HttpRequestMessage` headers (not `DefaultRequestHeaders`) to avoid thread-safety issues between concurrent JWT (GraphQL) and Basic (REST) auth requests
+
+## Heat Pump Dashboard
+- Design: heat_pump_v7.html — do not change fonts (JetBrains Mono + Instrument Sans),
+  colours (cyan #06B6D4 accent, near-black ink), or layout structure
+- Data source: PostgreSQL via existing OctopusCosyAnalyser connection
+- AI analysis card calls Anthropic API — keep that wiring intact

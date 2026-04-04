@@ -1,13 +1,9 @@
 import { useQueries } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
 import { queryKeys } from '@/lib/query-keys'
-import { periodStart } from '@/lib/utils'
-import type { PeriodDays } from '@/components/dashboard/PeriodSelector'
 
 /** Fetches snapshots + period summary in parallel for the selected period. */
-export function usePeriodData(deviceId: string | undefined, periodDays: PeriodDays) {
-  const from = periodStart(periodDays)
-  const to = new Date()
+export function usePeriodData(deviceId: string | undefined, from: Date, to: Date) {
   const fromStr = from.toISOString()
   const toStr = to.toISOString()
 
@@ -41,10 +37,7 @@ export function usePeriodData(deviceId: string | undefined, periodDays: PeriodDa
 }
 
 /** Fetches daily aggregates for the selected period. */
-export function useDailyAggregates(deviceId: string | undefined, periodDays: PeriodDays) {
-  const from = periodStart(periodDays)
-  const to = new Date()
-
+export function useDailyAggregates(deviceId: string | undefined, from: Date, to: Date) {
   return useQueries({
     queries: [
       {

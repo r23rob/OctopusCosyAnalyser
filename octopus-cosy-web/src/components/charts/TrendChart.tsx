@@ -1,7 +1,6 @@
 import {
   CartesianGrid,
   ComposedChart,
-  Legend,
   Line,
   ResponsiveContainer,
   Tooltip,
@@ -23,25 +22,25 @@ interface Props {
   snapshots: HeatPumpSnapshotDto[]
   series: SeriesConfig[]
   dualAxis?: boolean
+  height?: number
 }
 
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string }) => {
   if (!active || !payload?.length) return null
   return (
-    <div className="rounded-lg border border-white/10 bg-[#1e2130] p-3 text-xs shadow-xl">
-      <p className="mb-2 text-white/60 font-medium">{label}</p>
+    <div className="rounded-[10px] bg-ink text-white p-[10px_13px] text-xs shadow-[0_8px_28px_rgba(0,0,0,0.2)] min-w-[195px]">
+      <p className="mb-1.5 font-mono text-[7.5px] tracking-[.09em] uppercase text-white/28">{label}</p>
       {payload.map((p) => (
-        <div key={p.name} className="flex items-center gap-2 mb-1">
-          <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-          <span className="text-white/70">{p.name}:</span>
-          <span className="text-white font-medium">{fmtDec(p.value)}</span>
+        <div key={p.name} className="flex justify-between gap-3.5 py-[1.5px] items-baseline">
+          <span className="text-white/45 text-[9px]" style={{ color: p.color }}>{p.name}</span>
+          <span className="font-mono text-[10px] text-white">{fmtDec(p.value)}</span>
         </div>
       ))}
     </div>
   )
 }
 
-export function TrendChart({ snapshots, series, dualAxis = false }: Props) {
+export function TrendChart({ snapshots, series, dualAxis = false, height = 228 }: Props) {
   const data = snapshots.map((s) => {
     const pt: Record<string, number | string> = {
       t: shortDate(s.snapshotTakenAt),
@@ -53,38 +52,39 @@ export function TrendChart({ snapshots, series, dualAxis = false }: Props) {
     return pt
   })
 
+  // Group series by yAxisId
+  const hasLeftAxis = series.some(s => (s.yAxisId ?? 'left') === 'left')
+  const hasRightAxis = dualAxis || series.some(s => s.yAxisId === 'right')
+
   return (
-    <ResponsiveContainer width="100%" height={240}>
+    <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
         <XAxis
           dataKey="t"
-          tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.38)' }}
+          tick={{ fontSize: 7.5, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' }}
           tickLine={false}
           axisLine={false}
           interval="preserveStartEnd"
         />
-        <YAxis
-          yAxisId="left"
-          tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.38)' }}
-          tickLine={false}
-          axisLine={false}
-        />
-        {dualAxis && (
+        {hasLeftAxis && (
+          <YAxis
+            yAxisId="left"
+            tick={{ fontSize: 7.5, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' }}
+            tickLine={false}
+            axisLine={false}
+          />
+        )}
+        {hasRightAxis && (
           <YAxis
             yAxisId="right"
             orientation="right"
-            tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.38)' }}
+            tick={{ fontSize: 7.5, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' }}
             tickLine={false}
             axisLine={false}
           />
         )}
         <Tooltip content={<CustomTooltip />} />
-        <Legend
-          wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}
-          iconType="circle"
-          iconSize={8}
-        />
         {series.map((sr) => (
           <Line
             key={String(sr.key)}
@@ -93,7 +93,7 @@ export function TrendChart({ snapshots, series, dualAxis = false }: Props) {
             dataKey={String(sr.key)}
             name={sr.label}
             stroke={sr.color}
-            strokeWidth={2}
+            strokeWidth={sr.strokeDasharray ? 1 : 1.5}
             dot={false}
             strokeDasharray={sr.strokeDasharray}
             connectNulls

@@ -72,17 +72,31 @@ export function fmtPercent(value: number | null | undefined): string {
 // ── COP helpers ───────────────────────────────────────────────────────
 
 export function copColorClass(cop: number | null | undefined): string {
-  if (cop == null) return 'text-white/60'
-  if (cop >= 3.5) return 'text-green-400'
-  if (cop >= 2.5) return 'text-amber-400'
-  return 'text-red-400'
+  if (cop == null) return 'text-ink3'
+  if (cop >= 3.2) return 'text-[#16A34A]'
+  if (cop >= 2.5) return 'text-[#D97706]'
+  return 'text-[#DC2626]'
 }
 
 export function copColor(cop: number | null | undefined): string {
-  if (cop == null) return 'rgba(255,255,255,0.38)'
-  if (cop >= 3.5) return '#22c55e'
-  if (cop >= 2.5) return '#f59e0b'
-  return '#ef4444'
+  if (cop == null) return '#A1A1AA'
+  if (cop >= 3.2) return '#16A34A'
+  if (cop >= 2.5) return '#D97706'
+  return '#DC2626'
+}
+
+export function copLabel(cop: number | null | undefined): string {
+  if (cop == null) return '—'
+  if (cop >= 3.2) return 'Running well'
+  if (cop >= 2.5) return 'Running OK'
+  return 'Low efficiency'
+}
+
+export function copCls(cop: number | null | undefined): 'g' | 'w' | 'r' {
+  if (cop == null) return 'r'
+  if (cop >= 3.2) return 'g'
+  if (cop >= 2.5) return 'w'
+  return 'r'
 }
 
 // ── Snapshot downsampling ─────────────────────────────────────────────
@@ -99,4 +113,51 @@ export function parseFloatSafe(s: string | null | undefined): number | null {
   if (!s) return null
   const n = parseFloat(s)
   return isNaN(n) ? null : n
+}
+
+// ── Period label formatting ───────────────────────────────────────────
+
+export type PeriodType = 'day' | 'week' | 'month' | 'year'
+
+export function periodLabel(type: PeriodType, from: Date, to: Date): string {
+  switch (type) {
+    case 'day':
+      return from.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
+    case 'week': {
+      const s = from.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+      const e = to.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
+      return `${s} – ${e}`
+    }
+    case 'month':
+      return from.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+    case 'year':
+      return from.getFullYear().toString()
+  }
+}
+
+export function periodDaysFromType(type: PeriodType): number {
+  switch (type) {
+    case 'day': return 1
+    case 'week': return 7
+    case 'month': return 30
+    case 'year': return 365
+  }
+}
+
+export function vsLabel(type: PeriodType): string {
+  switch (type) {
+    case 'day': return 'vs yesterday'
+    case 'week': return 'vs last week'
+    case 'month': return 'vs last month'
+    case 'year': return 'vs last year'
+  }
+}
+
+export function periodSubtitle(type: PeriodType): string {
+  switch (type) {
+    case 'day': return '24-hour view'
+    case 'week': return '7-day view'
+    case 'month': return 'Monthly view'
+    case 'year': return 'Annual view'
+  }
 }
