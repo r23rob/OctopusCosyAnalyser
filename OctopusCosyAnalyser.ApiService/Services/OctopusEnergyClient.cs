@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 
 namespace OctopusCosyAnalyser.ApiService.Services;
 
-public class OctopusEnergyClient
+public class OctopusEnergyClient : IOctopusEnergyClient
 {
     private sealed record TokenCacheEntry(string Token, DateTime ExpiresAt);
 

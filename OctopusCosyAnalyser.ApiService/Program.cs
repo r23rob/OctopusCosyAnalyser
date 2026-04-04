@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Http.Resilience;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Endpoints;
+using OctopusCosyAnalyser.ApiService.Options;
 using OctopusCosyAnalyser.ApiService.Services;
 using OctopusCosyAnalyser.ApiService.Workers;
 
@@ -13,34 +14,46 @@ builder.AddServiceDefaults();
 // Add PostgreSQL DbContext
 builder.AddNpgsqlDbContext<CosyDbContext>("cosydb");
 
+// Bind configuration sections
+var octopusOptions = new OctopusApiOptions();
+builder.Configuration.GetSection(OctopusApiOptions.SectionName).Bind(octopusOptions);
+
+var anthropicOptions = new AnthropicOptions();
+builder.Configuration.GetSection(AnthropicOptions.SectionName).Bind(anthropicOptions);
+
+builder.Services.Configure<OctopusApiOptions>(builder.Configuration.GetSection(OctopusApiOptions.SectionName));
+builder.Services.Configure<AnthropicOptions>(builder.Configuration.GetSection(AnthropicOptions.SectionName));
+
 // Add Octopus Energy API client with extended timeouts for large queries
 // Paginated queries (e.g. applicableRates, sync-timeseries) may make many sequential API calls
-builder.Services.AddHttpClient<OctopusEnergyClient>()
-    .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromMinutes(5))
+builder.Services.AddHttpClient<IOctopusEnergyClient, OctopusEnergyClient>()
+    .ConfigureHttpClient(client => client.Timeout = octopusOptions.HttpTimeout)
     .AddStandardResilienceHandler(options =>
     {
-        options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(5);
-        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
-        options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
+        options.TotalRequestTimeout.Timeout = octopusOptions.HttpTimeout;
+        options.AttemptTimeout.Timeout = octopusOptions.AttemptTimeout;
+        options.CircuitBreaker.SamplingDuration = octopusOptions.CircuitBreakerSamplingDuration;
     });
 
 // Add AI services
-// API key can come from DB (Account Settings) or from env var / config as fallback
-var anthropicKey = builder.Configuration["Anthropic:ApiKey"]
-    ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+// API key can come from DB (Account Settings) or from config/env var as fallback
+var anthropicKey = anthropicOptions.ApiKey;
 
 // Detailed AI analysis service (raw HTTP client for full CSV-based analysis)
-builder.Services.AddHttpClient<AiAnalysisService>(client =>
+builder.Services.AddHttpClient<IAiAnalysisService, AiAnalysisService>(client =>
 {
-    client.Timeout = TimeSpan.FromMinutes(3);
+    client.Timeout = anthropicOptions.Timeout;
     if (!string.IsNullOrEmpty(anthropicKey))
     {
-        // Pre-configure for env var key (fallback when no DB key is set)
-        client.BaseAddress = new Uri("https://api.anthropic.com/");
+        // Pre-configure for config/env var key (fallback when no DB key is set)
+        client.BaseAddress = new Uri(anthropicOptions.BaseUrl);
         client.DefaultRequestHeaders.Add("x-api-key", anthropicKey);
-        client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+        client.DefaultRequestHeaders.Add("anthropic-version", anthropicOptions.ApiVersion);
     }
 });
+
+// Add Heat Pump Data Service (daily aggregates, time series enrichment)
+builder.Services.AddSingleton<IHeatPumpDataService, HeatPumpDataService>();
 
 // Add Heat Pump Snapshot Worker
 builder.Services.AddHostedService<HeatPumpSnapshotWorker>();

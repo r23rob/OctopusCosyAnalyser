@@ -10,26 +10,26 @@ public static class AccountSettingsEndpoints
     {
         var group = app.MapGroup("/api/settings");
 
-        group.MapGet("", async (CosyDbContext db) =>
+        group.MapGet("", async (CosyDbContext db, CancellationToken ct) =>
         {
             var settings = await db.OctopusAccountSettings
                 .OrderBy(s => s.AccountNumber)
-                .ToListAsync();
+                .ToListAsync(ct);
 
             return Results.Ok(settings);
         }).WithName("GetAccountSettings");
 
-        group.MapGet("/{accountNumber}", async (string accountNumber, CosyDbContext db) =>
+        group.MapGet("/{accountNumber}", async (string accountNumber, CosyDbContext db, CancellationToken ct) =>
         {
             var settings = await db.OctopusAccountSettings
-                .FirstOrDefaultAsync(s => s.AccountNumber == accountNumber);
+                .FirstOrDefaultAsync(s => s.AccountNumber == accountNumber, ct);
 
             return settings is null
                 ? Results.NotFound("Account settings not found")
                 : Results.Ok(settings);
         }).WithName("GetAccountSettingsByAccount");
 
-        group.MapPut("", async (AccountSettingsRequest request, CosyDbContext db) =>
+        group.MapPut("", async (AccountSettingsRequest request, CosyDbContext db, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.AccountNumber))
                 return Results.BadRequest("Account number is required");
@@ -41,7 +41,7 @@ public static class AccountSettingsEndpoints
                 return Results.BadRequest("Octopus password is required");
 
             var settings = await db.OctopusAccountSettings
-                .FirstOrDefaultAsync(s => s.AccountNumber == request.AccountNumber);
+                .FirstOrDefaultAsync(s => s.AccountNumber == request.AccountNumber, ct);
 
             if (settings is null)
             {
@@ -67,7 +67,7 @@ public static class AccountSettingsEndpoints
                 settings.UpdatedAt = DateTime.UtcNow;
             }
 
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
 
             return Results.Ok(settings);
         }).WithName("UpsertAccountSettings");

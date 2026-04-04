@@ -292,3 +292,71 @@ These were in the original design but not yet built:
   colours (cyan #06B6D4 accent, near-black ink), or layout structure
 - Data source: PostgreSQL via existing OctopusCosyAnalyser connection
 - AI analysis card calls Anthropic API — keep that wiring intact
+
+## .NET API Patterns & Best Practices
+
+### Architecture
+- Use **Minimal APIs** for all endpoints — no MVC controllers.
+- Business logic lives in service classes, not in endpoint delegates.
+  Endpoint handlers should be thin: validate, call service, return result.
+- Keep it simple. This is a small personal-use API. Do not introduce
+  abstractions that do not earn their place at this scale.
+- EF Core `DbContext` is acceptable as the data access layer — no need
+  for a separate Repository layer on top for this project size.
+
+### Design Patterns
+- Use **service classes** for business logic, injected directly into
+  endpoint delegates via DI. No MediatR, no command/query objects.
+```csharp
+// Good — direct, clean, readable
+app.MapPost("/tasks", async (CreateTaskRequest req, ITaskService taskService) =>
+    await taskService.CreateAsync(req));
+
+// Bad — unnecessary indirection for this scale
+app.MapPost("/tasks", async (CreateTaskCommand cmd, IMediator mediator) =>
+    await mediator.Send(cmd));
+```
+- Use the **Options pattern** for all configuration. No magic strings,
+  no inline config values, no `Environment.GetEnvironmentVariable()` reads
+  outside of Options classes.
+- Use a **ServiceResult\<T\>** return type for service methods that can fail
+  in expected ways (not found, validation error, API failure).
+  Reserve exceptions for truly unexpected infrastructure failures.
+- Centralise API response shaping in extension methods —
+  keep `Results.Ok()` / `Results.Problem()` patterns consistent.
+
+### Dependency Injection
+- Always register and inject by **interface**, never by concrete type.
+- Use appropriate lifetimes: Scoped for per-request services,
+  Singleton for stateless clients, Transient sparingly.
+- Never use the service locator pattern (`IServiceProvider` injected into
+  business logic). Workers that need scoped services should use
+  `IServiceScopeFactory`.
+
+### Error Handling
+- Global exception handling via `UseExceptionHandler()` +
+  `AddProblemDetails()` — no try/catch in handlers for generic exceptions.
+- Return ProblemDetails-compliant error responses for all 4xx/5xx.
+- Use `ServiceResult<T>` for expected failure paths — not exceptions.
+
+### Async
+- Every method that performs I/O must be async and return `Task` or `Task<T>`.
+- Never use `.Result`, `.Wait()`, or `.GetAwaiter().GetResult()`.
+- `CancellationToken` must be accepted and propagated through all async
+  call chains — endpoints, services, and EF Core queries.
+
+### Naming & Conventions
+- Services: `I[Name]Service` / `[Name]Service` or `I[Name]Client` / `[Name]Client`
+- DTOs: `*Dto` suffix (existing convention in `Shared/Models/`)
+- Extension classes: `[Subject]Extensions`
+- Request records: `[Entity]Request` (inline in endpoint files is fine)
+
+### Anti-Patterns — Never Do These
+- No MediatR or command/query pipeline — direct service injection only.
+- No business logic in endpoint delegates (validation is OK, computation is not).
+- No `.Result` or `.Wait()` on async methods.
+- No magic strings for config keys, URIs, or timeouts.
+- No exceptions thrown for expected failure states (not found, bad input).
+- No concrete type registration in DI for services that have interfaces.
+- No shared mutable static state (except thread-safe caches with
+  `ConcurrentDictionary`).
