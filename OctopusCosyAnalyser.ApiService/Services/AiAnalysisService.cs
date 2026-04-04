@@ -4,17 +4,17 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OctopusCosyAnalyser.ApiService.Data;
-using OctopusCosyAnalyser.ApiService.Endpoints;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.Shared.Models;
 
 namespace OctopusCosyAnalyser.ApiService.Services;
 
-public class AiAnalysisService
+public class AiAnalysisService : IAiAnalysisService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<AiAnalysisService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IHeatPumpDataService _dataService;
     private readonly bool _isConfigured;
 
     // Dashboard summary cache (30-minute TTL)
@@ -94,11 +94,12 @@ public class AiAnalysisService
         Use markdown formatting with headers, bullet points, and bold for key figures. Be direct and specific — the user is technically competent.
         """;
 
-    public AiAnalysisService(HttpClient httpClient, ILogger<AiAnalysisService> logger, IServiceScopeFactory scopeFactory)
+    public AiAnalysisService(HttpClient httpClient, ILogger<AiAnalysisService> logger, IServiceScopeFactory scopeFactory, IHeatPumpDataService dataService)
     {
         _httpClient = httpClient;
         _logger = logger;
         _scopeFactory = scopeFactory;
+        _dataService = dataService;
         _isConfigured = _httpClient.BaseAddress is not null;
     }
 
@@ -234,9 +235,9 @@ public class AiAnalysisService
             var weekSnapshots = snapshots.Where(s => s.SnapshotTakenAt >= now.AddDays(-7)).ToList();
             var monthSnapshots = snapshots.Where(s => s.SnapshotTakenAt >= now.AddDays(-30)).ToList();
 
-            var weekAggs = HeatPumpEndpoints.ComputeDailyAggregates(weekSnapshots);
-            var monthAggs = HeatPumpEndpoints.ComputeDailyAggregates(monthSnapshots);
-            var yearAggs = HeatPumpEndpoints.ComputeDailyAggregates(snapshots);
+            var weekAggs = _dataService.ComputeDailyAggregates(weekSnapshots);
+            var monthAggs = _dataService.ComputeDailyAggregates(monthSnapshots);
+            var yearAggs = _dataService.ComputeDailyAggregates(snapshots);
 
             // Merge stored cost data into aggregates
             var costRecords = await db.DailyCostRecords
