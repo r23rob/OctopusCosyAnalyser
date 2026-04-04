@@ -12,8 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as HeatpumpIndexRouteImport } from './routes/heatpump/index'
-import { Route as HeatpumpCostTrackingRouteImport } from './routes/heatpump/cost-tracking'
-import { Route as HeatpumpAiAnalysisRouteImport } from './routes/heatpump/ai-analysis'
+import { Route as HeatpumpScatterRouteImport } from './routes/heatpump/scatter'
+import { Route as HeatpumpDataRouteImport } from './routes/heatpump/data'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -30,37 +30,37 @@ const HeatpumpIndexRoute = HeatpumpIndexRouteImport.update({
   path: '/heatpump/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const HeatpumpCostTrackingRoute = HeatpumpCostTrackingRouteImport.update({
-  id: '/heatpump/cost-tracking',
-  path: '/heatpump/cost-tracking',
+const HeatpumpScatterRoute = HeatpumpScatterRouteImport.update({
+  id: '/heatpump/scatter',
+  path: '/heatpump/scatter',
   getParentRoute: () => rootRouteImport,
 } as any)
-const HeatpumpAiAnalysisRoute = HeatpumpAiAnalysisRouteImport.update({
-  id: '/heatpump/ai-analysis',
-  path: '/heatpump/ai-analysis',
+const HeatpumpDataRoute = HeatpumpDataRouteImport.update({
+  id: '/heatpump/data',
+  path: '/heatpump/data',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
-  '/heatpump/ai-analysis': typeof HeatpumpAiAnalysisRoute
-  '/heatpump/cost-tracking': typeof HeatpumpCostTrackingRoute
+  '/heatpump/data': typeof HeatpumpDataRoute
+  '/heatpump/scatter': typeof HeatpumpScatterRoute
   '/heatpump/': typeof HeatpumpIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
-  '/heatpump/ai-analysis': typeof HeatpumpAiAnalysisRoute
-  '/heatpump/cost-tracking': typeof HeatpumpCostTrackingRoute
+  '/heatpump/data': typeof HeatpumpDataRoute
+  '/heatpump/scatter': typeof HeatpumpScatterRoute
   '/heatpump': typeof HeatpumpIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
-  '/heatpump/ai-analysis': typeof HeatpumpAiAnalysisRoute
-  '/heatpump/cost-tracking': typeof HeatpumpCostTrackingRoute
+  '/heatpump/data': typeof HeatpumpDataRoute
+  '/heatpump/scatter': typeof HeatpumpScatterRoute
   '/heatpump/': typeof HeatpumpIndexRoute
 }
 export interface FileRouteTypes {
@@ -68,30 +68,25 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/settings'
-    | '/heatpump/ai-analysis'
-    | '/heatpump/cost-tracking'
+    | '/heatpump/data'
+    | '/heatpump/scatter'
     | '/heatpump/'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/settings'
-    | '/heatpump/ai-analysis'
-    | '/heatpump/cost-tracking'
-    | '/heatpump'
+  to: '/' | '/settings' | '/heatpump/data' | '/heatpump/scatter' | '/heatpump'
   id:
     | '__root__'
     | '/'
     | '/settings'
-    | '/heatpump/ai-analysis'
-    | '/heatpump/cost-tracking'
+    | '/heatpump/data'
+    | '/heatpump/scatter'
     | '/heatpump/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SettingsRoute: typeof SettingsRoute
-  HeatpumpAiAnalysisRoute: typeof HeatpumpAiAnalysisRoute
-  HeatpumpCostTrackingRoute: typeof HeatpumpCostTrackingRoute
+  HeatpumpDataRoute: typeof HeatpumpDataRoute
+  HeatpumpScatterRoute: typeof HeatpumpScatterRoute
   HeatpumpIndexRoute: typeof HeatpumpIndexRoute
 }
 
@@ -118,18 +113,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HeatpumpIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/heatpump/cost-tracking': {
-      id: '/heatpump/cost-tracking'
-      path: '/heatpump/cost-tracking'
-      fullPath: '/heatpump/cost-tracking'
-      preLoaderRoute: typeof HeatpumpCostTrackingRouteImport
+    '/heatpump/scatter': {
+      id: '/heatpump/scatter'
+      path: '/heatpump/scatter'
+      fullPath: '/heatpump/scatter'
+      preLoaderRoute: typeof HeatpumpScatterRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/heatpump/ai-analysis': {
-      id: '/heatpump/ai-analysis'
-      path: '/heatpump/ai-analysis'
-      fullPath: '/heatpump/ai-analysis'
-      preLoaderRoute: typeof HeatpumpAiAnalysisRouteImport
+    '/heatpump/data': {
+      id: '/heatpump/data'
+      path: '/heatpump/data'
+      fullPath: '/heatpump/data'
+      preLoaderRoute: typeof HeatpumpDataRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -138,8 +133,8 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SettingsRoute: SettingsRoute,
-  HeatpumpAiAnalysisRoute: HeatpumpAiAnalysisRoute,
-  HeatpumpCostTrackingRoute: HeatpumpCostTrackingRoute,
+  HeatpumpDataRoute: HeatpumpDataRoute,
+  HeatpumpScatterRoute: HeatpumpScatterRoute,
   HeatpumpIndexRoute: HeatpumpIndexRoute,
 }
 export const routeTree = rootRouteImport

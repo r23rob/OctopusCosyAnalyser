@@ -15,9 +15,10 @@ interface Props {
   xKey: keyof HeatPumpSnapshotDto
   xLabel: string
   xUnit?: string
+  height?: number
 }
 
-export function CopScatterChart({ snapshots, xKey, xLabel, xUnit = '' }: Props) {
+export function CopScatterChart({ snapshots, xKey, xLabel, xUnit = '', height = 220 }: Props) {
   const data = snapshots
     .filter((s) => s.coefficientOfPerformance != null && s[xKey] != null)
     .map((s) => ({
@@ -27,33 +28,34 @@ export function CopScatterChart({ snapshots, xKey, xLabel, xUnit = '' }: Props) 
     }))
 
   return (
-    <ResponsiveContainer width="100%" height={220}>
+    <ResponsiveContainer width="100%" height={height}>
       <ReScatterChart margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
         <XAxis
           dataKey="x"
           name={xLabel}
           unit={xUnit}
           type="number"
-          tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.38)' }}
+          tick={{ fontSize: 8.5, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' }}
           tickLine={false}
           axisLine={false}
+          label={{ value: `${xLabel} (${xUnit || '°C'})`, position: 'bottom', offset: -4, style: { fontSize: 8.5, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' } }}
         />
         <YAxis
           dataKey="cop"
           name="COP"
           domain={[0, 6]}
-          tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.38)' }}
+          tick={{ fontSize: 8.5, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' }}
           tickLine={false}
           axisLine={false}
+          label={{ value: 'COP', angle: -90, position: 'insideLeft', offset: 20, style: { fontSize: 8.5, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' } }}
         />
         <Tooltip
-          contentStyle={{ background: '#1e2130', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 11 }}
-          labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
-          cursor={{ strokeDasharray: '3 3', stroke: 'rgba(255,255,255,0.2)' }}
+          contentStyle={{ background: '#09090B', border: 'none', borderRadius: 10, fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: '#fff', padding: '10px 13px' }}
+          cursor={{ strokeDasharray: '3 3', stroke: 'rgba(0,0,0,0.15)' }}
           formatter={(value: unknown, name: unknown) => [fmtDec(typeof value === 'number' ? value : 0), String(name)] as [string, string]}
         />
-        <Scatter data={data} fill="#22c55e" fillOpacity={0.7} />
+        <Scatter data={data} fillOpacity={0.6} />
       </ReScatterChart>
     </ResponsiveContainer>
   )

@@ -1,84 +1,93 @@
-import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { Activity, Bot, PoundSterling, Settings, Menu, X, Zap } from 'lucide-react'
+import { LayoutDashboard, ScatterChart, Table2, Sparkles, Settings } from 'lucide-react'
+import { useAiDrawer } from './AiDrawerContext'
 
-interface NavLinkProps {
-  to: string
-  icon: React.ReactNode
-  label: string
-  onClick?: () => void
+export function NavBar() {
+  const { toggle } = useAiDrawer()
+
+  return (
+    <>
+      {/* Top nav bar */}
+      <nav className="sticky top-0 z-[200] h-[52px] bg-white/88 backdrop-blur-[18px] border-b border-[rgba(0,0,0,0.07)] flex items-center px-4 sm:px-[22px]">
+        {/* Brand */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="w-[22px] h-[22px] rounded-[6px] bg-ink flex items-center justify-center">
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+              <path d="M5.5.5C4 2 2 3.3 2 6.3C2 8.8 3.7 10.5 5.5 10.5C7.3 10.5 9 8.8 9 6.3C9 3.3 7 2 5.5.5Z" fill="white" opacity=".88"/>
+              <circle cx="5.5" cy="7" r="1.3" fill="white" opacity=".38"/>
+            </svg>
+          </div>
+          <span className="text-[13px] font-semibold tracking-tight">Ecodan</span>
+          <span className="hidden sm:inline font-mono text-[8px] text-ink3 tracking-[.07em] uppercase ml-0.5">· Thermal Monitor</span>
+        </div>
+
+        {/* Center nav pills (desktop) */}
+        <div className="hidden sm:flex items-center gap-0.5 mx-auto bg-bg-surface border border-border-subtle rounded-[10px] p-[3px]">
+          <NavPill to="/heatpump" icon={<LayoutDashboard size={15} />} tip="Dashboard" exact />
+          <NavPill to="/heatpump/scatter" icon={<ScatterChart size={15} />} tip="COP vs Temp" />
+          <NavPill to="/heatpump/data" icon={<Table2 size={15} />} tip="Data & Export" />
+        </div>
+
+        {/* Right section */}
+        <div className="flex items-center gap-2 flex-shrink-0 ml-auto sm:ml-0">
+          <button
+            onClick={toggle}
+            className="flex items-center gap-1.5 px-2.5 py-[5px] rounded-[7px] border border-border-subtle bg-white cursor-pointer font-mono text-[8.5px] tracking-[.06em] uppercase text-ink2 hover:border-border-card hover:text-ink transition-all duration-150"
+          >
+            <Sparkles size={13} />
+            <span className="hidden sm:inline">AI Analysis</span>
+          </button>
+          <Link
+            to="/settings"
+            className="w-[34px] h-[34px] rounded-[7px] flex items-center justify-center text-ink3 hover:bg-white hover:text-ink hover:border-border-subtle border border-transparent transition-all duration-150"
+          >
+            <Settings size={15} />
+          </Link>
+          <div className="hidden sm:flex items-center gap-[5px] font-mono text-[8.5px] text-success tracking-[.05em] uppercase px-[9px] py-1 rounded-full bg-success-bg border border-[rgba(22,163,74,0.15)]">
+            <div className="w-[5px] h-[5px] rounded-full bg-success pulse" />
+            Live
+          </div>
+        </div>
+      </nav>
+
+      {/* Mobile bottom tab bar */}
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-[200] h-12 bg-white/95 backdrop-blur-[18px] border-t border-[rgba(0,0,0,0.07)] flex items-center justify-around px-4">
+        <MobileTab to="/heatpump" icon={<LayoutDashboard size={18} />} label="Dashboard" exact />
+        <MobileTab to="/heatpump/scatter" icon={<ScatterChart size={18} />} label="Scatter" />
+        <MobileTab to="/heatpump/data" icon={<Table2 size={18} />} label="Data" />
+      </div>
+    </>
+  )
 }
 
-function NavLink({ to, icon, label, onClick }: NavLinkProps) {
+function NavPill({ to, icon, tip, exact }: { to: string; icon: React.ReactNode; tip: string; exact?: boolean }) {
   return (
     <Link
       to={to}
-      onClick={onClick}
-      className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white/60 hover:text-white hover:bg-white/[0.06] transition-colors"
-      activeProps={{ className: 'text-white bg-white/[0.08] border-l-2 border-blue-500 rounded-l-none pl-[10px]' }}
+      activeOptions={exact ? { exact: true } : undefined}
+      className="w-[34px] h-[34px] rounded-[7px] flex items-center justify-center cursor-pointer text-ink3 hover:bg-white hover:text-ink hover:border-[rgba(0,0,0,0.07)] border border-transparent transition-all duration-150 relative group"
+      activeProps={{
+        className: 'bg-white text-ink border-[rgba(0,0,0,0.07)] shadow-[0_1px_4px_rgba(0,0,0,0.08)] [&>svg]:text-primary',
+      }}
     >
-      <span className="w-4 h-4 flex-shrink-0">{icon}</span>
-      {label}
+      {icon}
+      <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-ink text-white font-mono text-[9px] tracking-[.05em] px-2 py-[3px] rounded-[5px] whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 z-[300] before:content-[''] before:absolute before:bottom-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-b-ink">
+        {tip}
+      </div>
     </Link>
   )
 }
 
-export function NavBar() {
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const close = () => setMobileOpen(false)
-
-  const links = (
-    <nav className="flex flex-col gap-1 p-3 flex-1">
-      <NavLink to="/heatpump" icon={<Activity size={16} />} label="Dashboard" onClick={close} />
-      <NavLink to="/heatpump/ai-analysis" icon={<Bot size={16} />} label="AI Analysis" onClick={close} />
-      <NavLink to="/heatpump/cost-tracking" icon={<PoundSterling size={16} />} label="Cost Tracking" onClick={close} />
-      <div className="mt-4 mb-1 px-3 text-[10px] uppercase tracking-widest text-white/25 font-medium">
-        Settings
-      </div>
-      <NavLink to="/settings" icon={<Settings size={16} />} label="Account Settings" onClick={close} />
-    </nav>
-  )
-
+function MobileTab({ to, icon, label, exact }: { to: string; icon: React.ReactNode; label: string; exact?: boolean }) {
   return (
-    <>
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex flex-col w-56 flex-shrink-0 border-r border-white/[0.06] bg-[#1a1d27] min-h-screen">
-        <div className="flex items-center gap-2 px-4 py-4 border-b border-white/[0.06]">
-          <Zap size={18} className="text-blue-400" />
-          <span className="font-semibold text-white/90 text-sm">Cosy Analyser</span>
-        </div>
-        {links}
-      </aside>
-
-      {/* Mobile top bar */}
-      <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-white/[0.06] bg-[#1a1d27]">
-        <div className="flex items-center gap-2">
-          <Zap size={16} className="text-blue-400" />
-          <span className="font-semibold text-white/90 text-sm">Cosy Analyser</span>
-        </div>
-        <button onClick={() => setMobileOpen((o) => !o)} className="text-white/60 hover:text-white p-1">
-          {mobileOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
-      </header>
-
-      {/* Mobile nav drawer */}
-      {mobileOpen && (
-        <div className="md:hidden absolute inset-0 z-50 flex">
-          <div className="flex flex-col w-56 bg-[#1a1d27] border-r border-white/[0.06] min-h-screen pt-2">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
-              <div className="flex items-center gap-2">
-                <Zap size={16} className="text-blue-400" />
-                <span className="font-semibold text-white/90 text-sm">Cosy Analyser</span>
-              </div>
-              <button onClick={close} className="text-white/60">
-                <X size={18} />
-              </button>
-            </div>
-            {links}
-          </div>
-          <div className="flex-1 bg-black/50" onClick={close} />
-        </div>
-      )}
-    </>
+    <Link
+      to={to}
+      activeOptions={exact ? { exact: true } : undefined}
+      className="flex flex-col items-center gap-0.5 text-ink3 transition-colors"
+      activeProps={{ className: 'text-primary' }}
+    >
+      {icon}
+      <span className="font-mono text-[7px] tracking-[.05em] uppercase">{label}</span>
+    </Link>
   )
 }
