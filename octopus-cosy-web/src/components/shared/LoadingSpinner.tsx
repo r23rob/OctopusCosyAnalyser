@@ -12,11 +12,11 @@ export function LoadingSpinner({ className, size = 'md', label }: Props) {
     <div className={cn('flex items-center gap-2', className)}>
       <span
         className={cn(
-          'rounded-full border-white/20 border-t-white/60 animate-spin',
+          'rounded-full border-ink4 border-t-primary animate-spin',
           sizes[size],
         )}
       />
-      {label && <span className="text-xs text-white/40">{label}</span>}
+      {label && <span className="text-xs text-ink3">{label}</span>}
     </div>
   )
 }

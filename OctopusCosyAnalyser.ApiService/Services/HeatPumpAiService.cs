@@ -3,9 +3,10 @@ using System.Text;
 using Anthropic;
 using Anthropic.Models.Messages;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Models;
+using OctopusCosyAnalyser.ApiService.Options;
 using OctopusCosyAnalyser.Shared.Models;
 
 namespace OctopusCosyAnalyser.ApiService.Services;
@@ -14,15 +15,15 @@ public class HeatPumpAiService : IHeatPumpAiService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HeatPumpAiService> _logger;
-    private readonly IConfiguration _configuration;
+    private readonly AnthropicOptions _anthropicOptions;
     private readonly ConcurrentDictionary<string, (AiSummaryDto Summary, DateTime CachedAt)> _cache = new();
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
 
-    public HeatPumpAiService(IServiceScopeFactory scopeFactory, ILogger<HeatPumpAiService> logger, IConfiguration configuration)
+    public HeatPumpAiService(IServiceScopeFactory scopeFactory, ILogger<HeatPumpAiService> logger, IOptions<AnthropicOptions> anthropicOptions)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
-        _configuration = configuration;
+        _anthropicOptions = anthropicOptions.Value;
     }
 
     public async Task<AiSummaryDto> GenerateSummaryAsync(string deviceId, bool forceRefresh = false)
@@ -30,13 +31,12 @@ public class HeatPumpAiService : IHeatPumpAiService
         if (!forceRefresh && _cache.TryGetValue(deviceId, out var cached) && DateTime.UtcNow - cached.CachedAt < CacheDuration)
             return cached.Summary;
 
-        var apiKey = _configuration["Anthropic:ApiKey"]
-            ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+        var apiKey = _anthropicOptions.ApiKey;
         if (string.IsNullOrEmpty(apiKey))
         {
             return new AiSummaryDto
             {
-                WeekSummary = "AI summaries are not available. Set the ANTHROPIC_API_KEY environment variable or configure Anthropic:ApiKey to enable this feature.",
+                WeekSummary = "AI summaries are not available. Set the Anthropic:ApiKey configuration value or ANTHROPIC_API_KEY environment variable to enable this feature.",
                 MonthSummary = "",
                 YearSummary = "",
                 Suggestions = "",

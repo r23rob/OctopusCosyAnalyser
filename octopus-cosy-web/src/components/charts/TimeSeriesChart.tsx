@@ -32,17 +32,17 @@ export function TimeSeriesChart({ points, showCop = true, showOutput = true, sho
   return (
     <ResponsiveContainer width="100%" height={260}>
       <ComposedChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
         <XAxis
           dataKey="t"
-          tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.38)' }}
+          tick={{ fontSize: 7.5, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' }}
           tickLine={false}
           axisLine={false}
           interval="preserveStartEnd"
         />
         <YAxis
           yAxisId="kwh"
-          tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.38)' }}
+          tick={{ fontSize: 7.5, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' }}
           tickLine={false}
           axisLine={false}
         />
@@ -50,28 +50,26 @@ export function TimeSeriesChart({ points, showCop = true, showOutput = true, sho
           yAxisId="cop"
           orientation="right"
           domain={[0, 6]}
-          tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.38)' }}
+          tick={{ fontSize: 7.5, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' }}
           tickLine={false}
           axisLine={false}
         />
         <Tooltip
-          contentStyle={{ background: '#1e2130', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 11 }}
-          labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
-          itemStyle={{ color: 'rgba(255,255,255,0.85)' }}
+          contentStyle={{ background: '#09090B', border: 'none', borderRadius: 10, fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: '#fff', padding: '10px 13px' }}
           formatter={(value: unknown) => fmtDec(typeof value === 'number' ? value : 0)}
         />
-        <Legend wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }} iconType="circle" iconSize={8} />
+        <Legend wrapperStyle={{ fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: '#52525B' }} iconType="circle" iconSize={8} />
         {showOutput && (
-          <Bar yAxisId="kwh" dataKey="output" name="Heat Out (kWh)" fill="#ef4444" opacity={0.8} />
+          <Bar yAxisId="kwh" dataKey="output" name="Heat Out (kWh)" fill="#DC2626" opacity={0.8} />
         )}
         {showInput && (
-          <Bar yAxisId="kwh" dataKey="input" name="Power In (kWh)" fill="#3b82f6" opacity={0.8} />
+          <Bar yAxisId="kwh" dataKey="input" name="Power In (kWh)" fill="#06B6D4" opacity={0.8} />
         )}
         {showCop && (
-          <Line yAxisId="cop" type="monotone" dataKey="cop" name="COP" stroke="#22c55e" strokeWidth={2} dot={false} connectNulls />
+          <Line yAxisId="cop" type="monotone" dataKey="cop" name="COP" stroke="#16A34A" strokeWidth={2} dot={false} connectNulls />
         )}
         {showOutdoor && (
-          <Line yAxisId="cop" type="monotone" dataKey="outdoor" name="Outdoor °C" stroke="#f59e0b" strokeWidth={1.5} dot={false} strokeDasharray="4 2" connectNulls />
+          <Line yAxisId="cop" type="monotone" dataKey="outdoor" name="Outdoor °C" stroke="#8B5CF6" strokeWidth={1.5} dot={false} strokeDasharray="4 2" connectNulls />
         )}
       </ComposedChart>
     </ResponsiveContainer>
