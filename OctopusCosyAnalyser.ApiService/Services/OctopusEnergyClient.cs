@@ -12,6 +12,11 @@ public class OctopusEnergyClient : IOctopusEnergyClient
 
     private static readonly ConcurrentDictionary<string, TokenCacheEntry> TokenCache = new();
 
+    // Serialize token acquisition so only one request is in-flight at a time
+    // (prevents concurrent workers from racing and obtaining multiple tokens,
+    //  which can cause the Octopus API to invalidate earlier tokens)
+    private static readonly SemaphoreSlim TokenSemaphore = new(1, 1);
+
     // Allowlist: alphanumeric, hyphens, underscores, dots — defence-in-depth input validation
     // (no longer the primary injection guard; all queries now use parameterised GraphQL variables)
     private static readonly Regex SafeIdentifierRegex = new(@"^[A-Za-z0-9\-_.]{1,200}$", RegexOptions.Compiled);
@@ -41,31 +46,48 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         if (string.IsNullOrWhiteSpace(password))
             throw new ArgumentException("Password is required for Octopus API authentication.", nameof(password));
 
+        // Fast path: return cached token without acquiring lock
         if (TokenCache.TryGetValue(email, out var cached) && DateTime.UtcNow < cached.ExpiresAt)
             return cached.Token;
 
-        var query = "mutation ObtainToken($input: ObtainJSONWebTokenInput!) { obtainKrakenToken(input: $input) { token } }";
-        var payload = JsonSerializer.Serialize(new
+        // Serialize token acquisition — prevents multiple workers from racing to
+        // obtain separate tokens (which can cause the API to invalidate earlier ones)
+        await TokenSemaphore.WaitAsync();
+        try
         {
-            query,
-            variables = new { input = new { email, password } }
-        });
+            // Double-check after acquiring lock — another thread may have cached a token
+            if (TokenCache.TryGetValue(email, out cached) && DateTime.UtcNow < cached.ExpiresAt)
+                return cached.Token;
 
-        var content = new StringContent(payload, Encoding.UTF8, "application/json");
-        var response = await _httpClient.PostAsync("https://api.octopus.energy/v1/graphql/", content);
-        response.EnsureSuccessStatusCode();
+            _logger.LogInformation("Obtaining new Octopus API token for {Email}", email);
 
-        var result = await response.Content.ReadAsStringAsync();
-        var json = JsonDocument.Parse(result);
-        var token = json.RootElement.GetProperty("data").GetProperty("obtainKrakenToken").GetProperty("token").GetString();
+            var query = "mutation ObtainToken($input: ObtainJSONWebTokenInput!) { obtainKrakenToken(input: $input) { token } }";
+            var payload = JsonSerializer.Serialize(new
+            {
+                query,
+                variables = new { input = new { email, password } }
+            });
 
-        if (string.IsNullOrWhiteSpace(token))
-            throw new InvalidOperationException("Octopus API token was empty.");
+            var content = new StringContent(payload, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("https://api.octopus.energy/v1/graphql/", content);
+            response.EnsureSuccessStatusCode();
 
-        var entry = new TokenCacheEntry(token, DateTime.UtcNow.AddMinutes(55));
-        TokenCache[email] = entry;
+            var result = await response.Content.ReadAsStringAsync();
+            var json = JsonDocument.Parse(result);
+            var token = json.RootElement.GetProperty("data").GetProperty("obtainKrakenToken").GetProperty("token").GetString();
 
-        return token;
+            if (string.IsNullOrWhiteSpace(token))
+                throw new InvalidOperationException("Octopus API token was empty.");
+
+            var entry = new TokenCacheEntry(token, DateTime.UtcNow.AddMinutes(55));
+            TokenCache[email] = entry;
+
+            return token;
+        }
+        finally
+        {
+            TokenSemaphore.Release();
+        }
     }
 
     // ── Account & Device Discovery ───────────────────────────────────
@@ -632,234 +654,47 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         List<string> NodeFieldNames);
 
     /// <summary>
-    /// Recursively unwraps NON_NULL / LIST wrappers to find the named inner type.
+    /// Returns the known costOfUsage schema.
+    /// Previously used introspection (__schema / __type queries), but Octopus now blocks
+    /// introspection on the backend API (returns 403). The schema is hardcoded instead.
     /// </summary>
-    private static (string TypeName, bool IsArray, bool IsConnection) UnwrapGraphQLType(JsonElement typeEl)
-    {
-        var kind = typeEl.TryGetProperty("kind", out var k) ? k.GetString() ?? "" : "";
-        var name = typeEl.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String
-            ? n.GetString() ?? "" : "";
-
-        if (kind is "NON_NULL" or "LIST")
-        {
-            var isListLayer = kind == "LIST";
-            if (typeEl.TryGetProperty("ofType", out var ofType))
-            {
-                var (innerName, innerIsArray, innerIsConnection) = UnwrapGraphQLType(ofType);
-                return (innerName, innerIsArray || isListLayer, innerIsConnection);
-            }
-            return ("", isListLayer, false);
-        }
-
-        var isConnection = !string.IsNullOrEmpty(name) && name.Contains("Connection");
-        return (name, false, isConnection);
-    }
-
-    /// <summary>
-    /// Introspects a connection type to discover the node type's field names.
-    /// Follows the chain: ConnectionType -> edges field -> EdgeType -> node field -> NodeType -> fields.
-    /// </summary>
-    private async Task<List<string>> DiscoverNodeTypeFieldsAsync(string email, string password, string connectionTypeName)
-    {
-        // Introspect the connection type to find the edges field's type
-        var connIntrospection = await ExecuteRawQueryAsync(email, password, $$"""
-            { __type(name: "{{connectionTypeName}}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }
-        """);
-
-        var connData = connIntrospection.RootElement.GetProperty("data");
-        if (!connData.TryGetProperty("__type", out var connType) || connType.ValueKind == JsonValueKind.Null)
-            return [];
-
-        // Find the 'edges' field and get its inner type
-        string? edgeTypeName = null;
-        foreach (var field in connType.GetProperty("fields").EnumerateArray())
-        {
-            if (field.GetProperty("name").GetString() == "edges")
-            {
-                var (typeName, _, _) = UnwrapGraphQLType(field.GetProperty("type"));
-                edgeTypeName = typeName;
-                break;
-            }
-        }
-
-        if (string.IsNullOrEmpty(edgeTypeName))
-            return [];
-
-        // Introspect the edge type to find the 'node' field's type
-        var edgeIntrospection = await ExecuteRawQueryAsync(email, password, $$"""
-            { __type(name: "{{edgeTypeName}}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }
-        """);
-
-        var edgeData = edgeIntrospection.RootElement.GetProperty("data");
-        if (!edgeData.TryGetProperty("__type", out var edgeType) || edgeType.ValueKind == JsonValueKind.Null)
-            return [];
-
-        string? nodeTypeName = null;
-        foreach (var field in edgeType.GetProperty("fields").EnumerateArray())
-        {
-            if (field.GetProperty("name").GetString() == "node")
-            {
-                var (typeName, _, _) = UnwrapGraphQLType(field.GetProperty("type"));
-                nodeTypeName = typeName;
-                break;
-            }
-        }
-
-        if (string.IsNullOrEmpty(nodeTypeName))
-            return [];
-
-        // Introspect the node type to get its field names
-        var nodeIntrospection = await ExecuteRawQueryAsync(email, password, $$"""
-            { __type(name: "{{nodeTypeName}}") { fields { name } } }
-        """);
-
-        var nodeData = nodeIntrospection.RootElement.GetProperty("data");
-        if (!nodeData.TryGetProperty("__type", out var nodeType) || nodeType.ValueKind == JsonValueKind.Null)
-            return [];
-
-        var nodeFields = new List<string>();
-        foreach (var field in nodeType.GetProperty("fields").EnumerateArray())
-            nodeFields.Add(field.GetProperty("name").GetString()!);
-
-        _logger.LogInformation("Discovered node type {NodeType} with fields: [{Fields}]",
-            nodeTypeName, string.Join(", ", nodeFields));
-
-        return nodeFields;
-    }
-
-    private async Task<CostOfUsageSchema> DiscoverCostOfUsageSchemaAsync(string email, string password)
+    private static CostOfUsageSchema GetCostOfUsageSchema()
     {
         if (_costOfUsageSchema is not null)
             return _costOfUsageSchema;
 
-        // Use deeper ofType nesting to handle NON_NULL(LIST(NON_NULL(Type))) patterns
-        var introspectionQuery = """
+        var argNames = new List<string>
         {
-          __schema {
-            queryType {
-              fields {
-                name
-                args { name type { name kind ofType { name kind ofType { name kind } } } }
-                type { name kind ofType { name kind ofType { name kind ofType { name kind } } fields { name } } }
-              }
-            }
-          }
-        }
-        """;
+            "accountNumber", "startAt", "endAt", "grouping",
+            "propertyId", "mpxn", "first", "after"
+        };
 
-        var result = await ExecuteRawQueryAsync(email, password, introspectionQuery);
-        var fields = result.RootElement
-            .GetProperty("data")
-            .GetProperty("__schema")
-            .GetProperty("queryType")
-            .GetProperty("fields");
-
-        JsonElement? costField = null;
-        foreach (var field in fields.EnumerateArray())
+        var nodeFieldNames = new List<string>
         {
-            if (field.GetProperty("name").GetString() == "costOfUsage")
-            {
-                costField = field;
-                break;
-            }
-        }
+            "startAt", "endAt", "costInclTax", "costExclTax",
+            "consumptionKwh", "unitRateInclTax", "unitRateExclTax",
+            "standingCharge", "costCurrency"
+        };
 
-        if (costField is null)
-            throw new InvalidOperationException("costOfUsage query not found in Octopus API schema");
-
-        var argNames = new List<string>();
-        foreach (var arg in costField.Value.GetProperty("args").EnumerateArray())
-            argNames.Add(arg.GetProperty("name").GetString()!);
-
-        // Match date arguments — try specific names first, then fall back to substring matching
-        var startDateArgs = new[] { "startAt", "fromDatetime", "from", "startDate", "periodFrom" };
-        var endDateArgs = new[] { "endAt", "toDatetime", "to", "endDate", "periodTo" };
-        var startArg = argNames.FirstOrDefault(a => startDateArgs.Contains(a));
-        var endArg = argNames.FirstOrDefault(a => endDateArgs.Contains(a));
-
-        // Fallback: look for any arg whose name contains start/from or end/to keywords
-        if (startArg is null)
-            startArg = argNames.FirstOrDefault(a =>
-                a.Contains("start", StringComparison.OrdinalIgnoreCase) ||
-                a.Contains("from", StringComparison.OrdinalIgnoreCase));
-        if (endArg is null)
-            endArg = argNames.FirstOrDefault(a =>
-                !a.Equals("accountNumber", StringComparison.OrdinalIgnoreCase) &&
-                (a.Contains("end", StringComparison.OrdinalIgnoreCase) ||
-                 a.Contains("to", StringComparison.OrdinalIgnoreCase)));
-
-        // Unwrap the return type (handles NON_NULL(LIST(NON_NULL(Type))) etc.)
-        var typeEl = costField.Value.GetProperty("type");
-        var (innerTypeName, isArray, isConnection) = UnwrapGraphQLType(typeEl);
-
-        if (string.IsNullOrEmpty(innerTypeName))
-            innerTypeName = "CostOfUsageType";
-
-        // Introspect the return type's fields
-        var typeIntrospection = await ExecuteRawQueryAsync(email, password, $$"""
-            { __type(name: "{{innerTypeName}}") { name kind fields { name type { name kind ofType { name } } } } }
-        """);
-
-        var fieldNames = new List<string>();
-        var typeData = typeIntrospection.RootElement.GetProperty("data");
-        if (typeData.TryGetProperty("__type", out var introspectedType)
-            && introspectedType.ValueKind != JsonValueKind.Null
-            && introspectedType.TryGetProperty("fields", out var typeFields))
-        {
-            foreach (var f in typeFields.EnumerateArray())
-            {
-                var fieldName = f.GetProperty("name").GetString()!;
-                fieldNames.Add(fieldName);
-            }
-        }
-
-        // Only treat as a connection if the return type has BOTH edges AND pageInfo fields
-        if (!isConnection)
-            isConnection = fieldNames.Contains("edges") && fieldNames.Contains("pageInfo");
-
-        // Introspect node-level fields for connection types
-        var nodeFieldNames = fieldNames;
-        if (isConnection)
-        {
-            try
-            {
-                // Find the edges field's inner type from the connection type introspection
-                var edgesTypeName = await DiscoverNodeTypeFieldsAsync(email, password, innerTypeName);
-                if (edgesTypeName.Count > 0)
-                    nodeFieldNames = edgesTypeName;
-                else
-                    _logger.LogWarning("Could not discover node fields for connection type {TypeName}, will use all requested fields", innerTypeName);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to introspect node type for {TypeName}, will use all requested fields", innerTypeName);
-            }
-        }
-
-        _logger.LogInformation(
-            "Discovered costOfUsage schema: args=[{Args}], startArg={StartArg}, endArg={EndArg}, " +
-            "returnType={ReturnType}, isConnection={IsConnection}, fields=[{Fields}], nodeFields=[{NodeFields}]",
-            string.Join(", ", argNames), startArg, endArg,
-            innerTypeName, isConnection,
-            string.Join(", ", fieldNames), string.Join(", ", nodeFieldNames));
+        var connectionFieldNames = new List<string> { "edges", "pageInfo" };
 
         _costOfUsageSchema = new CostOfUsageSchema(
-            argNames, startArg, endArg,
-            innerTypeName,
-            isConnection, isArray, fieldNames, nodeFieldNames);
+            argNames,
+            StartArg: "startAt",
+            EndArg: "endAt",
+            ReturnTypeName: "CostOfUsageConnection",
+            IsConnection: true,
+            IsArray: false,
+            FieldNames: connectionFieldNames,
+            NodeFieldNames: nodeFieldNames);
 
         return _costOfUsageSchema;
     }
 
-    /// <summary>
-    /// Clears the cached costOfUsage schema so it will be re-discovered on next call.
-    /// </summary>
-    private static void InvalidateCostOfUsageSchemaCache() => _costOfUsageSchema = null;
 
     /// <summary>
     /// Gets the actual cost of energy usage for a date range.
-    /// Schema is auto-discovered via introspection on first call.
-    /// If the query fails with schema validation errors, the cache is cleared and retried.
+    /// Uses a hardcoded schema definition (introspection is blocked by the Octopus backend API).
     /// grouping: HALF_HOUR, DAY, WEEK, MONTH, QUARTER
     /// </summary>
     public async Task<JsonDocument> GetCostOfUsageAsync(string email, string password, string accountNumber, DateTime from, DateTime to, string grouping = "DAY", int? propertyId = null, string? mpxn = null)
@@ -867,42 +702,11 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         var fromStr = from.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
         var toStr = to.ToString("yyyy-MM-ddTHH:mm:ss.ffffff+00:00");
 
-        var schema = await DiscoverCostOfUsageSchemaAsync(email, password);
+        var schema = GetCostOfUsageSchema();
         _logger.LogDebug("Cost of usage schema: args=[{Args}], startArg={Start}, endArg={End}, isConnection={IsConn}",
             string.Join(", ", schema.ArgNames), schema.StartArg, schema.EndArg, schema.IsConnection);
 
-        JsonDocument result;
-        try
-        {
-            result = await ExecuteCostOfUsageQueryAsync(email, password, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn);
-        }
-        catch (HttpRequestException ex)
-        {
-            if (!ex.Message.Contains("400"))
-                throw;
-
-            // Schema may be stale - clear cache and retry with fresh introspection
-            _logger.LogWarning(ex, "costOfUsage query returned 400, clearing schema cache and retrying");
-            InvalidateCostOfUsageSchemaCache();
-            schema = await DiscoverCostOfUsageSchemaAsync(email, password);
-            result = await ExecuteCostOfUsageQueryAsync(email, password, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn);
-        }
-
-        // Also handle GraphQL-level errors (some servers return 200 with errors array)
-        if (result.RootElement.TryGetProperty("errors", out var errors)
-            && errors.ValueKind == JsonValueKind.Array
-            && errors.GetArrayLength() > 0)
-        {
-            var firstError = errors[0].TryGetProperty("message", out var msg) ? msg.GetString() ?? "" : "";
-            if (firstError.Contains("Unknown argument") || firstError.Contains("Cannot query field"))
-            {
-                _logger.LogWarning("costOfUsage query returned schema error: {Error}, clearing cache and retrying", firstError);
-                InvalidateCostOfUsageSchemaCache();
-                schema = await DiscoverCostOfUsageSchemaAsync(email, password);
-                result.Dispose();
-                result = await ExecuteCostOfUsageQueryAsync(email, password, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn);
-            }
-        }
+        var result = await ExecuteCostOfUsageQueryAsync(email, password, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn);
 
         return result;
     }
@@ -1107,18 +911,40 @@ public class OctopusEnergyClient : IOctopusEnergyClient
 
     private async Task<JsonDocument> ExecuteQueryAsync(string email, string password, string query)
     {
-        var token = await GetAuthTokenAsync(email, password);
+        const int maxRetries = 3;
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "");
-        request.Headers.TryAddWithoutValidation("Authorization", token);
-        request.Content = new StringContent(query, Encoding.UTF8, "application/json");
+        for (var attempt = 0; attempt <= maxRetries; attempt++)
+        {
+            var token = await GetAuthTokenAsync(email, password);
 
-        using var response = await _httpClient.SendAsync(request);
-        var result = await response.Content.ReadAsStringAsync();
+            using var request = new HttpRequestMessage(HttpMethod.Post, "");
+            request.Headers.TryAddWithoutValidation("Authorization", token);
+            request.Content = new StringContent(query, Encoding.UTF8, "application/json");
 
-        if (!response.IsSuccessStatusCode)
+            using var response = await _httpClient.SendAsync(request);
+            var result = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+                return JsonDocument.Parse(result);
+
+            if ((int)response.StatusCode == 403 && attempt < maxRetries)
+            {
+                // 403 from the CDN/WAF is typically transient rate-limiting.
+                // Evict the cached token and retry after a backoff.
+                _logger.LogWarning(
+                    "Octopus API returned 403 (attempt {Attempt}/{Max}), evicting token and retrying after backoff",
+                    attempt + 1, maxRetries);
+
+                TokenCache.TryRemove(email, out _);
+
+                var delay = TimeSpan.FromSeconds(2 * (attempt + 1)); // 2s, 4s, 6s
+                await Task.Delay(delay);
+                continue;
+            }
+
             throw new HttpRequestException($"Octopus API returned {(int)response.StatusCode}: {result}");
+        }
 
-        return JsonDocument.Parse(result);
+        throw new HttpRequestException("Octopus API request failed after all retry attempts");
     }
 }
