@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using OctopusCosyAnalyser.ApiService.Data;
+using OctopusCosyAnalyser.ApiService.Helpers;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.ApiService.Services;
 using OctopusCosyAnalyser.Shared.Models;
 using System.Text.Json;
+using static OctopusCosyAnalyser.ApiService.Helpers.JsonHelpers;
 
 namespace OctopusCosyAnalyser.ApiService.Endpoints;
 
@@ -419,7 +421,7 @@ public static class HeatPumpEndpoints
             var data = await client.GetHeatPumpStatusAndConfigAsync(settings!.Email!, settings!.OctopusPassword!, device.AccountNumber, device.Euid);
             var root = data.RootElement.GetProperty("data");
 
-            var summary = MapHeatPumpSummary(root);
+            var summary = HeatPumpMappingService.MapHeatPumpSummary(root);
             return Results.Ok(summary);
         }).WithName("GetHeatPumpSummary");
 
@@ -595,13 +597,13 @@ public static class HeatPumpEndpoints
             if (from > to)
                 return Results.BadRequest(new { error = "'from' must be before 'to'." });
 
-            if ((to.Value - from.Value).TotalDays > 400)
-                return Results.BadRequest(new { error = "Maximum sync range is 400 days." });
+            if ((to.Value - from.Value).TotalDays > Constants.MaxSyncRangeDays)
+                return Results.BadRequest(new { error = $"Maximum sync range is {Constants.MaxSyncRangeDays} days." });
 
             var synced = 0;
             var skipped = 0;
             var chunkStart = from.Value;
-            var chunkSize = TimeSpan.FromDays(60); // MONTH grouping max span
+            var chunkSize = TimeSpan.FromDays(Constants.TimeSeriesChunkDays); // MONTH grouping max span
             var logger = loggerFactory.CreateLogger("TimeSeriesSync");
 
             // Load all existing timestamps for this device in the date range to avoid duplicates
@@ -813,8 +815,8 @@ public static class HeatPumpEndpoints
 
             if (from >= to)
                 return Results.BadRequest("'from' must be before 'to'.");
-            if ((to.Value - from.Value).TotalDays > 400)
-                return Results.BadRequest("Maximum range is 400 days.");
+            if ((to.Value - from.Value).TotalDays > Constants.MaxSyncRangeDays)
+                return Results.BadRequest($"Maximum range is {Constants.MaxSyncRangeDays} days.");
 
             var snapshots = await db.HeatPumpSnapshots
                 .AsNoTracking()
@@ -863,9 +865,9 @@ public static class HeatPumpEndpoints
                     if (v > copMax) copMax = v;
                 }
                 if (s.PowerInputKilowatt.HasValue)
-                    totalInputKwh += (double)s.PowerInputKilowatt.Value * 0.25;
+                    totalInputKwh += (double)s.PowerInputKilowatt.Value * Constants.SnapshotIntervalHours;
                 if (s.HeatOutputKilowatt.HasValue)
-                    totalOutputKwh += (double)s.HeatOutputKilowatt.Value * 0.25;
+                    totalOutputKwh += (double)s.HeatOutputKilowatt.Value * Constants.SnapshotIntervalHours;
                 if (s.OutdoorTemperatureCelsius.HasValue)
                 {
                     var v = (double)s.OutdoorTemperatureCelsius.Value;
@@ -954,7 +956,7 @@ public static class HeatPumpEndpoints
 
             // Cap at 366 days to prevent loading unbounded data into memory.
             // At 15-min intervals, 366 days = ~35,000 snapshots which is manageable.
-            var maxSpan = TimeSpan.FromDays(366);
+            var maxSpan = TimeSpan.FromDays(Constants.MaxAggregateSpanDays);
             if (to.Value - from.Value > maxSpan)
                 from = to.Value - maxSpan;
 
@@ -986,8 +988,8 @@ public static class HeatPumpEndpoints
             if (request.From >= request.To)
                 return Results.BadRequest(new { error = "From date must be before To date." });
 
-            if ((request.To - request.From).TotalDays > 365)
-                return Results.BadRequest(new { error = "Date range must not exceed 365 days." });
+            if ((request.To - request.From).TotalDays > Constants.MaxAnalysisRangeDays)
+                return Results.BadRequest(new { error = $"Date range must not exceed {Constants.MaxAnalysisRangeDays} days." });
 
             var device = await db.HeatPumpDevices.FirstOrDefaultAsync(d => d.DeviceId == deviceId, ct);
             if (device is null)
@@ -1021,15 +1023,15 @@ public static class HeatPumpEndpoints
                 .Distinct()
                 .Count();
 
-            if (coveredDays < requestedDays * 0.5 && !string.IsNullOrWhiteSpace(device.Euid))
+            if (coveredDays < requestedDays * Constants.MinTimeSeriesCoveragePercent && !string.IsNullOrWhiteSpace(device.Euid))
             {
                 if (settings is not null)
                 {
                     var syncFrom = from;
                     var syncTo = to;
-                    // Cap auto-sync to 90 days to avoid slow requests
-                    if ((syncTo - syncFrom).TotalDays > 90)
-                        syncFrom = syncTo.AddDays(-90);
+                    // Cap auto-sync to avoid slow requests
+                    if ((syncTo - syncFrom).TotalDays > Constants.MaxAutoSyncDays)
+                        syncFrom = syncTo.AddDays(-Constants.MaxAutoSyncDays);
 
                     logger.LogInformation("Auto-syncing time series for device {DeviceId} from {From} to {To} (had {Covered}/{Requested} days)",
                         deviceId, syncFrom, syncTo, coveredDays, requestedDays);
@@ -1173,11 +1175,11 @@ public static class HeatPumpEndpoints
                 {
                     if (storedCosts.TryGetValue(agg.Date, out var cost))
                     {
-                        agg.DailyCostPence = cost.TotalCostPence;
-                        agg.DailyUsageKwh = cost.TotalUsageKwh;
-                        agg.AvgUnitRatePence = cost.AvgUnitRatePence;
+                        agg.DailyCostPence = (double)cost.TotalCostPence;
+                        agg.DailyUsageKwh = (double)cost.TotalUsageKwh;
+                        agg.AvgUnitRatePence = (double)cost.AvgUnitRatePence;
                         agg.CostPerKwhHeatPence = agg.TotalHeatOutputKwh > 0
-                            ? cost.TotalCostPence / agg.TotalHeatOutputKwh
+                            ? (double)cost.TotalCostPence / agg.TotalHeatOutputKwh
                             : null;
                         mergedCount++;
                     }
@@ -1303,344 +1305,6 @@ public static class HeatPumpEndpoints
             var summary = await aiService.GenerateDashboardSummaryAsync(deviceId, forceRefresh: true, anthropicApiKey: anthropicKey);
             return Results.Ok(summary);
         }).WithName("RefreshAiSummary");
-    }
-
-    // Business logic for daily aggregates and time series enrichment
-    // is in HeatPumpDataService (injected via IHeatPumpDataService).
-
-    private static double GetJsonDouble(JsonElement el, string property)
-    {
-        if (!el.TryGetProperty(property, out var val)) return 0;
-        if (val.ValueKind == JsonValueKind.Number && val.TryGetDouble(out var d)) return d;
-        if (val.ValueKind == JsonValueKind.String
-            && double.TryParse(val.GetString(), System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out var parsed))
-            return parsed;
-        return 0;
-    }
-
-    private static HeatPumpSummary MapHeatPumpSummary(JsonElement data)
-    {
-        return new HeatPumpSummary
-        {
-            ControllerStatus = MapControllerStatus(data),
-            ControllerConfiguration = MapControllerConfiguration(data),
-            LivePerformance = MapLivePerformance(data),
-            LifetimePerformance = MapLifetimePerformance(data)
-        };
-    }
-
-    private static HeatPumpControllerStatus? MapControllerStatus(JsonElement data)
-    {
-        if (!data.TryGetProperty("heatPumpControllerStatus", out var status))
-            return null;
-
-        var sensors = status.TryGetProperty("sensors", out var sensorsEl)
-            ? sensorsEl.EnumerateArray().Select(MapSensor).ToList()
-            : new List<HeatPumpSensor>();
-
-        var zones = status.TryGetProperty("zones", out var zonesEl)
-            ? zonesEl.EnumerateArray().Select(MapZoneStatus).ToList()
-            : new List<HeatPumpZoneStatus>();
-
-        return new HeatPumpControllerStatus
-        {
-            Sensors = sensors,
-            Zones = zones
-        };
-    }
-
-    private static HeatPumpSensor MapSensor(JsonElement element)
-    {
-        return new HeatPumpSensor
-        {
-            Code = GetString(element, "code"),
-            Connectivity = element.TryGetProperty("connectivity", out var connectivity)
-                ? new HeatPumpConnectivity
-                {
-                    Online = GetBool(connectivity, "online"),
-                    RetrievedAt = GetString(connectivity, "retrievedAt")
-                }
-                : null,
-            Telemetry = element.TryGetProperty("telemetry", out var telemetry)
-                ? new HeatPumpTelemetry
-                {
-                    TemperatureInCelsius = GetDecimal(telemetry, "temperatureInCelsius"),
-                    HumidityPercentage = GetDecimal(telemetry, "humidityPercentage"),
-                    RetrievedAt = GetString(telemetry, "retrievedAt")
-                }
-                : null
-        };
-    }
-
-    private static HeatPumpZoneStatus MapZoneStatus(JsonElement element)
-    {
-        return new HeatPumpZoneStatus
-        {
-            Zone = GetString(element, "zone"),
-            Telemetry = element.TryGetProperty("telemetry", out var telemetry)
-                ? new HeatPumpZoneTelemetry
-                {
-                    SetpointInCelsius = GetDecimal(telemetry, "setpointInCelsius"),
-                    Mode = GetString(telemetry, "mode"),
-                    RelaySwitchedOn = GetBool(telemetry, "relaySwitchedOn"),
-                    HeatDemand = GetBool(telemetry, "heatDemand"),
-                    RetrievedAt = GetString(telemetry, "retrievedAt")
-                }
-                : null
-        };
-    }
-
-    private static HeatPumpControllerConfiguration? MapControllerConfiguration(JsonElement data)
-    {
-        if (!data.TryGetProperty("heatPumpControllerConfiguration", out var configuration))
-            return null;
-
-        var controller = configuration.TryGetProperty("controller", out var controllerEl)
-            ? new HeatPumpController
-            {
-                State = GetStringList(controllerEl, "state"),
-                HeatPumpTimezone = GetString(controllerEl, "heatPumpTimezone"),
-                Connected = GetBool(controllerEl, "connected")
-            }
-            : null;
-
-        var heatPump = configuration.TryGetProperty("heatPump", out var heatPumpEl)
-            ? MapHeatPumpDetails(heatPumpEl)
-            : null;
-
-        var zones = configuration.TryGetProperty("zones", out var zonesEl)
-            ? zonesEl.EnumerateArray().Select(MapZoneConfiguration).ToList()
-            : new List<HeatPumpZoneConfiguration>();
-
-        return new HeatPumpControllerConfiguration
-        {
-            Controller = controller,
-            HeatPump = heatPump,
-            Zones = zones
-        };
-    }
-
-    private static HeatPumpDetails MapHeatPumpDetails(JsonElement element)
-    {
-        return new HeatPumpDetails
-        {
-            SerialNumber = GetString(element, "serialNumber"),
-            Model = GetString(element, "model"),
-            HardwareVersion = GetString(element, "hardwareVersion"),
-            MaxWaterSetpoint = GetInt(element, "maxWaterSetpoint"),
-            MinWaterSetpoint = GetInt(element, "minWaterSetpoint"),
-            HeatingFlowTemperature = element.TryGetProperty("heatingFlowTemperature", out var flow)
-                ? new HeatPumpHeatingFlowTemperature
-                {
-                    CurrentTemperature = MapValueAndUnit(flow, "currentTemperature"),
-                    AllowableRange = MapAllowableRange(flow, "allowableRange")
-                }
-                : null,
-            WeatherCompensation = element.TryGetProperty("weatherCompensation", out var weather)
-                ? new HeatPumpWeatherCompensation
-                {
-                    Enabled = GetBool(weather, "enabled"),
-                    CurrentRange = MapAllowableRange(weather, "currentRange")
-                }
-                : null
-        };
-    }
-
-    private static HeatPumpZoneConfiguration MapZoneConfiguration(JsonElement element)
-    {
-        return new HeatPumpZoneConfiguration
-        {
-            Configuration = element.TryGetProperty("configuration", out var config)
-                ? MapZoneConfig(config)
-                : null
-        };
-    }
-
-    private static HeatPumpZoneConfig MapZoneConfig(JsonElement config)
-    {
-        var sensors = config.TryGetProperty("sensors", out var sensorsEl)
-            ? sensorsEl.EnumerateArray().Select(MapSensorConfiguration).ToList()
-            : new List<HeatPumpSensorConfiguration>();
-
-        return new HeatPumpZoneConfig
-        {
-            Code = GetString(config, "code"),
-            ZoneType = GetString(config, "zoneType"),
-            Enabled = GetBool(config, "enabled"),
-            DisplayName = GetString(config, "displayName"),
-            PrimarySensor = GetString(config, "primarySensor"),
-            CurrentOperation = config.TryGetProperty("currentOperation", out var operation)
-                ? new HeatPumpCurrentOperation
-                {
-                    Mode = GetString(operation, "mode"),
-                    SetpointInCelsius = GetDecimal(operation, "setpointInCelsius"),
-                    Action = GetString(operation, "action"),
-                    End = GetString(operation, "end")
-                }
-                : null,
-            CallForHeat = GetBool(config, "callForHeat"),
-            HeatDemand = GetBool(config, "heatDemand"),
-            Emergency = GetBool(config, "emergency"),
-            Sensors = sensors
-        };
-    }
-
-    private static HeatPumpSensorConfiguration MapSensorConfiguration(JsonElement sensor)
-    {
-        return new HeatPumpSensorConfiguration
-        {
-            Code = GetString(sensor, "code"),
-            DisplayName = GetString(sensor, "displayName"),
-            Type = GetString(sensor, "type"),
-            Enabled = GetBool(sensor, "enabled"),
-            FirmwareVersion = GetString(sensor, "firmwareVersion"),
-            BoostEnabled = GetBool(sensor, "boostEnabled")
-        };
-    }
-
-    private static HeatPumpLivePerformance? MapLivePerformance(JsonElement data)
-    {
-        if (!data.TryGetProperty("heatPumpTimeSeriesPerformance", out var liveArray)
-            || liveArray.ValueKind != JsonValueKind.Array
-            || liveArray.GetArrayLength() == 0)
-            return null;
-
-        // Take the most recent bucket (last element in the LIVE time series)
-        var live = liveArray.EnumerateArray().Last();
-
-        // COP is not returned by the new API — compute client-side from energyOutput / energyInput
-        string? cop = null;
-        if (live.TryGetProperty("energyInput", out var eiEl) && live.TryGetProperty("energyOutput", out var eoEl))
-        {
-            var eIn = GetDecimal(eiEl, "value");
-            var eOut = GetDecimal(eoEl, "value");
-            if (eIn is > 0 && eOut.HasValue)
-                cop = (eOut.Value / eIn.Value).ToString("F2");
-        }
-
-        return new HeatPumpLivePerformance
-        {
-            CoefficientOfPerformance = cop,
-            OutdoorTemperature = MapValueAndUnit(live, "outdoorTemperature"),
-            HeatOutput = MapValueAndUnit(live, "energyOutput"),
-            PowerInput = MapValueAndUnit(live, "energyInput"),
-            ReadAt = GetString(live, "startAt")
-        };
-    }
-
-    private static HeatPumpLifetimePerformance? MapLifetimePerformance(JsonElement data)
-    {
-        if (!data.TryGetProperty("heatPumpLifetimePerformance", out var lifetime))
-            return null;
-
-        return new HeatPumpLifetimePerformance
-        {
-            SeasonalCoefficientOfPerformance = GetString(lifetime, "seasonalCoefficientOfPerformance"),
-            HeatOutput = MapValueAndUnit(lifetime, "heatOutput"),
-            EnergyInput = MapValueAndUnit(lifetime, "energyInput"),
-            ReadAt = GetString(lifetime, "readAt")
-        };
-    }
-
-    private static HeatPumpValueAndUnit? MapValueAndUnit(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var valueAndUnit))
-            return null;
-
-        return new HeatPumpValueAndUnit
-        {
-            Value = GetString(valueAndUnit, "value"),
-            Unit = GetString(valueAndUnit, "unit")
-        };
-    }
-
-    private static HeatPumpAllowableRange? MapAllowableRange(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var range))
-            return null;
-
-        return new HeatPumpAllowableRange
-        {
-            Minimum = MapValueAndUnit(range, "minimum"),
-            Maximum = MapValueAndUnit(range, "maximum")
-        };
-    }
-
-    private static string? GetString(JsonElement element, string propertyName)
-    {
-        return element.TryGetProperty(propertyName, out var value)
-            ? value.ValueKind == JsonValueKind.String ? value.GetString() : value.ToString()
-            : null;
-    }
-
-    private static bool? GetBool(JsonElement element, string propertyName)
-    {
-        return element.TryGetProperty(propertyName, out var value)
-            ? value.ValueKind == JsonValueKind.True ? true : value.ValueKind == JsonValueKind.False ? false : null
-            : null;
-    }
-
-    private static decimal? GetDecimal(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var value))
-            return null;
-
-        return value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var parsed)
-            ? parsed
-            : decimal.TryParse(value.ToString(), out var textParsed) ? textParsed : null;
-    }
-
-    private static int? GetInt(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var value))
-            return null;
-
-        return value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var parsed)
-            ? parsed
-            : int.TryParse(value.ToString(), out var textParsed) ? textParsed : null;
-    }
-
-    private static List<string> GetStringList(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.Array)
-            return new List<string>();
-
-        return value.EnumerateArray()
-            .Select(item => item.ValueKind == JsonValueKind.String ? item.GetString() ?? string.Empty : item.ToString())
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .ToList();
-    }
-
-    internal static string? TryGetString(JsonElement element, params string[] propertyNames)
-    {
-        foreach (var propertyName in propertyNames)
-        {
-            if (element.TryGetProperty(propertyName, out var value)
-                && value.ValueKind == JsonValueKind.String)
-            {
-                return value.GetString();
-            }
-        }
-        return null;
-    }
-
-    internal static double TryGetDouble(JsonElement element, params string[] propertyNames)
-    {
-        foreach (var propertyName in propertyNames)
-        {
-            if (!element.TryGetProperty(propertyName, out var value))
-                continue;
-
-            if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var d))
-                return d;
-
-            if (value.ValueKind == JsonValueKind.String
-                && double.TryParse(value.GetString(), System.Globalization.NumberStyles.Any,
-                    System.Globalization.CultureInfo.InvariantCulture, out var parsed))
-                return parsed;
-        }
-        return 0;
     }
 
     public sealed record GraphqlQueryRequest(string AccountNumber, string Query, JsonElement? Variables);
