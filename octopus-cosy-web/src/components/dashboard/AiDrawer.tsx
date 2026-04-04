@@ -25,9 +25,9 @@ export function AiDrawer() {
       >
         {/* Header */}
         <div className="px-5 pt-[18px] pb-4 border-b border-border-subtle flex items-center justify-between flex-shrink-0">
-          <div className="text-[15px] font-semibold tracking-tight flex items-center gap-2">
+          <div className="text-[17px] font-semibold tracking-tight flex items-center gap-2">
             AI Analysis
-            <span className="inline-flex items-center gap-1 font-mono text-[8px] tracking-[.06em] uppercase px-[7px] py-0.5 rounded bg-gradient-to-br from-[rgba(124,58,237,0.1)] to-[rgba(6,182,212,0.1)] text-primary border border-[rgba(6,182,212,0.2)]">
+            <span className="inline-flex items-center gap-1 font-mono text-[10px] tracking-[.06em] uppercase px-[8px] py-0.5 rounded bg-gradient-to-br from-[rgba(124,58,237,0.1)] to-[rgba(6,182,212,0.1)] text-primary border border-[rgba(6,182,212,0.2)]">
               Claude
             </span>
           </div>
@@ -49,19 +49,19 @@ export function AiDrawer() {
                 <div className="w-1.5 h-1.5 rounded-full bg-primary ai-dot" />
                 <div className="w-1.5 h-1.5 rounded-full bg-primary ai-dot" />
               </div>
-              <div className="font-mono text-[9.5px] text-ink3 tracking-[.05em] uppercase">
+              <div className="font-mono text-[11px] text-ink3 tracking-[.05em] uppercase">
                 Analysing performance data…
               </div>
             </div>
           ) : findings.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 gap-3 text-ink3">
-              <div className="font-mono text-[9.5px] tracking-[.05em] uppercase">
+              <div className="font-mono text-[11px] tracking-[.05em] uppercase">
                 No analysis data available
               </div>
               <button
                 onClick={() => refresh()}
                 disabled={isRefreshing}
-                className="flex items-center gap-1.5 font-mono text-[8.5px] tracking-[.06em] uppercase border-none bg-transparent cursor-pointer text-primary hover:text-ink transition-colors duration-150 disabled:opacity-50"
+                className="flex items-center gap-1.5 font-mono text-[10px] tracking-[.06em] uppercase border-none bg-transparent cursor-pointer text-primary hover:text-ink transition-colors duration-150 disabled:opacity-50"
               >
                 <RefreshCw size={11} className={isRefreshing ? 'animate-spin' : ''} />
                 Generate analysis
@@ -78,8 +78,8 @@ export function AiDrawer() {
                     {f.icon}
                   </div>
                   <div className="flex-1">
-                    <div className="text-[13px] font-medium text-ink mb-[3px]">{f.title}</div>
-                    <div className="text-[12px] text-ink2 leading-[1.65]">
+                    <div className="text-[15px] font-medium text-ink mb-[3px]">{f.title}</div>
+                    <div className="text-[14px] text-ink2 leading-[1.65]">
                       <MarkdownRenderer>{f.description}</MarkdownRenderer>
                     </div>
                   </div>
@@ -89,7 +89,7 @@ export function AiDrawer() {
               <button
                 onClick={() => refresh()}
                 disabled={isRefreshing}
-                className="flex items-center gap-1.5 font-mono text-[8.5px] tracking-[.06em] uppercase pt-2 border-none bg-transparent cursor-pointer text-ink3 hover:text-ink transition-colors duration-150 disabled:opacity-50"
+                className="flex items-center gap-1.5 font-mono text-[10px] tracking-[.06em] uppercase pt-2 border-none bg-transparent cursor-pointer text-ink3 hover:text-ink transition-colors duration-150 disabled:opacity-50"
               >
                 <RefreshCw size={11} className={isRefreshing ? 'animate-spin' : ''} />
                 Regenerate analysis
@@ -100,7 +100,7 @@ export function AiDrawer() {
 
         {/* Footer */}
         {summary?.generatedAt && (
-          <div className="px-5 py-3 border-t border-border-subtle font-mono text-[8.5px] text-ink3 tracking-[.03em] flex-shrink-0">
+          <div className="px-5 py-3 border-t border-border-subtle font-mono text-[10px] text-ink3 tracking-[.03em] flex-shrink-0">
             Generated {new Date(summary.generatedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
           </div>
         )}
