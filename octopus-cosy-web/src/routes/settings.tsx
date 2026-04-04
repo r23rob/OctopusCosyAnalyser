@@ -13,7 +13,9 @@ export const Route = createFileRoute('/settings')({
 
 const schema = z.object({
   accountNumber: z.string().min(1, 'Account number is required'),
-  apiKey: z.string().min(1, 'API key is required'),
+  apiKey: z.string().optional(),
+  email: z.string().email('Valid email required'),
+  octopusPassword: z.string().min(1, 'Password is required'),
   anthropicApiKey: z.string().optional(),
 })
 
@@ -40,6 +42,8 @@ function SettingsPage() {
       ? {
           accountNumber: existing.accountNumber,
           apiKey: existing.apiKey,
+          email: '',
+          octopusPassword: '',
           anthropicApiKey: existing.anthropicApiKey ?? '',
         }
       : undefined,
@@ -49,7 +53,9 @@ function SettingsPage() {
     mutationFn: (values: FormValues) =>
       api.settings.upsert({
         accountNumber: values.accountNumber,
-        apiKey: values.apiKey,
+        apiKey: values.apiKey || null,
+        email: values.email,
+        octopusPassword: values.octopusPassword,
         anthropicApiKey: values.anthropicApiKey || null,
       }),
     onSuccess: (saved) => {
@@ -57,6 +63,8 @@ function SettingsPage() {
       reset({
         accountNumber: saved?.accountNumber ?? '',
         apiKey: saved?.apiKey ?? '',
+        email: '',
+        octopusPassword: '',
         anthropicApiKey: saved?.anthropicApiKey ?? '',
       })
     },
@@ -99,7 +107,25 @@ function SettingsPage() {
             />
           </Field>
 
-          <Field label="API Key" error={errors.apiKey?.message}>
+          <Field label="Email" error={errors.email?.message}>
+            <input
+              {...register('email')}
+              type="email"
+              placeholder="you@example.com"
+              className={inputCls(!!errors.email)}
+            />
+          </Field>
+
+          <Field label="Password" error={errors.octopusPassword?.message} hint="Re-enter each time you save settings.">
+            <input
+              {...register('octopusPassword')}
+              type="password"
+              placeholder="Your Octopus account password"
+              className={inputCls(!!errors.octopusPassword)}
+            />
+          </Field>
+
+          <Field label="API Key" error={errors.apiKey?.message} hint="Optional — used for some legacy endpoints.">
             <input
               {...register('apiKey')}
               type="password"
