@@ -13,7 +13,9 @@ export interface AccountSettingsDto {
 
 export interface AccountSettingsRequestDto {
   accountNumber: string
-  apiKey: string
+  apiKey?: string | null
+  email: string
+  octopusPassword: string
   anthropicApiKey?: string | null
 }
 
