@@ -3,23 +3,26 @@ using System.Text;
 using Anthropic;
 using Anthropic.Models.Messages;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.Shared.Models;
 
 namespace OctopusCosyAnalyser.ApiService.Services;
 
-public class HeatPumpAiService
+public class HeatPumpAiService : IHeatPumpAiService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HeatPumpAiService> _logger;
+    private readonly IConfiguration _configuration;
     private readonly ConcurrentDictionary<string, (AiSummaryDto Summary, DateTime CachedAt)> _cache = new();
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
 
-    public HeatPumpAiService(IServiceScopeFactory scopeFactory, ILogger<HeatPumpAiService> logger)
+    public HeatPumpAiService(IServiceScopeFactory scopeFactory, ILogger<HeatPumpAiService> logger, IConfiguration configuration)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _configuration = configuration;
     }
 
     public async Task<AiSummaryDto> GenerateSummaryAsync(string deviceId, bool forceRefresh = false)
@@ -27,12 +30,13 @@ public class HeatPumpAiService
         if (!forceRefresh && _cache.TryGetValue(deviceId, out var cached) && DateTime.UtcNow - cached.CachedAt < CacheDuration)
             return cached.Summary;
 
-        var apiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+        var apiKey = _configuration["Anthropic:ApiKey"]
+            ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
         if (string.IsNullOrEmpty(apiKey))
         {
             return new AiSummaryDto
             {
-                WeekSummary = "AI summaries are not available. Set the ANTHROPIC_API_KEY environment variable to enable this feature.",
+                WeekSummary = "AI summaries are not available. Set the ANTHROPIC_API_KEY environment variable or configure Anthropic:ApiKey to enable this feature.",
                 MonthSummary = "",
                 YearSummary = "",
                 Suggestions = "",
@@ -43,6 +47,8 @@ public class HeatPumpAiService
         try
         {
             var prompt = await BuildPromptAsync(deviceId);
+            // Set the env var so the Anthropic SDK picks it up (it reads ANTHROPIC_API_KEY by default)
+            Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", apiKey);
             var client = new AnthropicClient();
 
             var parameters = new MessageCreateParams

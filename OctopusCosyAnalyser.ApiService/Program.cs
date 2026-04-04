@@ -15,7 +15,7 @@ builder.AddNpgsqlDbContext<CosyDbContext>("cosydb");
 
 // Add Octopus Energy API client with extended timeouts for large queries
 // Paginated queries (e.g. applicableRates, sync-timeseries) may make many sequential API calls
-builder.Services.AddHttpClient<OctopusEnergyClient>()
+builder.Services.AddHttpClient<IOctopusEnergyClient, OctopusEnergyClient>()
     .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromMinutes(5))
     .AddStandardResilienceHandler(options =>
     {
@@ -30,7 +30,7 @@ var anthropicKey = builder.Configuration["Anthropic:ApiKey"]
     ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
 
 // Detailed AI analysis service (raw HTTP client for full CSV-based analysis)
-builder.Services.AddHttpClient<AiAnalysisService>(client =>
+builder.Services.AddHttpClient<IAiAnalysisService, AiAnalysisService>(client =>
 {
     client.Timeout = TimeSpan.FromMinutes(3);
     if (!string.IsNullOrEmpty(anthropicKey))
@@ -41,6 +41,9 @@ builder.Services.AddHttpClient<AiAnalysisService>(client =>
         client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
     }
 });
+
+// Add HeatPumpAiService
+builder.Services.AddScoped<IHeatPumpAiService, HeatPumpAiService>();
 
 // Add Heat Pump Snapshot Worker
 builder.Services.AddHostedService<HeatPumpSnapshotWorker>();
@@ -63,7 +66,17 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
-    db.Database.Migrate();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        db.Database.Migrate();
+        logger.LogInformation("Database migration completed successfully");
+    }
+    catch (Exception ex)
+    {
+        logger.LogCritical(ex, "Database migration failed");
+        throw;
+    }
 }
 
 // Configure the HTTP request pipeline.

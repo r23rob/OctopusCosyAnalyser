@@ -30,19 +30,19 @@ else
             </div>
             <div class="mb-3">
                 <label class="form-label">Password</label>
-                <input @bind="octopusPassword" type="password" class="form-control" />
+                <input @bind="octopusPassword" type="password" class="form-control" placeholder="@(isExistingAccount ? "Leave blank to keep current password" : "")" />
                 <div class="form-text">Your Octopus Energy account password. Used for GraphQL API authentication.</div>
             </div>
             <div class="mb-3">
                 <label class="form-label">API Key <span class="text-muted">(optional)</span></label>
-                <input @bind="apiKey" type="password" class="form-control" placeholder="sk_live_..." />
+                <input @bind="apiKey" type="password" class="form-control" placeholder="@(isExistingAccount ? "Leave blank to keep current key" : "sk_live_...")" />
                 <div class="form-text">Only needed for smart meter consumption data. Found at <a href="https://octopus.energy/dashboard/new/accounts/personal-details/api-access" target="_blank">octopus.energy/dashboard</a>.</div>
             </div>
 
             <h5 class="card-title mb-3 mt-4">AI Analysis</h5>
             <div class="mb-3">
                 <label class="form-label">Anthropic API Key <span class="text-muted">(optional)</span></label>
-                <input @bind="anthropicApiKey" type="password" class="form-control" placeholder="sk-ant-..." />
+                <input @bind="anthropicApiKey" type="password" class="form-control" placeholder="@(isExistingAccount ? "Leave blank to keep current key" : "sk-ant-...")" />
                 <div class="form-text">Required for the AI Analysis feature. Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a>.</div>
             </div>
 
@@ -74,6 +74,7 @@ else
     private string anthropicApiKey = string.Empty;
     private bool isLoading = true;
     private bool isSaving = false;
+    private bool isExistingAccount;
     private string? statusMessage;
 
     protected override async Task OnInitializedAsync()
@@ -86,9 +87,9 @@ else
             {
                 accountNumber = current.AccountNumber;
                 email = current.Email ?? string.Empty;
-                octopusPassword = current.OctopusPassword ?? string.Empty;
-                apiKey = current.ApiKey;
-                anthropicApiKey = current.AnthropicApiKey ?? string.Empty;
+                isExistingAccount = true;
+                // Secrets are not returned by the API — fields stay empty.
+                // Leave blank to keep existing values, or enter new values to update.
             }
         }
         catch (Exception ex)
@@ -103,9 +104,15 @@ else
 
     private async Task SaveSettings()
     {
-        if (string.IsNullOrWhiteSpace(accountNumber) || string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(octopusPassword))
+        if (string.IsNullOrWhiteSpace(accountNumber) || string.IsNullOrWhiteSpace(email))
         {
-            statusMessage = "Account number, email, and password are required.";
+            statusMessage = "Account number and email are required.";
+            return;
+        }
+
+        if (!isExistingAccount && string.IsNullOrWhiteSpace(octopusPassword))
+        {
+            statusMessage = "Password is required for initial setup.";
             return;
         }
 

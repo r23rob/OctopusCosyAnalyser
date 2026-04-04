@@ -4,13 +4,12 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OctopusCosyAnalyser.ApiService.Data;
-using OctopusCosyAnalyser.ApiService.Endpoints;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.Shared.Models;
 
 namespace OctopusCosyAnalyser.ApiService.Services;
 
-public class AiAnalysisService
+public class AiAnalysisService : IAiAnalysisService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<AiAnalysisService> _logger;
@@ -165,7 +164,7 @@ public class AiAnalysisService
                 return $"AI analysis failed (HTTP {(int)response.StatusCode}). Check the API key and try again.";
             }
 
-            var responseJson = await response.Content.ReadFromJsonAsync<JsonDocument>(ct);
+            using var responseJson = await response.Content.ReadFromJsonAsync<JsonDocument>(ct);
             if (responseJson is null)
                 return "AI analysis returned an empty response.";
 
@@ -234,9 +233,9 @@ public class AiAnalysisService
             var weekSnapshots = snapshots.Where(s => s.SnapshotTakenAt >= now.AddDays(-7)).ToList();
             var monthSnapshots = snapshots.Where(s => s.SnapshotTakenAt >= now.AddDays(-30)).ToList();
 
-            var weekAggs = HeatPumpEndpoints.ComputeDailyAggregates(weekSnapshots);
-            var monthAggs = HeatPumpEndpoints.ComputeDailyAggregates(monthSnapshots);
-            var yearAggs = HeatPumpEndpoints.ComputeDailyAggregates(snapshots);
+            var weekAggs = HeatPumpAggregationService.ComputeDailyAggregates(weekSnapshots);
+            var monthAggs = HeatPumpAggregationService.ComputeDailyAggregates(monthSnapshots);
+            var yearAggs = HeatPumpAggregationService.ComputeDailyAggregates(snapshots);
 
             // Merge stored cost data into aggregates
             var costRecords = await db.DailyCostRecords
@@ -429,11 +428,11 @@ public class AiAnalysisService
         {
             if (costRecords.TryGetValue(agg.Date, out var cost))
             {
-                agg.DailyCostPence = cost.TotalCostPence;
-                agg.DailyUsageKwh = cost.TotalUsageKwh;
-                agg.AvgUnitRatePence = cost.AvgUnitRatePence;
+                agg.DailyCostPence = (double)cost.TotalCostPence;
+                agg.DailyUsageKwh = (double)cost.TotalUsageKwh;
+                agg.AvgUnitRatePence = (double)cost.AvgUnitRatePence;
                 agg.CostPerKwhHeatPence = agg.TotalHeatOutputKwh > 0
-                    ? cost.TotalCostPence / agg.TotalHeatOutputKwh
+                    ? (double)cost.TotalCostPence / agg.TotalHeatOutputKwh
                     : null;
             }
         }

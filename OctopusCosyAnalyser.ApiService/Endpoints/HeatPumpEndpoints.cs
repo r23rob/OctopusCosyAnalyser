@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using OctopusCosyAnalyser.ApiService.Data;
+using OctopusCosyAnalyser.ApiService.Helpers;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.ApiService.Services;
 using OctopusCosyAnalyser.Shared.Models;
 using System.Text.Json;
+using static OctopusCosyAnalyser.ApiService.Helpers.JsonHelpers;
 
 namespace OctopusCosyAnalyser.ApiService.Endpoints;
 
@@ -52,7 +54,7 @@ public static class HeatPumpEndpoints
         }
 
         // Get account info and set up device
-        group.MapPost("/setup", async (string accountNumber, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapPost("/setup", async (string accountNumber, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, settingsError) = await GetSettingsForAccountAsync(db, accountNumber);
             if (settingsError is not null)
@@ -183,7 +185,7 @@ public static class HeatPumpEndpoints
         }).WithName("SetupHeatPump");
 
         // Get current telemetry
-        group.MapGet("/telemetry/{deviceId}", async (string deviceId, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/telemetry/{deviceId}", async (string deviceId, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (device, settings, error) = await GetDeviceAndSettingsAsync(db, deviceId);
             if (error is not null)
@@ -195,7 +197,7 @@ public static class HeatPumpEndpoints
 
         // Sync historical data
         group.MapPost("/sync/{deviceId}", async (string deviceId, DateTime? from, DateTime? to,
-            OctopusEnergyClient client, CosyDbContext db) =>
+            IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (device, settings, error) = await GetDeviceAndSettingsAsync(db, deviceId);
             if (error is not null)
@@ -279,7 +281,7 @@ public static class HeatPumpEndpoints
         }).WithName("GetDevices");
 
         // Get account properties (needed for heat pump device query)
-        group.MapGet("/properties/{accountNumber}", async (string accountNumber, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/properties/{accountNumber}", async (string accountNumber, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
             if (error is not null)
@@ -298,7 +300,7 @@ public static class HeatPumpEndpoints
         }).WithName("GetProperties");
 
         // Get heat pump device info
-        group.MapGet("/heatpump-device/{accountNumber}/{propertyId}", async (string accountNumber, int propertyId, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/heatpump-device/{accountNumber}/{propertyId}", async (string accountNumber, int propertyId, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
             if (error is not null)
@@ -309,7 +311,7 @@ public static class HeatPumpEndpoints
         }).WithName("GetHeatPumpDevice");
 
         // Get heat pump status
-        group.MapGet("/heatpump-status", async (string accountNumber, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/heatpump-status", async (string accountNumber, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
             if (error is not null)
@@ -320,7 +322,7 @@ public static class HeatPumpEndpoints
         }).WithName("GetHeatPumpStatus");
 
         // Get viewer properties with heat pump device details
-        group.MapGet("/heatpump-config", async (string accountNumber, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/heatpump-config", async (string accountNumber, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
             if (error is not null)
@@ -331,7 +333,7 @@ public static class HeatPumpEndpoints
         }).WithName("GetHeatPumpConfig");
 
         // Get heat pump controller status (uses basic heatPumpStatus query)
-        group.MapGet("/heatpump-controller-status", async (string accountNumber, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/heatpump-controller-status", async (string accountNumber, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
             if (error is not null)
@@ -342,7 +344,7 @@ public static class HeatPumpEndpoints
         }).WithName("GetHeatPumpControllerStatus");
 
         // Get heat pump variants
-        group.MapGet("/heatpump-variants", async (string accountNumber, string? make, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/heatpump-variants", async (string accountNumber, string? make, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
             if (error is not null)
@@ -353,7 +355,7 @@ public static class HeatPumpEndpoints
         }).WithName("GetHeatPumpVariants");
 
         // Get complete heat pump data (COP, temperatures, performance — uses primary batched query)
-        group.MapGet("/heatpump-complete/{accountNumber}/{euid}", async (string accountNumber, string euid, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/heatpump-complete/{accountNumber}/{euid}", async (string accountNumber, string euid, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
             if (error is not null)
@@ -369,7 +371,7 @@ public static class HeatPumpEndpoints
 
         if (app.Environment.IsDevelopment())
         {
-            group.MapGet("/introspect/{typeName}", async (string typeName, string accountNumber, OctopusEnergyClient client, CosyDbContext db) =>
+            group.MapGet("/introspect/{typeName}", async (string typeName, string accountNumber, IOctopusEnergyClient client, CosyDbContext db) =>
             {
                 var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
                 if (error is not null)
@@ -380,7 +382,7 @@ public static class HeatPumpEndpoints
                 return Results.Ok(result);
             }).WithName("IntrospectType");
 
-            group.MapPost("/graphql", async (GraphqlQueryRequest request, OctopusEnergyClient client, CosyDbContext db) =>
+            group.MapPost("/graphql", async (GraphqlQueryRequest request, IOctopusEnergyClient client, CosyDbContext db) =>
             {
                 if (string.IsNullOrWhiteSpace(request.AccountNumber))
                     return Results.BadRequest("Account number is required.");
@@ -397,7 +399,7 @@ public static class HeatPumpEndpoints
             }).WithName("RunGraphqlQuery");
         }
 
-        group.MapGet("/controller-euids/{accountNumber}", async (string accountNumber, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/controller-euids/{accountNumber}", async (string accountNumber, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
             if (error is not null)
@@ -407,7 +409,7 @@ public static class HeatPumpEndpoints
             return Results.Ok(euids);
         }).WithName("GetHeatPumpControllerEuids");
 
-        group.MapGet("/summary/{deviceId}", async (string deviceId, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/summary/{deviceId}", async (string deviceId, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (device, settings, error) = await GetDeviceAndSettingsAsync(db, deviceId);
             if (error is not null)
@@ -419,7 +421,7 @@ public static class HeatPumpEndpoints
             var data = await client.GetHeatPumpStatusAndConfigAsync(settings!.Email!, settings!.OctopusPassword!, device.AccountNumber, device.Euid);
             var root = data.RootElement.GetProperty("data");
 
-            var summary = MapHeatPumpSummary(root);
+            var summary = HeatPumpMappingService.MapHeatPumpSummary(root);
             return Results.Ok(summary);
         }).WithName("GetHeatPumpSummary");
 
@@ -474,7 +476,7 @@ public static class HeatPumpEndpoints
             });
         }).WithName("GetLatestSnapshot");
 
-        group.MapGet("/time-ranged/{accountNumber}/{euid}", async (string accountNumber, string euid, DateTime? from, DateTime? to, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/time-ranged/{accountNumber}/{euid}", async (string accountNumber, string euid, DateTime? from, DateTime? to, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
             if (error is not null)
@@ -496,7 +498,7 @@ public static class HeatPumpEndpoints
             });
         }).WithName("GetHeatPumpTimeRangedPerformance");
 
-        group.MapGet("/time-series/{accountNumber}/{euid}", async (string accountNumber, string euid, DateTime? from, DateTime? to, string? grouping, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/time-series/{accountNumber}/{euid}", async (string accountNumber, string euid, DateTime? from, DateTime? to, string? grouping, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
             if (error is not null)
@@ -580,7 +582,7 @@ public static class HeatPumpEndpoints
         }).WithName("GetStoredTimeSeries");
 
         group.MapPost("/sync-timeseries/{deviceId}", async (string deviceId, DateTime? from, DateTime? to,
-            OctopusEnergyClient client, CosyDbContext db, ILoggerFactory loggerFactory) =>
+            IOctopusEnergyClient client, CosyDbContext db, ILoggerFactory loggerFactory) =>
         {
             var (device, settings, error) = await GetDeviceAndSettingsAsync(db, deviceId);
             if (error is not null)
@@ -595,13 +597,13 @@ public static class HeatPumpEndpoints
             if (from > to)
                 return Results.BadRequest(new { error = "'from' must be before 'to'." });
 
-            if ((to.Value - from.Value).TotalDays > 400)
-                return Results.BadRequest(new { error = "Maximum sync range is 400 days." });
+            if ((to.Value - from.Value).TotalDays > Constants.MaxSyncRangeDays)
+                return Results.BadRequest(new { error = $"Maximum sync range is {Constants.MaxSyncRangeDays} days." });
 
             var synced = 0;
             var skipped = 0;
             var chunkStart = from.Value;
-            var chunkSize = TimeSpan.FromDays(60); // MONTH grouping max span
+            var chunkSize = TimeSpan.FromDays(Constants.TimeSeriesChunkDays); // MONTH grouping max span
             var logger = loggerFactory.CreateLogger("TimeSeriesSync");
 
             // Load all existing timestamps for this device in the date range to avoid duplicates
@@ -697,7 +699,7 @@ public static class HeatPumpEndpoints
 
         // ── Controllers at Location (Multi-HP) ────────────────────────
 
-        group.MapGet("/controllers-at-location/{accountNumber}/{propertyId:int}", async (string accountNumber, int propertyId, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/controllers-at-location/{accountNumber}/{propertyId:int}", async (string accountNumber, int propertyId, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
             if (error is not null)
@@ -709,7 +711,7 @@ public static class HeatPumpEndpoints
 
         // ── Applicable Rates (Tariff) ─────────────────────────────────
 
-        group.MapGet("/rates/{accountNumber}", async (string accountNumber, DateTime? from, DateTime? to, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/rates/{accountNumber}", async (string accountNumber, DateTime? from, DateTime? to, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
             if (error is not null)
@@ -742,7 +744,7 @@ public static class HeatPumpEndpoints
 
         // ── Cost of Usage ─────────────────────────────────────────────
 
-        group.MapGet("/cost/{accountNumber}", async (string accountNumber, DateTime? from, DateTime? to, OctopusEnergyClient client, CosyDbContext db) =>
+        group.MapGet("/cost/{accountNumber}", async (string accountNumber, DateTime? from, DateTime? to, IOctopusEnergyClient client, CosyDbContext db) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber);
             if (error is not null)
@@ -813,8 +815,8 @@ public static class HeatPumpEndpoints
 
             if (from >= to)
                 return Results.BadRequest("'from' must be before 'to'.");
-            if ((to.Value - from.Value).TotalDays > 400)
-                return Results.BadRequest("Maximum range is 400 days.");
+            if ((to.Value - from.Value).TotalDays > Constants.MaxSyncRangeDays)
+                return Results.BadRequest($"Maximum range is {Constants.MaxSyncRangeDays} days.");
 
             var snapshots = await db.HeatPumpSnapshots
                 .AsNoTracking()
@@ -863,9 +865,9 @@ public static class HeatPumpEndpoints
                     if (v > copMax) copMax = v;
                 }
                 if (s.PowerInputKilowatt.HasValue)
-                    totalInputKwh += (double)s.PowerInputKilowatt.Value * 0.25;
+                    totalInputKwh += (double)s.PowerInputKilowatt.Value * Constants.SnapshotIntervalHours;
                 if (s.HeatOutputKilowatt.HasValue)
-                    totalOutputKwh += (double)s.HeatOutputKilowatt.Value * 0.25;
+                    totalOutputKwh += (double)s.HeatOutputKilowatt.Value * Constants.SnapshotIntervalHours;
                 if (s.OutdoorTemperatureCelsius.HasValue)
                 {
                     var v = (double)s.OutdoorTemperatureCelsius.Value;
@@ -954,7 +956,7 @@ public static class HeatPumpEndpoints
 
             // Cap at 366 days to prevent loading unbounded data into memory.
             // At 15-min intervals, 366 days = ~35,000 snapshots which is manageable.
-            var maxSpan = TimeSpan.FromDays(366);
+            var maxSpan = TimeSpan.FromDays(Constants.MaxAggregateSpanDays);
             if (to.Value - from.Value > maxSpan)
                 from = to.Value - maxSpan;
 
@@ -964,7 +966,7 @@ public static class HeatPumpEndpoints
                 .OrderBy(s => s.SnapshotTakenAt)
                 .ToListAsync();
 
-            var aggregates = ComputeDailyAggregates(snapshots);
+            var aggregates = HeatPumpAggregationService.ComputeDailyAggregates(snapshots);
 
             return Results.Ok(new
             {
@@ -980,14 +982,14 @@ public static class HeatPumpEndpoints
         // ── AI Analysis ──────────────────────────────────────────────
 
         group.MapPost("/ai-analysis/{deviceId}", async (string deviceId, AiAnalysisRequestDto request,
-            AiAnalysisService aiService, OctopusEnergyClient octopusClient, CosyDbContext db,
+            IAiAnalysisService aiService, IOctopusEnergyClient octopusClient, CosyDbContext db,
             ILogger<AiAnalysisService> logger) =>
         {
             if (request.From >= request.To)
                 return Results.BadRequest(new { error = "From date must be before To date." });
 
-            if ((request.To - request.From).TotalDays > 365)
-                return Results.BadRequest(new { error = "Date range must not exceed 365 days." });
+            if ((request.To - request.From).TotalDays > Constants.MaxAnalysisRangeDays)
+                return Results.BadRequest(new { error = $"Date range must not exceed {Constants.MaxAnalysisRangeDays} days." });
 
             var device = await db.HeatPumpDevices.FirstOrDefaultAsync(d => d.DeviceId == deviceId);
             if (device is null)
@@ -1021,15 +1023,15 @@ public static class HeatPumpEndpoints
                 .Distinct()
                 .Count();
 
-            if (coveredDays < requestedDays * 0.5 && !string.IsNullOrWhiteSpace(device.Euid))
+            if (coveredDays < requestedDays * Constants.MinTimeSeriesCoveragePercent && !string.IsNullOrWhiteSpace(device.Euid))
             {
                 if (settings is not null)
                 {
                     var syncFrom = from;
                     var syncTo = to;
-                    // Cap auto-sync to 90 days to avoid slow requests
-                    if ((syncTo - syncFrom).TotalDays > 90)
-                        syncFrom = syncTo.AddDays(-90);
+                    // Cap auto-sync to avoid slow requests
+                    if ((syncTo - syncFrom).TotalDays > Constants.MaxAutoSyncDays)
+                        syncFrom = syncTo.AddDays(-Constants.MaxAutoSyncDays);
 
                     logger.LogInformation("Auto-syncing time series for device {DeviceId} from {From} to {To} (had {Covered}/{Requested} days)",
                         deviceId, syncFrom, syncTo, coveredDays, requestedDays);
@@ -1148,13 +1150,13 @@ public static class HeatPumpEndpoints
 
             // Compute daily aggregates from snapshots (existing logic)
             var aggregates = snapshots.Count > 0
-                ? ComputeDailyAggregates(snapshots)
+                ? HeatPumpAggregationService.ComputeDailyAggregates(snapshots)
                 : new List<DailyAggregateDto>();
 
             // Enrich with time series data + weather comp from nearest snapshots
             if (timeSeriesRecords.Count > 0)
             {
-                EnrichAggregatesWithTimeSeries(aggregates, timeSeriesRecords, snapshots);
+                HeatPumpAggregationService.EnrichAggregatesWithTimeSeries(aggregates, timeSeriesRecords, snapshots);
             }
 
             // Merge cost data — prefer stored DB records, fall back to live API
@@ -1173,11 +1175,11 @@ public static class HeatPumpEndpoints
                 {
                     if (storedCosts.TryGetValue(agg.Date, out var cost))
                     {
-                        agg.DailyCostPence = cost.TotalCostPence;
-                        agg.DailyUsageKwh = cost.TotalUsageKwh;
-                        agg.AvgUnitRatePence = cost.AvgUnitRatePence;
+                        agg.DailyCostPence = (double)cost.TotalCostPence;
+                        agg.DailyUsageKwh = (double)cost.TotalUsageKwh;
+                        agg.AvgUnitRatePence = (double)cost.AvgUnitRatePence;
                         agg.CostPerKwhHeatPence = agg.TotalHeatOutputKwh > 0
-                            ? cost.TotalCostPence / agg.TotalHeatOutputKwh
+                            ? (double)cost.TotalCostPence / agg.TotalHeatOutputKwh
                             : null;
                         mergedCount++;
                     }
@@ -1282,7 +1284,7 @@ public static class HeatPumpEndpoints
         }).WithName("GetAiAnalysis");
 
         // AI Dashboard Summary (auto-cached 30 min, reuses daily aggregate pipeline)
-        group.MapGet("/ai-summary/{deviceId}", async (string deviceId, AiAnalysisService aiService, CosyDbContext db) =>
+        group.MapGet("/ai-summary/{deviceId}", async (string deviceId, IAiAnalysisService aiService, CosyDbContext db) =>
         {
             var (device, settings, error) = await GetDeviceAndSettingsAsync(db, deviceId);
             if (error is not null)
@@ -1293,7 +1295,7 @@ public static class HeatPumpEndpoints
             return Results.Ok(summary);
         }).WithName("GetAiSummary");
 
-        group.MapGet("/ai-summary/{deviceId}/refresh", async (string deviceId, AiAnalysisService aiService, CosyDbContext db) =>
+        group.MapPost("/ai-summary/{deviceId}/refresh", async (string deviceId, IAiAnalysisService aiService, CosyDbContext db) =>
         {
             var (device, settings, error) = await GetDeviceAndSettingsAsync(db, deviceId);
             if (error is not null)
@@ -1303,660 +1305,6 @@ public static class HeatPumpEndpoints
             var summary = await aiService.GenerateDashboardSummaryAsync(deviceId, forceRefresh: true, anthropicApiKey: anthropicKey);
             return Results.Ok(summary);
         }).WithName("RefreshAiSummary");
-    }
-
-    internal static List<DailyAggregateDto> ComputeDailyAggregates(List<HeatPumpSnapshot> snapshots)
-    {
-        return snapshots
-            .GroupBy(s => DateOnly.FromDateTime(s.SnapshotTakenAt))
-            .OrderBy(g => g.Key)
-            .Select(g =>
-            {
-                var day = g.ToList();
-                var heatingSnapshots = day.Where(s => s.HeatingZoneHeatDemand == true).ToList();
-                var hotWaterSnapshots = day.Where(s => s.HotWaterZoneHeatDemand == true).ToList();
-                var spaceHeatingOnly = day.Where(s => s.HeatingZoneHeatDemand == true && s.HotWaterZoneHeatDemand != true).ToList();
-
-                // Controller state transitions
-                var stateTransitions = 0;
-                string? prevState = null;
-                foreach (var s in day)
-                {
-                    if (prevState != null && s.ControllerState != prevState)
-                        stateTransitions++;
-                    prevState = s.ControllerState;
-                }
-
-                // Hot water run count (distinct periods of consecutive HW demand)
-                var hwRunCount = 0;
-                var hwTotalSnapshots = 0;
-                var prevHwDemand = false;
-                foreach (var s in day)
-                {
-                    var hwDemand = s.HotWaterZoneHeatDemand == true;
-                    if (hwDemand && !prevHwDemand)
-                        hwRunCount++;
-                    if (hwDemand)
-                        hwTotalSnapshots++;
-                    prevHwDemand = hwDemand;
-                }
-
-                // Flow temp mode (most frequent non-null value for the day)
-                var flowTempModeForDay = day.Where(s => s.FlowTempMode != null)
-                    .GroupBy(s => s.FlowTempMode!)
-                    .OrderByDescending(g2 => g2.Count())
-                    .FirstOrDefault()?.Key;
-
-                // WC curve range — only meaningful when in WeatherCompensation mode
-                var wcSnapshots = day.Where(s => s.FlowTempMode == Shared.Models.FlowTempMode.WeatherCompensation).ToList();
-                var wcMinMode = wcSnapshots.Where(s => s.WeatherCompensationMinCelsius.HasValue)
-                    .GroupBy(s => s.WeatherCompensationMinCelsius!.Value)
-                    .OrderByDescending(g2 => g2.Count())
-                    .FirstOrDefault()?.Key;
-
-                var wcMaxMode = wcSnapshots.Where(s => s.WeatherCompensationMaxCelsius.HasValue)
-                    .GroupBy(s => s.WeatherCompensationMaxCelsius!.Value)
-                    .OrderByDescending(g2 => g2.Count())
-                    .FirstOrDefault()?.Key;
-
-                // Fixed flow snapshots for setpoint average
-                var fixedFlowSnapshots = day.Where(s => s.FlowTempMode == Shared.Models.FlowTempMode.FixedFlow).ToList();
-
-                var flowTempMinMode = day.Where(s => s.HeatingFlowTempAllowableMinCelsius.HasValue)
-                    .GroupBy(s => s.HeatingFlowTempAllowableMinCelsius!.Value)
-                    .OrderByDescending(g2 => g2.Count())
-                    .FirstOrDefault()?.Key;
-
-                var flowTempMaxMode = day.Where(s => s.HeatingFlowTempAllowableMaxCelsius.HasValue)
-                    .GroupBy(s => s.HeatingFlowTempAllowableMaxCelsius!.Value)
-                    .OrderByDescending(g2 => g2.Count())
-                    .FirstOrDefault()?.Key;
-
-                return new DailyAggregateDto
-                {
-                    Date = g.Key,
-                    SnapshotCount = day.Count,
-
-                    AvgCopHeating = AvgDecimal(heatingSnapshots, s => s.CoefficientOfPerformance),
-                    AvgCopHotWater = AvgDecimal(hotWaterSnapshots, s => s.CoefficientOfPerformance),
-                    AvgCopSpaceHeatingOnly = AvgDecimal(spaceHeatingOnly, s => s.CoefficientOfPerformance),
-
-                    TotalElectricityKwh = day.Where(s => s.PowerInputKilowatt.HasValue)
-                        .Sum(s => (double)s.PowerInputKilowatt!.Value * 0.25),
-                    TotalHeatOutputKwh = day.Where(s => s.HeatOutputKilowatt.HasValue)
-                        .Sum(s => (double)s.HeatOutputKilowatt!.Value * 0.25),
-
-                    AvgOutdoorTemp = AvgDecimal(day, s => s.OutdoorTemperatureCelsius),
-                    MinOutdoorTemp = day.Any(s => s.OutdoorTemperatureCelsius.HasValue)
-                        ? day.Where(s => s.OutdoorTemperatureCelsius.HasValue)
-                            .Select(s => (double)s.OutdoorTemperatureCelsius!.Value).Min()
-                        : null,
-                    MaxOutdoorTemp = day.Any(s => s.OutdoorTemperatureCelsius.HasValue)
-                        ? day.Where(s => s.OutdoorTemperatureCelsius.HasValue)
-                            .Select(s => (double)s.OutdoorTemperatureCelsius!.Value).Max()
-                        : null,
-                    // Fixed flow temp setpoint — only from FixedFlow-mode snapshots
-                    AvgFlowTemp = AvgDecimal(fixedFlowSnapshots, s => s.HeatingFlowTemperatureCelsius),
-                    AvgRoomTemp = AvgDecimal(day, s => s.RoomTemperatureCelsius),
-                    AvgSetpoint = AvgDecimal(day, s => s.HeatingZoneSetpointCelsius),
-
-                    HeatingDutyCyclePercent = day.Count > 0
-                        ? day.Count(s => s.HeatingZoneHeatDemand == true) * 100.0 / day.Count
-                        : 0,
-                    HotWaterDutyCyclePercent = day.Count > 0
-                        ? day.Count(s => s.HotWaterZoneHeatDemand == true) * 100.0 / day.Count
-                        : 0,
-
-                    FlowTempMode = flowTempModeForDay,
-                    WeatherCompMin = wcMinMode.HasValue ? (double)wcMinMode.Value : null,
-                    WeatherCompMax = wcMaxMode.HasValue ? (double)wcMaxMode.Value : null,
-
-                    FlowTempAllowableMin = flowTempMinMode.HasValue ? (double)flowTempMinMode.Value : null,
-                    FlowTempAllowableMax = flowTempMaxMode.HasValue ? (double)flowTempMaxMode.Value : null,
-
-                    ControllerStateTransitions = stateTransitions,
-
-                    HotWaterRunCount = hwRunCount,
-                    HotWaterTotalMinutes = hwTotalSnapshots * 15,
-                    AvgHotWaterSetpoint = AvgDecimal(hotWaterSnapshots, s => s.HotWaterZoneSetpointCelsius),
-                };
-            })
-            .ToList();
-    }
-
-    private static double? AvgDecimal(List<HeatPumpSnapshot> snapshots, Func<HeatPumpSnapshot, decimal?> selector)
-    {
-        var values = snapshots.Where(s => selector(s).HasValue).Select(s => (double)selector(s)!.Value).ToList();
-        return values.Count > 0 ? values.Average() : null;
-    }
-
-    /// <summary>
-    /// Enriches daily aggregates with time series history data.
-    /// For each time series record, finds the nearest snapshot within ±30 minutes
-    /// to correlate weather compensation settings with energy performance.
-    /// Creates new daily aggregates for dates that have time series data but no snapshots.
-    /// </summary>
-    internal static void EnrichAggregatesWithTimeSeries(
-        List<DailyAggregateDto> aggregates,
-        List<HeatPumpTimeSeriesRecord> timeSeriesRecords,
-        List<HeatPumpSnapshot> snapshots)
-    {
-        // Index snapshots by time for efficient nearest-neighbour lookup
-        var snapshotsByTime = snapshots
-            .OrderBy(s => s.SnapshotTakenAt)
-            .ToList();
-
-        // Deduplicate time series records by StartAt before grouping
-        var dedupedRecords = timeSeriesRecords
-            .GroupBy(r => r.StartAt)
-            .Select(g => g.First())
-            .ToList();
-
-        // Group time series records by date
-        var tsByDate = dedupedRecords
-            .GroupBy(r => DateOnly.FromDateTime(r.StartAt))
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        // Index existing aggregates by date for merging
-        var aggByDate = aggregates.ToDictionary(a => a.Date);
-
-        foreach (var (date, records) in tsByDate)
-        {
-            // Sum energy from time series for the day
-            var tsEnergyIn = records
-                .Where(r => r.EnergyInputKwh.HasValue)
-                .Sum(r => (double)r.EnergyInputKwh!.Value);
-            var tsEnergyOut = records
-                .Where(r => r.EnergyOutputKwh.HasValue)
-                .Sum(r => (double)r.EnergyOutputKwh!.Value);
-            var tsOutdoorTemps = records
-                .Where(r => r.OutdoorTemperatureCelsius.HasValue)
-                .Select(r => (double)r.OutdoorTemperatureCelsius!.Value)
-                .ToList();
-
-            // Find flow temp mode and settings from nearest snapshots (within 30 min window)
-            var wcValues = new List<(string? flowTempMode, decimal? min, decimal? max, decimal? flowTemp, decimal? flowTempAllowableMin, decimal? flowTempAllowableMax)>();
-            foreach (var rec in records)
-            {
-                var nearest = FindNearestSnapshot(snapshotsByTime, rec.StartAt, TimeSpan.FromMinutes(30));
-                if (nearest is not null)
-                {
-                    wcValues.Add((
-                        nearest.FlowTempMode,
-                        nearest.WeatherCompensationMinCelsius,
-                        nearest.WeatherCompensationMaxCelsius,
-                        nearest.HeatingFlowTemperatureCelsius,
-                        nearest.HeatingFlowTempAllowableMinCelsius,
-                        nearest.HeatingFlowTempAllowableMaxCelsius
-                    ));
-                }
-            }
-
-            // Flow temp mode (most frequent non-null)
-            var flowTempModeForDay = wcValues
-                .Where(v => v.flowTempMode != null)
-                .GroupBy(v => v.flowTempMode!)
-                .OrderByDescending(g => g.Count())
-                .FirstOrDefault()?.Key;
-
-            // WC curve range — only from WeatherCompensation-mode snapshots
-            var wcMinMode = wcValues
-                .Where(v => v.flowTempMode == Shared.Models.FlowTempMode.WeatherCompensation && v.min.HasValue)
-                .GroupBy(v => v.min!.Value)
-                .OrderByDescending(g => g.Count())
-                .FirstOrDefault()?.Key;
-
-            var wcMaxMode = wcValues
-                .Where(v => v.flowTempMode == Shared.Models.FlowTempMode.WeatherCompensation && v.max.HasValue)
-                .GroupBy(v => v.max!.Value)
-                .OrderByDescending(g => g.Count())
-                .FirstOrDefault()?.Key;
-
-            // Fixed flow setpoint — only from FixedFlow-mode snapshots
-            var avgFlowTemp = wcValues
-                .Where(v => v.flowTempMode == Shared.Models.FlowTempMode.FixedFlow && v.flowTemp.HasValue)
-                .Select(v => (double)v.flowTemp!.Value)
-                .ToList();
-
-            var flowTempAllowMinMode = wcValues
-                .Where(v => v.flowTempAllowableMin.HasValue)
-                .GroupBy(v => v.flowTempAllowableMin!.Value)
-                .OrderByDescending(g => g.Count())
-                .FirstOrDefault()?.Key;
-
-            var flowTempAllowMaxMode = wcValues
-                .Where(v => v.flowTempAllowableMax.HasValue)
-                .GroupBy(v => v.flowTempAllowableMax!.Value)
-                .OrderByDescending(g => g.Count())
-                .FirstOrDefault()?.Key;
-
-            if (aggByDate.TryGetValue(date, out var existing))
-            {
-                // Merge: prefer time series energy totals (more complete hourly data)
-                if (tsEnergyIn > 0)
-                    existing.TotalElectricityKwh = tsEnergyIn;
-                if (tsEnergyOut > 0)
-                    existing.TotalHeatOutputKwh = tsEnergyOut;
-
-                // Supplement outdoor temp from time series if snapshot data is missing
-                if (!existing.AvgOutdoorTemp.HasValue && tsOutdoorTemps.Count > 0)
-                    existing.AvgOutdoorTemp = tsOutdoorTemps.Average();
-                if (!existing.MinOutdoorTemp.HasValue && tsOutdoorTemps.Count > 0)
-                    existing.MinOutdoorTemp = tsOutdoorTemps.Min();
-                if (!existing.MaxOutdoorTemp.HasValue && tsOutdoorTemps.Count > 0)
-                    existing.MaxOutdoorTemp = tsOutdoorTemps.Max();
-
-                // Supplement flow temp mode from time-series-correlated snapshots if not already set
-                if (existing.FlowTempMode == null && flowTempModeForDay != null)
-                    existing.FlowTempMode = flowTempModeForDay;
-                if (!existing.WeatherCompMin.HasValue && wcMinMode.HasValue)
-                    existing.WeatherCompMin = (double)wcMinMode.Value;
-                if (!existing.WeatherCompMax.HasValue && wcMaxMode.HasValue)
-                    existing.WeatherCompMax = (double)wcMaxMode.Value;
-                if (!existing.AvgFlowTemp.HasValue && avgFlowTemp.Count > 0)
-                    existing.AvgFlowTemp = avgFlowTemp.Average();
-                if (!existing.FlowTempAllowableMin.HasValue && flowTempAllowMinMode.HasValue)
-                    existing.FlowTempAllowableMin = (double)flowTempAllowMinMode.Value;
-                if (!existing.FlowTempAllowableMax.HasValue && flowTempAllowMaxMode.HasValue)
-                    existing.FlowTempAllowableMax = (double)flowTempAllowMaxMode.Value;
-
-                // Compute COP from time series energy data
-                if (tsEnergyIn > 0 && tsEnergyOut > 0)
-                    existing.AvgCopHeating ??= tsEnergyOut / tsEnergyIn;
-            }
-            else
-            {
-                // Create new aggregate from time series data for dates without snapshots
-                var newAgg = new DailyAggregateDto
-                {
-                    Date = date,
-                    SnapshotCount = 0,
-                    TotalElectricityKwh = tsEnergyIn,
-                    TotalHeatOutputKwh = tsEnergyOut,
-                    AvgOutdoorTemp = tsOutdoorTemps.Count > 0 ? tsOutdoorTemps.Average() : null,
-                    MinOutdoorTemp = tsOutdoorTemps.Count > 0 ? tsOutdoorTemps.Min() : null,
-                    MaxOutdoorTemp = tsOutdoorTemps.Count > 0 ? tsOutdoorTemps.Max() : null,
-                    AvgCopHeating = tsEnergyIn > 0 ? tsEnergyOut / tsEnergyIn : null,
-                    FlowTempMode = flowTempModeForDay,
-                    WeatherCompMin = wcMinMode.HasValue ? (double)wcMinMode.Value : null,
-                    WeatherCompMax = wcMaxMode.HasValue ? (double)wcMaxMode.Value : null,
-                    AvgFlowTemp = avgFlowTemp.Count > 0 ? avgFlowTemp.Average() : null,
-                    FlowTempAllowableMin = flowTempAllowMinMode.HasValue ? (double)flowTempAllowMinMode.Value : null,
-                    FlowTempAllowableMax = flowTempAllowMaxMode.HasValue ? (double)flowTempAllowMaxMode.Value : null,
-                };
-
-                aggregates.Add(newAgg);
-            }
-        }
-
-        // Re-sort by date after adding new entries
-        aggregates.Sort((a, b) => a.Date.CompareTo(b.Date));
-    }
-
-    /// <summary>
-    /// Finds the nearest snapshot to a given timestamp within a maximum time window.
-    /// Uses binary search for efficiency on sorted snapshot list.
-    /// </summary>
-    private static HeatPumpSnapshot? FindNearestSnapshot(List<HeatPumpSnapshot> sortedSnapshots, DateTime target, TimeSpan maxDistance)
-    {
-        if (sortedSnapshots.Count == 0) return null;
-
-        // Binary search for the insertion point
-        var idx = sortedSnapshots.BinarySearch(null!, Comparer<HeatPumpSnapshot>.Create(
-            (a, _) => a!.SnapshotTakenAt.CompareTo(target)));
-
-        if (idx < 0) idx = ~idx; // bitwise complement gives the insertion point
-
-        HeatPumpSnapshot? best = null;
-        var bestDistance = TimeSpan.MaxValue;
-
-        // Check the element at idx and idx-1 (the two nearest candidates)
-        for (var i = Math.Max(0, idx - 1); i <= Math.Min(sortedSnapshots.Count - 1, idx); i++)
-        {
-            var distance = (sortedSnapshots[i].SnapshotTakenAt - target).Duration();
-            if (distance < bestDistance)
-            {
-                bestDistance = distance;
-                best = sortedSnapshots[i];
-            }
-        }
-
-        return bestDistance <= maxDistance ? best : null;
-    }
-
-    private static double GetJsonDouble(JsonElement el, string property)
-    {
-        if (!el.TryGetProperty(property, out var val)) return 0;
-        if (val.ValueKind == JsonValueKind.Number && val.TryGetDouble(out var d)) return d;
-        if (val.ValueKind == JsonValueKind.String
-            && double.TryParse(val.GetString(), System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out var parsed))
-            return parsed;
-        return 0;
-    }
-
-    private static HeatPumpSummary MapHeatPumpSummary(JsonElement data)
-    {
-        return new HeatPumpSummary
-        {
-            ControllerStatus = MapControllerStatus(data),
-            ControllerConfiguration = MapControllerConfiguration(data),
-            LivePerformance = MapLivePerformance(data),
-            LifetimePerformance = MapLifetimePerformance(data)
-        };
-    }
-
-    private static HeatPumpControllerStatus? MapControllerStatus(JsonElement data)
-    {
-        if (!data.TryGetProperty("heatPumpControllerStatus", out var status))
-            return null;
-
-        var sensors = status.TryGetProperty("sensors", out var sensorsEl)
-            ? sensorsEl.EnumerateArray().Select(MapSensor).ToList()
-            : new List<HeatPumpSensor>();
-
-        var zones = status.TryGetProperty("zones", out var zonesEl)
-            ? zonesEl.EnumerateArray().Select(MapZoneStatus).ToList()
-            : new List<HeatPumpZoneStatus>();
-
-        return new HeatPumpControllerStatus
-        {
-            Sensors = sensors,
-            Zones = zones
-        };
-    }
-
-    private static HeatPumpSensor MapSensor(JsonElement element)
-    {
-        return new HeatPumpSensor
-        {
-            Code = GetString(element, "code"),
-            Connectivity = element.TryGetProperty("connectivity", out var connectivity)
-                ? new HeatPumpConnectivity
-                {
-                    Online = GetBool(connectivity, "online"),
-                    RetrievedAt = GetString(connectivity, "retrievedAt")
-                }
-                : null,
-            Telemetry = element.TryGetProperty("telemetry", out var telemetry)
-                ? new HeatPumpTelemetry
-                {
-                    TemperatureInCelsius = GetDecimal(telemetry, "temperatureInCelsius"),
-                    HumidityPercentage = GetDecimal(telemetry, "humidityPercentage"),
-                    RetrievedAt = GetString(telemetry, "retrievedAt")
-                }
-                : null
-        };
-    }
-
-    private static HeatPumpZoneStatus MapZoneStatus(JsonElement element)
-    {
-        return new HeatPumpZoneStatus
-        {
-            Zone = GetString(element, "zone"),
-            Telemetry = element.TryGetProperty("telemetry", out var telemetry)
-                ? new HeatPumpZoneTelemetry
-                {
-                    SetpointInCelsius = GetDecimal(telemetry, "setpointInCelsius"),
-                    Mode = GetString(telemetry, "mode"),
-                    RelaySwitchedOn = GetBool(telemetry, "relaySwitchedOn"),
-                    HeatDemand = GetBool(telemetry, "heatDemand"),
-                    RetrievedAt = GetString(telemetry, "retrievedAt")
-                }
-                : null
-        };
-    }
-
-    private static HeatPumpControllerConfiguration? MapControllerConfiguration(JsonElement data)
-    {
-        if (!data.TryGetProperty("heatPumpControllerConfiguration", out var configuration))
-            return null;
-
-        var controller = configuration.TryGetProperty("controller", out var controllerEl)
-            ? new HeatPumpController
-            {
-                State = GetStringList(controllerEl, "state"),
-                HeatPumpTimezone = GetString(controllerEl, "heatPumpTimezone"),
-                Connected = GetBool(controllerEl, "connected")
-            }
-            : null;
-
-        var heatPump = configuration.TryGetProperty("heatPump", out var heatPumpEl)
-            ? MapHeatPumpDetails(heatPumpEl)
-            : null;
-
-        var zones = configuration.TryGetProperty("zones", out var zonesEl)
-            ? zonesEl.EnumerateArray().Select(MapZoneConfiguration).ToList()
-            : new List<HeatPumpZoneConfiguration>();
-
-        return new HeatPumpControllerConfiguration
-        {
-            Controller = controller,
-            HeatPump = heatPump,
-            Zones = zones
-        };
-    }
-
-    private static HeatPumpDetails MapHeatPumpDetails(JsonElement element)
-    {
-        return new HeatPumpDetails
-        {
-            SerialNumber = GetString(element, "serialNumber"),
-            Model = GetString(element, "model"),
-            HardwareVersion = GetString(element, "hardwareVersion"),
-            MaxWaterSetpoint = GetInt(element, "maxWaterSetpoint"),
-            MinWaterSetpoint = GetInt(element, "minWaterSetpoint"),
-            HeatingFlowTemperature = element.TryGetProperty("heatingFlowTemperature", out var flow)
-                ? new HeatPumpHeatingFlowTemperature
-                {
-                    CurrentTemperature = MapValueAndUnit(flow, "currentTemperature"),
-                    AllowableRange = MapAllowableRange(flow, "allowableRange")
-                }
-                : null,
-            WeatherCompensation = element.TryGetProperty("weatherCompensation", out var weather)
-                ? new HeatPumpWeatherCompensation
-                {
-                    Enabled = GetBool(weather, "enabled"),
-                    CurrentRange = MapAllowableRange(weather, "currentRange")
-                }
-                : null
-        };
-    }
-
-    private static HeatPumpZoneConfiguration MapZoneConfiguration(JsonElement element)
-    {
-        return new HeatPumpZoneConfiguration
-        {
-            Configuration = element.TryGetProperty("configuration", out var config)
-                ? MapZoneConfig(config)
-                : null
-        };
-    }
-
-    private static HeatPumpZoneConfig MapZoneConfig(JsonElement config)
-    {
-        var sensors = config.TryGetProperty("sensors", out var sensorsEl)
-            ? sensorsEl.EnumerateArray().Select(MapSensorConfiguration).ToList()
-            : new List<HeatPumpSensorConfiguration>();
-
-        return new HeatPumpZoneConfig
-        {
-            Code = GetString(config, "code"),
-            ZoneType = GetString(config, "zoneType"),
-            Enabled = GetBool(config, "enabled"),
-            DisplayName = GetString(config, "displayName"),
-            PrimarySensor = GetString(config, "primarySensor"),
-            CurrentOperation = config.TryGetProperty("currentOperation", out var operation)
-                ? new HeatPumpCurrentOperation
-                {
-                    Mode = GetString(operation, "mode"),
-                    SetpointInCelsius = GetDecimal(operation, "setpointInCelsius"),
-                    Action = GetString(operation, "action"),
-                    End = GetString(operation, "end")
-                }
-                : null,
-            CallForHeat = GetBool(config, "callForHeat"),
-            HeatDemand = GetBool(config, "heatDemand"),
-            Emergency = GetBool(config, "emergency"),
-            Sensors = sensors
-        };
-    }
-
-    private static HeatPumpSensorConfiguration MapSensorConfiguration(JsonElement sensor)
-    {
-        return new HeatPumpSensorConfiguration
-        {
-            Code = GetString(sensor, "code"),
-            DisplayName = GetString(sensor, "displayName"),
-            Type = GetString(sensor, "type"),
-            Enabled = GetBool(sensor, "enabled"),
-            FirmwareVersion = GetString(sensor, "firmwareVersion"),
-            BoostEnabled = GetBool(sensor, "boostEnabled")
-        };
-    }
-
-    private static HeatPumpLivePerformance? MapLivePerformance(JsonElement data)
-    {
-        if (!data.TryGetProperty("heatPumpTimeSeriesPerformance", out var liveArray)
-            || liveArray.ValueKind != JsonValueKind.Array
-            || liveArray.GetArrayLength() == 0)
-            return null;
-
-        // Take the most recent bucket (last element in the LIVE time series)
-        var live = liveArray.EnumerateArray().Last();
-
-        // COP is not returned by the new API — compute client-side from energyOutput / energyInput
-        string? cop = null;
-        if (live.TryGetProperty("energyInput", out var eiEl) && live.TryGetProperty("energyOutput", out var eoEl))
-        {
-            var eIn = GetDecimal(eiEl, "value");
-            var eOut = GetDecimal(eoEl, "value");
-            if (eIn is > 0 && eOut.HasValue)
-                cop = (eOut.Value / eIn.Value).ToString("F2");
-        }
-
-        return new HeatPumpLivePerformance
-        {
-            CoefficientOfPerformance = cop,
-            OutdoorTemperature = MapValueAndUnit(live, "outdoorTemperature"),
-            HeatOutput = MapValueAndUnit(live, "energyOutput"),
-            PowerInput = MapValueAndUnit(live, "energyInput"),
-            ReadAt = GetString(live, "startAt")
-        };
-    }
-
-    private static HeatPumpLifetimePerformance? MapLifetimePerformance(JsonElement data)
-    {
-        if (!data.TryGetProperty("heatPumpLifetimePerformance", out var lifetime))
-            return null;
-
-        return new HeatPumpLifetimePerformance
-        {
-            SeasonalCoefficientOfPerformance = GetString(lifetime, "seasonalCoefficientOfPerformance"),
-            HeatOutput = MapValueAndUnit(lifetime, "heatOutput"),
-            EnergyInput = MapValueAndUnit(lifetime, "energyInput"),
-            ReadAt = GetString(lifetime, "readAt")
-        };
-    }
-
-    private static HeatPumpValueAndUnit? MapValueAndUnit(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var valueAndUnit))
-            return null;
-
-        return new HeatPumpValueAndUnit
-        {
-            Value = GetString(valueAndUnit, "value"),
-            Unit = GetString(valueAndUnit, "unit")
-        };
-    }
-
-    private static HeatPumpAllowableRange? MapAllowableRange(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var range))
-            return null;
-
-        return new HeatPumpAllowableRange
-        {
-            Minimum = MapValueAndUnit(range, "minimum"),
-            Maximum = MapValueAndUnit(range, "maximum")
-        };
-    }
-
-    private static string? GetString(JsonElement element, string propertyName)
-    {
-        return element.TryGetProperty(propertyName, out var value)
-            ? value.ValueKind == JsonValueKind.String ? value.GetString() : value.ToString()
-            : null;
-    }
-
-    private static bool? GetBool(JsonElement element, string propertyName)
-    {
-        return element.TryGetProperty(propertyName, out var value)
-            ? value.ValueKind == JsonValueKind.True ? true : value.ValueKind == JsonValueKind.False ? false : null
-            : null;
-    }
-
-    private static decimal? GetDecimal(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var value))
-            return null;
-
-        return value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var parsed)
-            ? parsed
-            : decimal.TryParse(value.ToString(), out var textParsed) ? textParsed : null;
-    }
-
-    private static int? GetInt(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var value))
-            return null;
-
-        return value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var parsed)
-            ? parsed
-            : int.TryParse(value.ToString(), out var textParsed) ? textParsed : null;
-    }
-
-    private static List<string> GetStringList(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.Array)
-            return new List<string>();
-
-        return value.EnumerateArray()
-            .Select(item => item.ValueKind == JsonValueKind.String ? item.GetString() ?? string.Empty : item.ToString())
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .ToList();
-    }
-
-    internal static string? TryGetString(JsonElement element, params string[] propertyNames)
-    {
-        foreach (var propertyName in propertyNames)
-        {
-            if (element.TryGetProperty(propertyName, out var value)
-                && value.ValueKind == JsonValueKind.String)
-            {
-                return value.GetString();
-            }
-        }
-        return null;
-    }
-
-    internal static double TryGetDouble(JsonElement element, params string[] propertyNames)
-    {
-        foreach (var propertyName in propertyNames)
-        {
-            if (!element.TryGetProperty(propertyName, out var value))
-                continue;
-
-            if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var d))
-                return d;
-
-            if (value.ValueKind == JsonValueKind.String
-                && double.TryParse(value.GetString(), System.Globalization.NumberStyles.Any,
-                    System.Globalization.CultureInfo.InvariantCulture, out var parsed))
-                return parsed;
-        }
-        return 0;
     }
 
     public sealed record GraphqlQueryRequest(string AccountNumber, string Query, JsonElement? Variables);

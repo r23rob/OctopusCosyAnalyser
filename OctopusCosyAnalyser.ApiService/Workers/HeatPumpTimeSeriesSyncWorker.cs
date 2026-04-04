@@ -44,7 +44,7 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
     {
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
-        var client = scope.ServiceProvider.GetRequiredService<OctopusEnergyClient>();
+        var client = scope.ServiceProvider.GetRequiredService<IOctopusEnergyClient>();
 
         var devices = await db.HeatPumpDevices
             .Where(d => d.IsActive && d.Euid != null && d.Euid != "")
@@ -58,7 +58,7 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
         }
     }
 
-    private async Task SyncDeviceAsync(CosyDbContext db, OctopusEnergyClient client, HeatPumpDevice device, CancellationToken stoppingToken)
+    private async Task SyncDeviceAsync(CosyDbContext db, IOctopusEnergyClient client, HeatPumpDevice device, CancellationToken stoppingToken)
     {
         var settings = await db.OctopusAccountSettings
             .FirstOrDefaultAsync(s => s.AccountNumber == device.AccountNumber, stoppingToken);
