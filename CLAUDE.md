@@ -103,6 +103,8 @@ Unique constraints prevent duplicate snapshots `(DeviceId, SnapshotTakenAt)` and
 
 ## Octopus Energy API
 
+Full schema reference (auto-generated from introspection): [`docs/octopus-graphql-schema.md`](docs/octopus-graphql-schema.md)
+
 Base URL: `https://api.octopus.energy/v1/graphql/`
 
 Authentication: POST to GraphQL with `obtainKrakenToken(input: {APIKey: "..."})` mutation → returns JWT. Token cached for 55 minutes in a `ConcurrentDictionary`.

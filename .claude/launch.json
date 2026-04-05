@@ -1,0 +1,30 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "aspire-apphost",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "OctopusCosyAnalyser.AppHost"],
+      "port": 15238
+    },
+    {
+      "name": "api-service",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "OctopusCosyAnalyser.ApiService"],
+      "port": 5532
+    },
+    {
+      "name": "react-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173,
+      "cwd": "octopus-cosy-web"
+    },
+    {
+      "name": "blazor-web",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "OctopusCosyAnalyser.Web"],
+      "port": 5165
+    }
+  ]
+}
