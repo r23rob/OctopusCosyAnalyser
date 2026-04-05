@@ -11,6 +11,12 @@ public sealed class AccountSettingsDto
     public string? Email { get; set; }
     public string? OctopusPassword { get; set; }
     public string? AnthropicApiKey { get; set; }
+
+    /// <summary>
+    /// Authentication mode: "apikey" or "password".
+    /// </summary>
+    public string AuthMode { get; set; } = "apikey";
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
@@ -22,8 +28,12 @@ public sealed class AccountSettingsRequestDto
 {
     public string AccountNumber { get; set; } = string.Empty;
     public string? ApiKey { get; set; }
-    public string Email { get; set; } = string.Empty;
-    public string OctopusPassword { get; set; } = string.Empty;
+    public string? Email { get; set; }
+    public string? OctopusPassword { get; set; }
     public string? AnthropicApiKey { get; set; }
-}
 
+    /// <summary>
+    /// Authentication mode: "apikey" or "password".
+    /// </summary>
+    public string AuthMode { get; set; } = "apikey";
+}
