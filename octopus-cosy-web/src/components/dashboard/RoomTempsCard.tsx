@@ -13,9 +13,9 @@ interface Props {
 export function RoomTempsCard({ rooms }: Props) {
   if (rooms.length === 0) {
     return (
-      <div className="bg-white border border-border-subtle rounded-[10px] p-[14px] flex-1">
-        <div className="font-mono text-[8px] tracking-[.1em] uppercase text-ink3 mb-2.5">Room temperatures</div>
-        <div className="text-[10px] text-ink3">No sensor data</div>
+      <div className="bg-white border border-border-subtle rounded-[10px] p-[18px] flex-1">
+        <div className="font-mono text-[10px] tracking-[.1em] uppercase text-ink3 mb-2.5">Room temperatures</div>
+        <div className="text-[13px] text-ink3">No sensor data</div>
       </div>
     )
   }
@@ -24,8 +24,8 @@ export function RoomTempsCard({ rooms }: Props) {
   const span = 14
 
   return (
-    <div className="bg-white border border-border-subtle rounded-[10px] p-[14px] flex-1">
-      <div className="font-mono text-[8px] tracking-[.1em] uppercase text-ink3 mb-2.5">Room temperatures</div>
+    <div className="bg-white border border-border-subtle rounded-[10px] p-[18px] flex-1">
+      <div className="font-mono text-[10px] tracking-[.1em] uppercase text-ink3 mb-2.5">Room temperatures</div>
       {rooms.map((r) => {
         const pv = ((r.avg - tMin) / span * 100).toFixed(1)
         const pmin = ((r.min - tMin) / span * 100).toFixed(1)
@@ -36,7 +36,7 @@ export function RoomTempsCard({ rooms }: Props) {
 
         return (
           <div key={r.name} className="flex items-start gap-2 mb-[11px] last:mb-0">
-            <div className="font-mono text-[7.5px] tracking-[.07em] uppercase text-ink3 w-[46px] pt-[5px]">
+            <div className="font-mono text-[10px] tracking-[.07em] uppercase text-ink3 w-[54px] pt-[5px]">
               {r.name}
             </div>
             <div className="flex-1">
@@ -57,15 +57,15 @@ export function RoomTempsCard({ rooms }: Props) {
                   style={{ left: `${pv}%`, background: clr }}
                 />
               </div>
-              <div className="flex justify-between font-mono text-[7.5px] text-ink4">
+              <div className="flex justify-between font-mono text-[10px] text-ink4">
                 <span>{r.min}°</span>
                 <span className="text-ink3">avg</span>
                 <span>{r.max}°</span>
               </div>
             </div>
-            <div className="font-mono text-[9px] w-[52px] text-right leading-[1.5]">
-              <span className="block text-[10px] font-normal" style={{ color: clr }}>{r.avg}°</span>
-              <span className="block text-ink3 text-[8px]">±{r.variance}°</span>
+            <div className="font-mono text-[12px] w-[58px] text-right leading-[1.5]">
+              <span className="block text-[13px] font-normal" style={{ color: clr }}>{r.avg}°</span>
+              <span className="block text-ink3 text-[10px]">±{r.variance}°</span>
             </div>
           </div>
         )
