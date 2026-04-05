@@ -262,13 +262,15 @@ public class OctopusEnergyClient : IOctopusEnergyClient
 
     /// <summary>
     /// Gets basic heat pump status: isConnected, climateControlStatus, waterTemperatureStatus.
-    /// Uses the older heatPumpStatus query (doesn't require EUID).
+    /// Uses the older heatPumpStatus query on api.octopus.energy (doesn't require EUID).
     /// </summary>
-    public async Task<JsonDocument> GetHeatPumpStatusAsync(string email, string password)
+    public async Task<JsonDocument> GetHeatPumpStatusAsync(string email, string password, string accountNumber)
     {
+        ValidateIdentifier(accountNumber, nameof(accountNumber));
+
         var query = """
-        query {
-          heatPumpStatus {
+        query GetHeatPumpStatus($accountNumber: String!) {
+          heatPumpStatus(accountNumber: $accountNumber) {
             isConnected
             climateControlStatus {
               climateControlEnabled
@@ -276,15 +278,14 @@ public class OctopusEnergyClient : IOctopusEnergyClient
               currentClimateControlTemperature
             }
             waterTemperatureStatus {
-              climateControlEnabled
-              targetClimateControlTemperature
-              currentClimateControlTemperature
+              waterTemperatureEnabled
+              currentWaterTemperature
             }
           }
         }
         """;
 
-        return await ExecuteRawQueryAsync(email, password, query);
+        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { accountNumber }));
     }
 
     /// <summary>
@@ -355,7 +356,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
           heatPumpControllerConfiguration(accountNumber: $accountNumber, euid: $euid) {
             controller { state heatPumpTimezone connected }
             heatPump {
-              serialNumber model hardwareVersion maxWaterSetpoint minWaterSetpoint
+              serialNumber model hardwareVersion faultCodes maxWaterSetpoint minWaterSetpoint
               heatingFlowTemperature {
                 currentTemperature { value unit }
                 allowableRange { minimum { value unit } maximum { value unit } }
@@ -363,6 +364,8 @@ public class OctopusEnergyClient : IOctopusEnergyClient
               weatherCompensation {
                 enabled
                 currentRange { minimum { value unit } maximum { value unit } }
+                allowableMinimumTemperatureRange { minimum { value unit } maximum { value unit } }
+                allowableMaximumTemperatureRange { minimum { value unit } maximum { value unit } }
               }
             }
             zones {
@@ -522,12 +525,17 @@ public class OctopusEnergyClient : IOctopusEnergyClient
     public async Task<JsonDocument> GetHeatPumpControllersAtLocationAsync(string email, string password, string accountNumber, int propertyId)
     {
         var query = """
-        query GetControllersAtLocation($accountNumber: String!, $propertyId: Int!) {
-          heatPumpControllersAtLocation(accountNumber: $accountNumber, propertyId: $propertyId)
+        query GetControllersAtLocation($accountNumber: String!, $propertyId: ID!) {
+          heatPumpControllersAtLocation(accountNumber: $accountNumber, propertyId: $propertyId) {
+            controller { euid }
+            heatPumpModel
+            location { propertyId }
+            provisionedAt
+          }
         }
         """;
 
-        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { accountNumber, propertyId }));
+        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { accountNumber, propertyId = propertyId.ToString() }));
     }
 
     // ── Tariff Rates ───────────────────────────────────────────────
