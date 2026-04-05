@@ -1,0 +1,32 @@
+meta {
+  name: Lifetime Performance
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{dataEndpoint}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: {{token}}
+}
+
+body:json {
+  {
+    "query": "query { heatPumpLifetimePerformance(accountNumber: \"{{accountNumber}}\", euid: \"{{euid}}\") { seasonalCoefficientOfPerformance lifetimeEnergyInput lifetimeEnergyOutput } }"
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should not have errors", function() {
+    expect(res.body.errors).to.be.undefined;
+  });
+}
