@@ -46,7 +46,7 @@ export function CopGaugeCard({ cop, flowTemp, setpointTemp }: Props) {
 
 function GaugeSvg({ cop, color }: { cop: number; color: string }) {
   const pct = Math.min(Math.max((cop - 1) / 4, 0), 1)
-  const r = 66, cx = 85, cy = 86
+  const r = 82, cx = 105, cy = 106
   const pa = (a: number): [number, number] => [cx + r * Math.cos(a), cy + r * Math.sin(a)]
   const sa = Math.PI, ea = 2 * Math.PI
 
@@ -62,29 +62,29 @@ function GaugeSvg({ cop, color }: { cop: number; color: string }) {
   const [b4x, b4y] = pa(ea)
 
   return (
-    <svg width="210" height="116" viewBox="0 0 170 94" className="my-[-2px]">
+    <svg width="210" height="116" viewBox="0 0 210 116" className="my-[-2px]">
       {/* Background arcs */}
       <path
         d={`M${x1},${y1} A${r},${r} 0 0,1 ${b2x.toFixed(1)},${b2y.toFixed(1)}`}
-        stroke="rgba(248,113,113,0.13)" strokeWidth="9" fill="none"
+        stroke="rgba(248,113,113,0.13)" strokeWidth="11" fill="none"
       />
       <path
         d={`M${b2x.toFixed(1)},${b2y.toFixed(1)} A${r},${r} 0 0,1 ${b3x.toFixed(1)},${b3y.toFixed(1)}`}
-        stroke="rgba(252,211,77,0.13)" strokeWidth="9" fill="none"
+        stroke="rgba(252,211,77,0.13)" strokeWidth="11" fill="none"
       />
       <path
         d={`M${b3x.toFixed(1)},${b3y.toFixed(1)} A${r},${r} 0 0,1 ${b4x.toFixed(1)},${b4y.toFixed(1)}`}
-        stroke="rgba(6,182,212,0.13)" strokeWidth="9" fill="none"
+        stroke="rgba(6,182,212,0.13)" strokeWidth="11" fill="none"
       />
       {/* Active arc */}
       <path
         className="gauge-arc"
         d={`M${x1},${y1} A${r},${r} 0 0,1 ${fx.toFixed(1)},${fy.toFixed(1)}`}
-        stroke={color} strokeWidth="9" fill="none" strokeLinecap="round"
+        stroke={color} strokeWidth="11" fill="none" strokeLinecap="round"
       />
       {/* Scale labels */}
-      <text x="11" y="85" fill="rgba(255,255,255,0.18)" fontSize="8.5" fontFamily="JetBrains Mono, monospace">1</text>
-      <text x="154" y="85" fill="rgba(255,255,255,0.18)" fontSize="8.5" fontFamily="JetBrains Mono, monospace">5</text>
+      <text x="14" y="105" fill="rgba(255,255,255,0.18)" fontSize="10.5" fontFamily="JetBrains Mono, monospace">1</text>
+      <text x="190" y="105" fill="rgba(255,255,255,0.18)" fontSize="10.5" fontFamily="JetBrains Mono, monospace">5</text>
     </svg>
   )
 }

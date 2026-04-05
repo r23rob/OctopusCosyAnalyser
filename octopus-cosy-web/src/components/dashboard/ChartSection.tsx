@@ -82,6 +82,7 @@ export function ChartSection({ snapshots, isLoading }: Props) {
               strokeDasharray: s.dash,
             }))}
             dualAxis
+            height={300}
           />
         )}
       </div>
