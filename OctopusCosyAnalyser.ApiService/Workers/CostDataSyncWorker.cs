@@ -23,6 +23,9 @@ public class CostDataSyncWorker : BackgroundService
     {
         _logger.LogInformation("Cost Data Sync Worker started");
 
+        // Stagger startup to avoid concurrent API calls with other workers
+        await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try

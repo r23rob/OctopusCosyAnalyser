@@ -23,6 +23,9 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
     {
         _logger.LogInformation("Heat Pump Time Series Sync Worker started");
 
+        // Stagger startup to avoid concurrent API calls with other workers
+        await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try
