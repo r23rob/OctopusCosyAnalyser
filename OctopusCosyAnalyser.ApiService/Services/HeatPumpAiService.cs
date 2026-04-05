@@ -11,7 +11,7 @@ using OctopusCosyAnalyser.Shared.Models;
 
 namespace OctopusCosyAnalyser.ApiService.Services;
 
-public class HeatPumpAiService
+public class HeatPumpAiService : IHeatPumpAiService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HeatPumpAiService> _logger;
@@ -47,6 +47,8 @@ public class HeatPumpAiService
         try
         {
             var prompt = await BuildPromptAsync(deviceId);
+            // Set the env var so the Anthropic SDK picks it up (it reads ANTHROPIC_API_KEY by default)
+            Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", apiKey);
             var client = new AnthropicClient();
 
             var parameters = new MessageCreateParams

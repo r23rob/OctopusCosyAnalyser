@@ -166,7 +166,7 @@ public class AiAnalysisService : IAiAnalysisService
                 return $"AI analysis failed (HTTP {(int)response.StatusCode}). Check the API key and try again.";
             }
 
-            var responseJson = await response.Content.ReadFromJsonAsync<JsonDocument>(ct);
+            using var responseJson = await response.Content.ReadFromJsonAsync<JsonDocument>(ct);
             if (responseJson is null)
                 return "AI analysis returned an empty response.";
 
@@ -430,11 +430,11 @@ public class AiAnalysisService : IAiAnalysisService
         {
             if (costRecords.TryGetValue(agg.Date, out var cost))
             {
-                agg.DailyCostPence = cost.TotalCostPence;
-                agg.DailyUsageKwh = cost.TotalUsageKwh;
-                agg.AvgUnitRatePence = cost.AvgUnitRatePence;
+                agg.DailyCostPence = (double)cost.TotalCostPence;
+                agg.DailyUsageKwh = (double)cost.TotalUsageKwh;
+                agg.AvgUnitRatePence = (double)cost.AvgUnitRatePence;
                 agg.CostPerKwhHeatPence = agg.TotalHeatOutputKwh > 0
-                    ? cost.TotalCostPence / agg.TotalHeatOutputKwh
+                    ? (double)cost.TotalCostPence / agg.TotalHeatOutputKwh
                     : null;
             }
         }

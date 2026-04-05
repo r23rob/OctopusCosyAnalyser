@@ -8,7 +8,7 @@ export function NavBar() {
   return (
     <>
       {/* Top nav bar */}
-      <nav className="sticky top-0 z-[200] h-[52px] bg-white/88 backdrop-blur-[18px] border-b border-[rgba(0,0,0,0.07)] flex items-center px-4 sm:px-[22px]">
+      <nav className="sticky top-0 z-[200] h-[56px] bg-white/88 backdrop-blur-[18px] border-b border-[rgba(0,0,0,0.07)] flex items-center px-4 sm:px-[22px]">
         {/* Brand */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <div className="w-[22px] h-[22px] rounded-[6px] bg-ink flex items-center justify-center">
@@ -17,8 +17,8 @@ export function NavBar() {
               <circle cx="5.5" cy="7" r="1.3" fill="white" opacity=".38"/>
             </svg>
           </div>
-          <span className="text-[13px] font-semibold tracking-tight">Ecodan</span>
-          <span className="hidden sm:inline font-mono text-[8px] text-ink3 tracking-[.07em] uppercase ml-0.5">· Thermal Monitor</span>
+          <span className="text-[15px] font-semibold tracking-tight">Ecodan</span>
+          <span className="hidden sm:inline font-mono text-[10px] text-ink3 tracking-[.07em] uppercase ml-0.5">· Thermal Monitor</span>
         </div>
 
         {/* Center nav pills (desktop) */}
@@ -32,7 +32,7 @@ export function NavBar() {
         <div className="flex items-center gap-2 flex-shrink-0 ml-auto sm:ml-0">
           <button
             onClick={toggle}
-            className="flex items-center gap-1.5 px-2.5 py-[5px] rounded-[7px] border border-border-subtle bg-white cursor-pointer font-mono text-[8.5px] tracking-[.06em] uppercase text-ink2 hover:border-border-card hover:text-ink transition-all duration-150"
+            className="flex items-center gap-1.5 px-3 py-[6px] rounded-[7px] border border-border-subtle bg-white cursor-pointer font-mono text-[10px] tracking-[.06em] uppercase text-ink2 hover:border-border-card hover:text-ink transition-all duration-150"
           >
             <Sparkles size={13} />
             <span className="hidden sm:inline">AI Analysis</span>
@@ -43,8 +43,8 @@ export function NavBar() {
           >
             <Settings size={15} />
           </Link>
-          <div className="hidden sm:flex items-center gap-[5px] font-mono text-[8.5px] text-success tracking-[.05em] uppercase px-[9px] py-1 rounded-full bg-success-bg border border-[rgba(22,163,74,0.15)]">
-            <div className="w-[5px] h-[5px] rounded-full bg-success pulse" />
+          <div className="hidden sm:flex items-center gap-[5px] font-mono text-[10px] text-success tracking-[.05em] uppercase px-[10px] py-1 rounded-full bg-success-bg border border-[rgba(22,163,74,0.15)]">
+            <div className="w-[6px] h-[6px] rounded-full bg-success pulse" />
             Live
           </div>
         </div>
@@ -52,9 +52,9 @@ export function NavBar() {
 
       {/* Mobile bottom tab bar */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 z-[200] h-12 bg-white/95 backdrop-blur-[18px] border-t border-[rgba(0,0,0,0.07)] flex items-center justify-around px-4">
-        <MobileTab to="/heatpump" icon={<LayoutDashboard size={18} />} label="Dashboard" exact />
-        <MobileTab to="/heatpump/scatter" icon={<ScatterChart size={18} />} label="Scatter" />
-        <MobileTab to="/heatpump/data" icon={<Table2 size={18} />} label="Data" />
+        <MobileTab to="/heatpump" icon={<LayoutDashboard size={20} />} label="Dashboard" exact />
+        <MobileTab to="/heatpump/scatter" icon={<ScatterChart size={20} />} label="Scatter" />
+        <MobileTab to="/heatpump/data" icon={<Table2 size={20} />} label="Data" />
       </div>
     </>
   )
@@ -71,7 +71,7 @@ function NavPill({ to, icon, tip, exact }: { to: string; icon: React.ReactNode; 
       }}
     >
       {icon}
-      <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-ink text-white font-mono text-[9px] tracking-[.05em] px-2 py-[3px] rounded-[5px] whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 z-[300] before:content-[''] before:absolute before:bottom-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-b-ink">
+      <div className="absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-ink text-white font-mono text-[10px] tracking-[.05em] px-2.5 py-[4px] rounded-[5px] whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 z-[300] before:content-[''] before:absolute before:bottom-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-b-ink">
         {tip}
       </div>
     </Link>
@@ -87,7 +87,7 @@ function MobileTab({ to, icon, label, exact }: { to: string; icon: React.ReactNo
       activeProps={{ className: 'text-primary' }}
     >
       {icon}
-      <span className="font-mono text-[7px] tracking-[.05em] uppercase">{label}</span>
+      <span className="font-mono text-[9px] tracking-[.05em] uppercase">{label}</span>
     </Link>
   )
 }
