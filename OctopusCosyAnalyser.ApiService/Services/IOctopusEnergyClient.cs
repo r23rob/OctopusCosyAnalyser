@@ -11,7 +11,7 @@ public interface IOctopusEnergyClient
     Task<JsonDocument> GetViewerPropertiesWithDevicesAsync(string email, string password);
     Task<JsonDocument> GetSmartMeterTelemetryAsync(string email, string password, string deviceId);
     Task<JsonDocument> GetConsumptionHistoryAsync(string apiKey, string mpan, string serialNumber, DateTime from, DateTime to);
-    Task<JsonDocument> GetHeatPumpStatusAsync(string email, string password);
+    Task<JsonDocument> GetHeatPumpStatusAsync(string email, string password, string accountNumber);
     Task<JsonDocument> GetHeatPumpVariantsAsync(string email, string password, string? make = null);
     Task<JsonDocument> GetHeatPumpStatusAndConfigAsync(string email, string password, string accountNumber, string euid);
     Task<JsonDocument> GetHeatPumpTimeRangedPerformanceAsync(string email, string password, string accountNumber, string euid, DateTime from, DateTime to);

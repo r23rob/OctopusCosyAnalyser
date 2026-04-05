@@ -315,7 +315,7 @@ public static class HeatPumpEndpoints
             if (error is not null)
                 return error;
 
-            var status = await client.GetHeatPumpStatusAsync(settings!.Email!, settings!.OctopusPassword!);
+            var status = await client.GetHeatPumpStatusAsync(settings!.Email!, settings!.OctopusPassword!, accountNumber);
             return Results.Ok(status);
         }).WithName("GetHeatPumpStatus");
 
@@ -337,7 +337,7 @@ public static class HeatPumpEndpoints
             if (error is not null)
                 return error;
 
-            var status = await client.GetHeatPumpStatusAsync(settings!.Email!, settings!.OctopusPassword!);
+            var status = await client.GetHeatPumpStatusAsync(settings!.Email!, settings!.OctopusPassword!, accountNumber);
             return Results.Ok(status);
         }).WithName("GetHeatPumpControllerStatus");
 

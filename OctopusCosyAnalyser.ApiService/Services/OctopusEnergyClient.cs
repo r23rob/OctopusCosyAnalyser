@@ -262,13 +262,15 @@ public class OctopusEnergyClient : IOctopusEnergyClient
 
     /// <summary>
     /// Gets basic heat pump status: isConnected, climateControlStatus, waterTemperatureStatus.
-    /// Uses the older heatPumpStatus query (doesn't require EUID).
+    /// Uses the older heatPumpStatus query on api.octopus.energy (doesn't require EUID).
     /// </summary>
-    public async Task<JsonDocument> GetHeatPumpStatusAsync(string email, string password)
+    public async Task<JsonDocument> GetHeatPumpStatusAsync(string email, string password, string accountNumber)
     {
+        ValidateIdentifier(accountNumber, nameof(accountNumber));
+
         var query = """
-        query {
-          heatPumpStatus {
+        query GetHeatPumpStatus($accountNumber: String!) {
+          heatPumpStatus(accountNumber: $accountNumber) {
             isConnected
             climateControlStatus {
               climateControlEnabled
@@ -276,15 +278,14 @@ public class OctopusEnergyClient : IOctopusEnergyClient
               currentClimateControlTemperature
             }
             waterTemperatureStatus {
-              climateControlEnabled
-              targetClimateControlTemperature
-              currentClimateControlTemperature
+              waterTemperatureEnabled
+              currentWaterTemperature
             }
           }
         }
         """;
 
-        return await ExecuteRawQueryAsync(email, password, query);
+        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { accountNumber }));
     }
 
     /// <summary>
@@ -327,11 +328,13 @@ public class OctopusEnergyClient : IOctopusEnergyClient
 
     /// <summary>
     /// PRIMARY QUERY — batches 4 GraphQL queries in one call:
-    ///   1. heatPumpControllerStatus      — sensors (temp, humidity, connectivity), zone telemetry
-    ///   2. heatPumpControllerConfiguration — controller state, heat pump details, flow temps, weather comp, zones
+    ///   1. heatPumpControllerStatus      — sensors (temp, humidity, rssi, voltage, connectivity), zone telemetry
+    ///   2. heatPumpControllerConfiguration — controller state + firmware, heat pump details (fault codes, flow temps,
+    ///      weather comp with allowable ranges, quieter mode), zone config + schedules
     ///   3. heatPumpTimeSeriesPerformance (LIVE) — recent energy in/out, outdoor temp (COP computed client-side)
     ///   4. heatPumpLifetimePerformance   — seasonal COP, lifetime energy totals
     /// Used by /summary endpoint and the HeatPumpSnapshotWorker.
+    /// Requests all available fields from the Octopus API schema.
     /// </summary>
     public async Task<JsonDocument> GetHeatPumpStatusAndConfigAsync(string email, string password, string accountNumber, string euid)
     {
@@ -345,7 +348,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
             sensors {
               code
               connectivity { online retrievedAt }
-              telemetry { temperatureInCelsius humidityPercentage retrievedAt }
+              telemetry { temperatureInCelsius humidityPercentage rssi voltage retrievedAt }
             }
             zones {
               zone
@@ -353,27 +356,56 @@ public class OctopusEnergyClient : IOctopusEnergyClient
             }
           }
           heatPumpControllerConfiguration(accountNumber: $accountNumber, euid: $euid) {
-            controller { state heatPumpTimezone connected }
+            controller {
+              accessPointPassword
+              connected
+              firmwareConfiguration { efr32 esp32 eui }
+              heatPumpTimezone
+              lastReset
+              state
+            }
             heatPump {
-              serialNumber model hardwareVersion maxWaterSetpoint minWaterSetpoint
+              faultCodes
+              hasHeatPumpCompatibleCylinder
+              hardwareVersion
               heatingFlowTemperature {
-                currentTemperature { value unit }
-                allowableRange { minimum { value unit } maximum { value unit } }
+                allowableRange { maximum { unit value } minimum { unit value } }
+                currentTemperature { unit value }
               }
+              latestCounterReset
+              manifoldEnabled
+              maxWaterSetpoint
+              minWaterSetpoint
+              model
+              quieterModeEnabled
+              serialNumber
               weatherCompensation {
+                allowableMaximumTemperatureRange { maximum { unit value } minimum { unit value } }
+                allowableMinimumTemperatureRange { maximum { unit value } minimum { unit value } }
+                currentRange { maximum { unit value } minimum { unit value } }
                 enabled
-                currentRange { minimum { value unit } maximum { value unit } }
               }
             }
             zones {
               configuration {
-                code zoneType enabled displayName primarySensor
-                currentOperation { mode setpointInCelsius action end }
-                callForHeat heatDemand emergency
+                callForHeat
+                code
+                currentOperation { action end mode setpointInCelsius }
+                displayName
+                emergency
+                enabled
+                heatDemand
+                previousOperation { action mode setpointInCelsius }
+                primarySensor
                 sensors {
-                  ... on ADCSensorConfiguration { code displayName type enabled }
-                  ... on ZigbeeSensorConfiguration { code displayName type firmwareVersion boostEnabled }
+                  ... on ADCSensorConfiguration { code displayName enabled type }
+                  ... on ZigbeeSensorConfiguration { id boostEnabled code displayName firmwareVersion type }
                 }
+                zoneType
+              }
+              schedules {
+                days
+                settings { action setpointInCelsius startTime zoneState }
               }
             }
           }
@@ -522,12 +554,17 @@ public class OctopusEnergyClient : IOctopusEnergyClient
     public async Task<JsonDocument> GetHeatPumpControllersAtLocationAsync(string email, string password, string accountNumber, int propertyId)
     {
         var query = """
-        query GetControllersAtLocation($accountNumber: String!, $propertyId: Int!) {
-          heatPumpControllersAtLocation(accountNumber: $accountNumber, propertyId: $propertyId)
+        query GetControllersAtLocation($accountNumber: String!, $propertyId: ID!) {
+          heatPumpControllersAtLocation(accountNumber: $accountNumber, propertyId: $propertyId) {
+            controller { euid }
+            heatPumpModel
+            location { propertyId }
+            provisionedAt
+          }
         }
         """;
 
-        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { accountNumber, propertyId }));
+        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { accountNumber, propertyId = propertyId.ToString() }));
     }
 
     // ── Tariff Rates ───────────────────────────────────────────────
