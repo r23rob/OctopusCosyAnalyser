@@ -12,7 +12,7 @@ export function MetricsStrip({ periodSummary: p, previousPeriodSummary: prev, vs
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-[72px] rounded-[10px] bg-white border border-border-subtle animate-pulse" />
+          <div key={i} className="h-[88px] rounded-[10px] bg-white border border-border-subtle animate-pulse" />
         ))}
       </div>
     )
@@ -94,14 +94,14 @@ function KpiCard({ label, value, unit, current, previous, higherIsBetter, vsLabe
       className="bg-white border border-border-subtle rounded-[10px] px-[14px] pt-[15px] pb-3 hover:border-border-card transition-colors duration-150"
       style={{ animation: `slide-up 0.4s ease both`, animationDelay: `${delay}s` }}
     >
-      <div className="font-mono text-[8px] tracking-[.1em] uppercase text-ink3 mb-[7px]">{label}</div>
-      <div className="font-mono text-[20px] font-normal tracking-tight leading-none text-ink">
+      <div className="font-mono text-[11px] tracking-[.1em] uppercase text-ink3 mb-[7px]">{label}</div>
+      <div className="font-mono text-[26px] font-normal tracking-tight leading-none text-ink">
         {value}
-        {unit && <span className="text-[11px] font-light text-ink3 ml-[1px]">{unit}</span>}
+        {unit && <span className="text-[14px] font-light text-ink3 ml-[2px]">{unit}</span>}
       </div>
       {delta && (
         <div
-          className={`inline-flex items-center gap-0.5 mt-[5px] font-mono text-[8px] px-1.5 py-0.5 rounded ${
+          className={`inline-flex items-center gap-0.5 mt-[5px] font-mono text-[10px] px-1.5 py-0.5 rounded ${
             delta.good
               ? 'bg-success-bg text-success'
               : 'bg-danger-bg text-danger'

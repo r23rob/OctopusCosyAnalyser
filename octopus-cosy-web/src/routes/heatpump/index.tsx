@@ -111,10 +111,10 @@ function DashboardPage() {
         vsLabel={vsLabel(period.periodType)}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_204px] gap-2.5 mb-2.5 animate-up" style={{ animationDelay: '0.2s' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-3 mb-3 animate-up" style={{ animationDelay: '0.2s' }}>
         <ChartSection snapshots={displayed} isLoading={periodLoading} />
 
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-3">
           <CopGaugeCard
             cop={periodSummary?.avgCop ?? (summary?.livePerformance?.coefficientOfPerformance != null ? parseFloat(summary.livePerformance.coefficientOfPerformance) : null)}
             flowTemp={periodSummary?.avgFlowTemp ?? null}
@@ -124,7 +124,7 @@ function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 animate-up" style={{ animationDelay: '0.28s' }}>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 animate-up" style={{ animationDelay: '0.28s' }}>
         <AvgPowerCard
           avgPowerIn={avgPowerIn}
           avgPowerOut={avgPowerOut}

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OctopusCosyAnalyser.ApiService.Data;
@@ -11,9 +12,11 @@ using OctopusCosyAnalyser.ApiService.Data;
 namespace OctopusCosyAnalyser.ApiService.Migrations
 {
     [DbContext(typeof(CosyDbContext))]
-    partial class CosyDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260405221915_UpdateCostRecordsSchema")]
+    partial class UpdateCostRecordsSchema
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -349,10 +352,6 @@ namespace OctopusCosyAnalyser.ApiService.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
-
-                    b.Property<string>("AuthMode")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");

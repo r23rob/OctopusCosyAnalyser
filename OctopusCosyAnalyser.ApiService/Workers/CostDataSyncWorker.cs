@@ -1,5 +1,5 @@
 using OctopusCosyAnalyser.ApiService.Data;
-using OctopusCosyAnalyser.ApiService.Endpoints;
+using OctopusCosyAnalyser.ApiService.Helpers;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.ApiService.Services;
 using Microsoft.EntityFrameworkCore;
@@ -115,19 +115,19 @@ public class CostDataSyncWorker : BackgroundService
             }
 
             // Aggregate half-hourly cost data into daily totals
-            var costByDate = new Dictionary<DateOnly, (double cost, double usage, double unitRate, double? standingCharge)>();
+            var costByDate = new Dictionary<DateOnly, (decimal cost, decimal usage, decimal unitRate, decimal? standingCharge)>();
             foreach (var edge in edges.EnumerateArray())
             {
                 if (!edge.TryGetProperty("node", out var node)) continue;
 
-                var startAtStr = HeatPumpEndpoints.TryGetString(node, "startAt", "fromDatetime", "from");
+                var startAtStr = JsonHelpers.TryGetString(node, "startAt", "fromDatetime", "from");
                 if (startAtStr == null || !DateTime.TryParse(startAtStr, out var dt)) continue;
 
                 var date = DateOnly.FromDateTime(dt);
-                var cost = HeatPumpEndpoints.TryGetDouble(node, "costInclTax", "totalCost", "cost");
-                var usage = HeatPumpEndpoints.TryGetDouble(node, "consumptionKwh", "totalConsumption", "consumption");
-                var unitRate = HeatPumpEndpoints.TryGetDouble(node, "unitRateInclTax", "unitRate");
-                var standingCharge = node.TryGetProperty("standingCharge", out var scEl) && scEl.TryGetDouble(out var scVal) ? scVal : (double?)null;
+                var cost = (decimal)JsonHelpers.TryGetDouble(node, "costInclTax", "totalCost", "cost");
+                var usage = (decimal)JsonHelpers.TryGetDouble(node, "consumptionKwh", "totalConsumption", "consumption");
+                var unitRate = (decimal)JsonHelpers.TryGetDouble(node, "unitRateInclTax", "unitRate");
+                var standingCharge = node.TryGetProperty("standingCharge", out var scEl) && scEl.TryGetDouble(out var scVal) ? (decimal)scVal : (decimal?)null;
 
                 if (costByDate.TryGetValue(date, out var existing))
                 {

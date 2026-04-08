@@ -28,12 +28,12 @@ interface Props {
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string }) => {
   if (!active || !payload?.length) return null
   return (
-    <div className="rounded-[10px] bg-ink text-white p-[10px_13px] text-xs shadow-[0_8px_28px_rgba(0,0,0,0.2)] min-w-[195px]">
-      <p className="mb-1.5 font-mono text-[7.5px] tracking-[.09em] uppercase text-white/28">{label}</p>
+    <div className="rounded-[10px] bg-ink text-white p-[12px_15px] text-sm shadow-[0_8px_28px_rgba(0,0,0,0.2)] min-w-[210px]">
+      <p className="mb-1.5 font-mono text-[10px] tracking-[.09em] uppercase text-white/28">{label}</p>
       {payload.map((p) => (
-        <div key={p.name} className="flex justify-between gap-3.5 py-[1.5px] items-baseline">
-          <span className="text-white/45 text-[9px]" style={{ color: p.color }}>{p.name}</span>
-          <span className="font-mono text-[10px] text-white">{fmtDec(p.value)}</span>
+        <div key={p.name} className="flex justify-between gap-3.5 py-[2px] items-baseline">
+          <span className="text-white/45 text-[11px]" style={{ color: p.color }}>{p.name}</span>
+          <span className="font-mono text-[13px] text-white">{fmtDec(p.value)}</span>
         </div>
       ))}
     </div>
@@ -62,7 +62,7 @@ export function TrendChart({ snapshots, series, dualAxis = false, height = 228 }
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
         <XAxis
           dataKey="t"
-          tick={{ fontSize: 7.5, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' }}
+          tick={{ fontSize: 10, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' }}
           tickLine={false}
           axisLine={false}
           interval="preserveStartEnd"
@@ -70,7 +70,7 @@ export function TrendChart({ snapshots, series, dualAxis = false, height = 228 }
         {hasLeftAxis && (
           <YAxis
             yAxisId="left"
-            tick={{ fontSize: 7.5, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' }}
+            tick={{ fontSize: 10, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' }}
             tickLine={false}
             axisLine={false}
           />
@@ -79,7 +79,7 @@ export function TrendChart({ snapshots, series, dualAxis = false, height = 228 }
           <YAxis
             yAxisId="right"
             orientation="right"
-            tick={{ fontSize: 7.5, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' }}
+            tick={{ fontSize: 10, fill: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace' }}
             tickLine={false}
             axisLine={false}
           />

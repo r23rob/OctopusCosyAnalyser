@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Models;
+using OctopusCosyAnalyser.Shared.Models;
 
 namespace OctopusCosyAnalyser.ApiService.Endpoints;
 
@@ -16,7 +17,7 @@ public static class AccountSettingsEndpoints
                 .OrderBy(s => s.AccountNumber)
                 .ToListAsync(ct);
 
-            return Results.Ok(settings);
+            return Results.Ok(settings.Select(ToDto).ToArray());
         }).WithName("GetAccountSettings");
 
         group.MapGet("/{accountNumber}", async (string accountNumber, CosyDbContext db, CancellationToken ct) =>
@@ -26,13 +27,17 @@ public static class AccountSettingsEndpoints
 
             return settings is null
                 ? Results.NotFound("Account settings not found")
-                : Results.Ok(settings);
+                : Results.Ok(ToDto(settings));
         }).WithName("GetAccountSettingsByAccount");
 
         group.MapPut("", async (AccountSettingsRequest request, CosyDbContext db, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.AccountNumber))
                 return Results.BadRequest("Account number is required");
+
+            var authMode = string.IsNullOrWhiteSpace(request.AuthMode) ? "apikey" : request.AuthMode.Trim().ToLowerInvariant();
+            if (authMode is not "apikey" and not "password")
+                return Results.BadRequest("AuthMode must be 'apikey' or 'password'");
 
             var authMode = string.IsNullOrWhiteSpace(request.AuthMode) ? "apikey" : request.AuthMode.Trim().ToLowerInvariant();
             if (authMode is not "apikey" and not "password")
@@ -50,12 +55,14 @@ public static class AccountSettingsEndpoints
                 if (string.IsNullOrWhiteSpace(request.ApiKey))
                     return Results.BadRequest("API key is required for API key authentication");
             }
-
             var settings = await db.OctopusAccountSettings
                 .FirstOrDefaultAsync(s => s.AccountNumber == request.AccountNumber, ct);
 
             if (settings is null)
             {
+                if (string.IsNullOrWhiteSpace(request.OctopusPassword))
+                    return Results.BadRequest("Octopus password is required for initial setup");
+
                 settings = new OctopusAccountSettings
                 {
                     AccountNumber = request.AccountNumber.Trim(),
@@ -72,19 +79,35 @@ public static class AccountSettingsEndpoints
             }
             else
             {
-                settings.ApiKey = request.ApiKey?.Trim() ?? string.Empty;
+                // Only overwrite secrets when the caller provides a new value
+                if (!string.IsNullOrWhiteSpace(request.ApiKey))
+                    settings.ApiKey = request.ApiKey.Trim();
                 settings.Email = request.Email?.Trim();
-                settings.OctopusPassword = request.OctopusPassword?.Trim();
-                settings.AnthropicApiKey = request.AnthropicApiKey?.Trim();
+                if (!string.IsNullOrWhiteSpace(request.OctopusPassword))
+                    settings.OctopusPassword = request.OctopusPassword.Trim();
+                if (!string.IsNullOrWhiteSpace(request.AnthropicApiKey))
+                    settings.AnthropicApiKey = request.AnthropicApiKey.Trim();
                 settings.AuthMode = authMode;
                 settings.UpdatedAt = DateTime.UtcNow;
             }
 
             await db.SaveChangesAsync(ct);
 
-            return Results.Ok(settings);
+            return Results.Ok(ToDto(settings));
         }).WithName("UpsertAccountSettings");
     }
+
+    private static AccountSettingsDto ToDto(OctopusAccountSettings s) => new()
+    {
+        Id = s.Id,
+        AccountNumber = s.AccountNumber,
+        HasApiKey = !string.IsNullOrWhiteSpace(s.ApiKey),
+        Email = s.Email,
+        HasOctopusPassword = !string.IsNullOrWhiteSpace(s.OctopusPassword),
+        HasAnthropicApiKey = !string.IsNullOrWhiteSpace(s.AnthropicApiKey),
+        CreatedAt = s.CreatedAt,
+        UpdatedAt = s.UpdatedAt,
+    };
 
     public sealed record AccountSettingsRequest(string AccountNumber, string? ApiKey, string? Email, string? OctopusPassword, string? AnthropicApiKey, string? AuthMode);
 }

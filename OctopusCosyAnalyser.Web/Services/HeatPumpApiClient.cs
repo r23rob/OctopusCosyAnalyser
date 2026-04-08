@@ -95,7 +95,7 @@ public class HeatPumpApiClient
     public async Task<TimeSeriesResult> GetTimeSeriesAsync(string accountNumber, string euid, DateTime from, DateTime to, string? grouping = null)
     {
         var raw = await GetTimeSeriesRawAsync(accountNumber, euid, from, to, grouping);
-        var doc = JsonDocument.Parse(raw);
+        using var doc = JsonDocument.Parse(raw);
         var root = doc.RootElement.GetProperty("data");
 
         if (root.TryGetProperty("heatPumpTimeSeriesPerformance", out var seriesEl)
@@ -262,7 +262,7 @@ public class HeatPumpApiClient
     {
         var fromStr = (from ?? DateTime.UtcNow.AddDays(-30)).ToString("o");
         var toStr = (to ?? DateTime.UtcNow).ToString("o");
-        var response = await _http.GetFromJsonAsync<JsonDocument>(
+        using var response = await _http.GetFromJsonAsync<JsonDocument>(
             $"/api/heatpump/daily-aggregates/{deviceId}?from={Uri.EscapeDataString(fromStr)}&to={Uri.EscapeDataString(toStr)}");
         if (response is null) return [];
         var aggregates = response.RootElement.GetProperty("aggregates");
@@ -284,7 +284,11 @@ public class HeatPumpApiClient
         => await _http.GetFromJsonAsync<AiSummaryDto>($"/api/heatpump/ai-summary/{deviceId}");
 
     public async Task<AiSummaryDto?> RefreshAiSummaryAsync(string deviceId)
-        => await _http.GetFromJsonAsync<AiSummaryDto>($"/api/heatpump/ai-summary/{deviceId}/refresh");
+    {
+        var response = await _http.PostAsync($"/api/heatpump/ai-summary/{deviceId}/refresh", null);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AiSummaryDto>();
+    }
 
     // ── Cost of Usage ─────────────────────────────────────────────
 

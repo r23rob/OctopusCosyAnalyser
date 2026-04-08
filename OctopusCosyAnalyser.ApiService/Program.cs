@@ -52,6 +52,9 @@ builder.Services.AddHttpClient<IAiAnalysisService, AiAnalysisService>(client =>
     }
 });
 
+// Add HeatPumpAiService
+builder.Services.AddScoped<IHeatPumpAiService, HeatPumpAiService>();
+
 // Add Heat Pump Data Service (daily aggregates, time series enrichment)
 builder.Services.AddSingleton<IHeatPumpDataService, HeatPumpDataService>();
 
@@ -76,7 +79,17 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
-    db.Database.Migrate();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        db.Database.Migrate();
+        logger.LogInformation("Database migration completed successfully");
+    }
+    catch (Exception ex)
+    {
+        logger.LogCritical(ex, "Database migration failed");
+        throw;
+    }
 }
 
 // Configure the HTTP request pipeline.
