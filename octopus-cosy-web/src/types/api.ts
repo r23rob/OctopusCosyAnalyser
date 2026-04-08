@@ -7,6 +7,7 @@ export interface AccountSettingsDto {
   accountNumber: string
   apiKey: string
   anthropicApiKey?: string | null
+  authMode: 'apikey' | 'password'
   createdAt: string
   updatedAt: string
 }
@@ -14,9 +15,10 @@ export interface AccountSettingsDto {
 export interface AccountSettingsRequestDto {
   accountNumber: string
   apiKey?: string | null
-  email: string
-  octopusPassword: string
+  email?: string | null
+  octopusPassword?: string | null
   anthropicApiKey?: string | null
+  authMode: 'apikey' | 'password'
 }
 
 // ── Device ────────────────────────────────────────────────────────────

@@ -1,0 +1,40 @@
+meta {
+  name: Batched Status and Config
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{dataEndpoint}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: {{token}}
+}
+
+body:json {
+  {
+    "query": "query { heatPumpControllerStatus(accountNumber: \"{{accountNumber}}\", euid: \"{{euid}}\") { sensors { type value displayName } octoHeatPumpControllerConnectivity { connectionState lastSeen } zones { zone currentTemperature setpointTemperature } } heatPumpControllerConfiguration(accountNumber: \"{{accountNumber}}\", euid: \"{{euid}}\") { controllerState heatPump { make model serialNumber } heatingZones { currentFlowTemperature minFlowTemperature maxFlowTemperature currentSetpoint } hotWaterZones { currentSetpoint heatingEnabled } weatherCompensation { enabled minTemperature maxTemperature } } heatPumpLifetimePerformance(accountNumber: \"{{accountNumber}}\", euid: \"{{euid}}\") { seasonalCoefficientOfPerformance lifetimeEnergyInput lifetimeEnergyOutput } }"
+  }
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should not have errors", function() {
+    expect(res.body.errors).to.be.undefined;
+  });
+
+  test("should have status data", function() {
+    expect(res.body.data.heatPumpControllerStatus).to.not.be.undefined;
+  });
+
+  test("should have config data", function() {
+    expect(res.body.data.heatPumpControllerConfiguration).to.not.be.undefined;
+  });
+}

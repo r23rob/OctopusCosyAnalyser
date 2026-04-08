@@ -35,9 +35,26 @@ public static class AccountSettingsEndpoints
             if (string.IsNullOrWhiteSpace(request.AccountNumber))
                 return Results.BadRequest("Account number is required");
 
-            if (string.IsNullOrWhiteSpace(request.Email))
-                return Results.BadRequest("Email is required");
+            var authMode = string.IsNullOrWhiteSpace(request.AuthMode) ? "apikey" : request.AuthMode.Trim().ToLowerInvariant();
+            if (authMode is not "apikey" and not "password")
+                return Results.BadRequest("AuthMode must be 'apikey' or 'password'");
 
+            var authMode = string.IsNullOrWhiteSpace(request.AuthMode) ? "apikey" : request.AuthMode.Trim().ToLowerInvariant();
+            if (authMode is not "apikey" and not "password")
+                return Results.BadRequest("AuthMode must be 'apikey' or 'password'");
+
+            if (authMode == "password")
+            {
+                if (string.IsNullOrWhiteSpace(request.Email))
+                    return Results.BadRequest("Email is required for password authentication");
+                if (string.IsNullOrWhiteSpace(request.OctopusPassword))
+                    return Results.BadRequest("Octopus password is required for password authentication");
+            }
+            else // apikey
+            {
+                if (string.IsNullOrWhiteSpace(request.ApiKey))
+                    return Results.BadRequest("API key is required for API key authentication");
+            }
             var settings = await db.OctopusAccountSettings
                 .FirstOrDefaultAsync(s => s.AccountNumber == request.AccountNumber, ct);
 
@@ -50,9 +67,10 @@ public static class AccountSettingsEndpoints
                 {
                     AccountNumber = request.AccountNumber.Trim(),
                     ApiKey = request.ApiKey?.Trim() ?? string.Empty,
-                    Email = request.Email.Trim(),
-                    OctopusPassword = request.OctopusPassword.Trim(),
+                    Email = request.Email?.Trim(),
+                    OctopusPassword = request.OctopusPassword?.Trim(),
                     AnthropicApiKey = request.AnthropicApiKey?.Trim(),
+                    AuthMode = authMode,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -64,11 +82,12 @@ public static class AccountSettingsEndpoints
                 // Only overwrite secrets when the caller provides a new value
                 if (!string.IsNullOrWhiteSpace(request.ApiKey))
                     settings.ApiKey = request.ApiKey.Trim();
-                settings.Email = request.Email.Trim();
+                settings.Email = request.Email?.Trim();
                 if (!string.IsNullOrWhiteSpace(request.OctopusPassword))
                     settings.OctopusPassword = request.OctopusPassword.Trim();
                 if (!string.IsNullOrWhiteSpace(request.AnthropicApiKey))
                     settings.AnthropicApiKey = request.AnthropicApiKey.Trim();
+                settings.AuthMode = authMode;
                 settings.UpdatedAt = DateTime.UtcNow;
             }
 
@@ -90,6 +109,5 @@ public static class AccountSettingsEndpoints
         UpdatedAt = s.UpdatedAt,
     };
 
-    public sealed record AccountSettingsRequest(string AccountNumber, string? ApiKey, string Email, string OctopusPassword, string? AnthropicApiKey);
+    public sealed record AccountSettingsRequest(string AccountNumber, string? ApiKey, string? Email, string? OctopusPassword, string? AnthropicApiKey, string? AuthMode);
 }
-

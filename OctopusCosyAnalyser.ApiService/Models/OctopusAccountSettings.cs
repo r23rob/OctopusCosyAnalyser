@@ -8,6 +8,12 @@ public class OctopusAccountSettings
     public string? Email { get; set; }
     public string? OctopusPassword { get; set; }
     public string? AnthropicApiKey { get; set; }
+
+    /// <summary>
+    /// Authentication mode: "apikey" (default) or "password".
+    /// </summary>
+    public string AuthMode { get; set; } = "apikey";
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

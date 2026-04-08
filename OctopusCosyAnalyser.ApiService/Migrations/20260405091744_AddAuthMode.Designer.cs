@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OctopusCosyAnalyser.ApiService.Data;
@@ -11,9 +12,11 @@ using OctopusCosyAnalyser.ApiService.Data;
 namespace OctopusCosyAnalyser.ApiService.Migrations
 {
     [DbContext(typeof(CosyDbContext))]
-    partial class CosyDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260405091744_AddAuthMode")]
+    partial class AddAuthMode
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -69,9 +72,8 @@ namespace OctopusCosyAnalyser.ApiService.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<decimal>("AvgUnitRatePence")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
+                    b.Property<double>("AvgUnitRatePence")
+                        .HasColumnType("double precision");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -84,17 +86,14 @@ namespace OctopusCosyAnalyser.ApiService.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<decimal?>("StandingChargePence")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
+                    b.Property<double?>("StandingChargePence")
+                        .HasColumnType("double precision");
 
-                    b.Property<decimal>("TotalCostPence")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
+                    b.Property<double>("TotalCostPence")
+                        .HasColumnType("double precision");
 
-                    b.Property<decimal>("TotalUsageKwh")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)");
+                    b.Property<double>("TotalUsageKwh")
+                        .HasColumnType("double precision");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");

@@ -1,0 +1,25 @@
+meta {
+  name: Consumption (REST)
+  type: http
+  seq: 6
+}
+
+get {
+  url: https://api.octopus.energy/v1/electricity-meter-points/{{mpan}}/meters/{{serialNumber}}/consumption/?page_size=100
+  auth: basic
+}
+
+auth:basic {
+  username: {{apiKey}}
+  password:
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("should have results", function() {
+    expect(res.body.results).to.be.an('array');
+  });
+}

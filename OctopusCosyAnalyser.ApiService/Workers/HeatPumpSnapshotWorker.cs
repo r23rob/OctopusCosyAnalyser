@@ -77,7 +77,8 @@ public class HeatPumpSnapshotWorker : BackgroundService
 
         try
         {
-            var data = await client.GetHeatPumpStatusAndConfigAsync(settings.Email!, settings.OctopusPassword!, device.AccountNumber, device.Euid);
+            var data = await client.GetHeatPumpStatusAndConfigAsync(settings, device.AccountNumber, device.Euid);
+            var root = data.RootElement.GetProperty("data");
 
             var snapshot = SnapshotMapper.MapFromStatusAndConfig(data, device.DeviceId, device.AccountNumber);
             if (snapshot is null)

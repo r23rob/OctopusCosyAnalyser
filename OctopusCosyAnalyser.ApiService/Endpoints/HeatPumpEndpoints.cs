@@ -61,7 +61,7 @@ public static class HeatPumpEndpoints
                 return settingsError;
 
             // Get account data with electricity agreements
-            var accountData = await client.GetAccountAsync(settings!.Email!, settings!.OctopusPassword!, accountNumber);
+            var accountData = await client.GetAccountAsync(settings!,accountNumber);
             var data = accountData.RootElement.GetProperty("data").GetProperty("account");
             var agreements = data.GetProperty("electricityAgreements");
 
@@ -90,7 +90,7 @@ public static class HeatPumpEndpoints
 
             try
             {
-                var viewerData = await client.GetViewerPropertiesAsync(settings.Email!, settings.OctopusPassword!);
+                var viewerData = await client.GetViewerPropertiesAsync(settings!);
                 var viewer = viewerData.RootElement.GetProperty("data").GetProperty("viewer");
                 var accounts = viewer.GetProperty("accounts");
                 var account = FindAccount(accounts, accountNumber);
@@ -120,7 +120,7 @@ public static class HeatPumpEndpoints
             {
                 try
                 {
-                    var controllerEuids = await client.GetHeatPumpControllerEuidsAsync(settings.Email!, settings.OctopusPassword!, accountNumber);
+                    var controllerEuids = await client.GetHeatPumpControllerEuidsAsync(settings!,accountNumber);
                     if (controllerEuids.RootElement.TryGetProperty("data", out var controllerData)
                         && controllerData.TryGetProperty("heatPumpControllerEuids", out var euids)
                         && euids.ValueKind == JsonValueKind.Array
@@ -140,7 +140,7 @@ public static class HeatPumpEndpoints
             {
                 try
                 {
-                    var controllersData = await client.GetHeatPumpControllersAtLocationAsync(settings.Email!, settings.OctopusPassword!, accountNumber, propertyId.Value);
+                    var controllersData = await client.GetHeatPumpControllersAtLocationAsync(settings!,accountNumber, propertyId.Value);
                     if (controllersData.RootElement.TryGetProperty("data", out var locData)
                         && locData.TryGetProperty("heatPumpControllersAtLocation", out var controllers)
                         && controllers.ValueKind == JsonValueKind.Array
@@ -191,7 +191,7 @@ public static class HeatPumpEndpoints
             if (error is not null)
                 return error;
 
-            var telemetry = await client.GetSmartMeterTelemetryAsync(settings!.Email!, settings!.OctopusPassword!, deviceId);
+            var telemetry = await client.GetSmartMeterTelemetryAsync(settings!,deviceId);
             return Results.Ok(telemetry);
         }).WithName("GetTelemetry");
 
@@ -287,7 +287,7 @@ public static class HeatPumpEndpoints
             if (error is not null)
                 return error;
 
-            var viewerData = await client.GetViewerPropertiesAsync(settings!.Email!, settings!.OctopusPassword!);
+            var viewerData = await client.GetViewerPropertiesAsync(settings!);
             var viewer = viewerData.RootElement.GetProperty("data").GetProperty("viewer");
             var accounts = viewer.GetProperty("accounts");
             var account = FindAccount(accounts, accountNumber);
@@ -306,7 +306,7 @@ public static class HeatPumpEndpoints
             if (error is not null)
                 return error;
 
-            var heatPump = await client.GetHeatPumpDeviceAsync(settings!.Email!, settings!.OctopusPassword!, accountNumber, propertyId);
+            var heatPump = await client.GetHeatPumpDeviceAsync(settings!,accountNumber, propertyId);
             return Results.Ok(heatPump);
         }).WithName("GetHeatPumpDevice");
 
@@ -317,7 +317,7 @@ public static class HeatPumpEndpoints
             if (error is not null)
                 return error;
 
-            var status = await client.GetHeatPumpStatusAsync(settings!.Email!, settings!.OctopusPassword!, accountNumber);
+            var status = await client.GetHeatPumpStatusAsync(settings!, accountNumber);
             return Results.Ok(status);
         }).WithName("GetHeatPumpStatus");
 
@@ -328,7 +328,7 @@ public static class HeatPumpEndpoints
             if (error is not null)
                 return error;
 
-            var config = await client.GetViewerPropertiesWithDevicesAsync(settings!.Email!, settings!.OctopusPassword!);
+            var config = await client.GetViewerPropertiesWithDevicesAsync(settings!);
             return Results.Ok(config);
         }).WithName("GetHeatPumpConfig");
 
@@ -339,7 +339,7 @@ public static class HeatPumpEndpoints
             if (error is not null)
                 return error;
 
-            var status = await client.GetHeatPumpStatusAsync(settings!.Email!, settings!.OctopusPassword!, accountNumber);
+            var status = await client.GetHeatPumpStatusAsync(settings!, accountNumber);
             return Results.Ok(status);
         }).WithName("GetHeatPumpControllerStatus");
 
@@ -350,7 +350,7 @@ public static class HeatPumpEndpoints
             if (error is not null)
                 return error;
 
-            var variants = await client.GetHeatPumpVariantsAsync(settings!.Email!, settings!.OctopusPassword!, make);
+            var variants = await client.GetHeatPumpVariantsAsync(settings!,make);
             return Results.Ok(variants);
         }).WithName("GetHeatPumpVariants");
 
@@ -365,7 +365,7 @@ public static class HeatPumpEndpoints
             if (device is null)
                 return Results.NotFound("Device not found for this account");
 
-            var data = await client.GetHeatPumpStatusAndConfigAsync(settings!.Email!, settings!.OctopusPassword!, accountNumber, euid);
+            var data = await client.GetHeatPumpStatusAndConfigAsync(settings!,accountNumber, euid);
             return Results.Ok(data);
         }).WithName("GetHeatPumpCompleteData");
 
@@ -378,7 +378,7 @@ public static class HeatPumpEndpoints
                     return error;
 
                 var introspectionQuery = $"{{ __type(name: \"{typeName}\") {{ name kind fields {{ name args {{ name type {{ name kind ofType {{ name kind ofType {{ name kind }} }} }} defaultValue }} type {{ name kind ofType {{ name kind ofType {{ name kind }} }} }} }} }} }}";
-                var result = await client.ExecuteRawQueryAsync(settings!.Email!, settings!.OctopusPassword!, introspectionQuery);
+                var result = await client.ExecuteRawQueryAsync(settings!,introspectionQuery);
                 return Results.Ok(result);
             }).WithName("IntrospectType");
 
@@ -394,7 +394,7 @@ public static class HeatPumpEndpoints
                 if (error is not null)
                     return error;
 
-                var result = await client.ExecuteRawQueryAsync(settings!.Email!, settings!.OctopusPassword!, request.Query, request.Variables);
+                var result = await client.ExecuteRawQueryAsync(settings!,request.Query, request.Variables);
                 return Results.Ok(result);
             }).WithName("RunGraphqlQuery");
         }
@@ -405,7 +405,7 @@ public static class HeatPumpEndpoints
             if (error is not null)
                 return error;
 
-            var euids = await client.GetHeatPumpControllerEuidsAsync(settings!.Email!, settings!.OctopusPassword!, accountNumber);
+            var euids = await client.GetHeatPumpControllerEuidsAsync(settings!,accountNumber);
             return Results.Ok(euids);
         }).WithName("GetHeatPumpControllerEuids");
 
@@ -418,7 +418,7 @@ public static class HeatPumpEndpoints
             if (string.IsNullOrWhiteSpace(device!.Euid))
                 return Results.Problem("EUID not found for device. Run setup first.");
 
-            var data = await client.GetHeatPumpStatusAndConfigAsync(settings!.Email!, settings!.OctopusPassword!, device.AccountNumber, device.Euid);
+            var data = await client.GetHeatPumpStatusAndConfigAsync(settings!,device.AccountNumber, device.Euid);
             var root = data.RootElement.GetProperty("data");
 
             var summary = HeatPumpMappingService.MapHeatPumpSummary(root);
@@ -485,7 +485,7 @@ public static class HeatPumpEndpoints
             from ??= DateTime.UtcNow.AddDays(-7);
             to ??= DateTime.UtcNow;
 
-            var data = await client.GetHeatPumpTimeRangedPerformanceAsync(settings!.Email!, settings!.OctopusPassword!, accountNumber, euid, from.Value, to.Value);
+            var data = await client.GetHeatPumpTimeRangedPerformanceAsync(settings!,accountNumber, euid, from.Value, to.Value);
             var root = data.RootElement.GetProperty("data");
             
             return Results.Ok(new
@@ -521,7 +521,7 @@ public static class HeatPumpEndpoints
             if (validationError is not null)
                 return Results.BadRequest(new { error = validationError });
 
-            var data = await client.GetHeatPumpTimeSeriesPerformanceAsync(settings!.Email!, settings!.OctopusPassword!, accountNumber, euid, from.Value, to.Value, grouping);
+            var data = await client.GetHeatPumpTimeSeriesPerformanceAsync(settings!,accountNumber, euid, from.Value, to.Value, grouping);
             var root = data.RootElement.GetProperty("data");
             
             return Results.Ok(new
@@ -622,7 +622,7 @@ public static class HeatPumpEndpoints
                 try
                 {
                     var data = await client.GetHeatPumpTimeSeriesPerformanceAsync(
-                        settings!.Email!, settings!.OctopusPassword!, device.AccountNumber, device.Euid, chunkStart, chunkEnd, "MONTH");
+                        settings!,device.AccountNumber, device.Euid, chunkStart, chunkEnd, "MONTH");
                     var root = data.RootElement.GetProperty("data");
 
                     var chunkSynced = 0;
@@ -705,7 +705,7 @@ public static class HeatPumpEndpoints
             if (error is not null)
                 return error;
 
-            var data = await client.GetHeatPumpControllersAtLocationAsync(settings!.Email!, settings!.OctopusPassword!, accountNumber, propertyId);
+            var data = await client.GetHeatPumpControllersAtLocationAsync(settings!,accountNumber, propertyId);
             return Results.Ok(data);
         }).WithName("GetControllersAtLocation");
 
@@ -725,7 +725,7 @@ public static class HeatPumpEndpoints
             from ??= DateTime.UtcNow.AddDays(-1);
             to ??= DateTime.UtcNow;
 
-            var data = await client.GetApplicableRatesAsync(settings!.Email!, settings!.OctopusPassword!, accountNumber, device.Mpan!, from.Value, to.Value);
+            var data = await client.GetApplicableRatesAsync(settings!,accountNumber, device.Mpan!, from.Value, to.Value);
             var root = data.RootElement.GetProperty("data");
 
             // Surface any GraphQL errors so the UI can display them
@@ -756,7 +756,7 @@ public static class HeatPumpEndpoints
             from ??= DateTime.UtcNow.AddDays(-7);
             to ??= DateTime.UtcNow;
 
-            var data = await client.GetCostOfUsageAsync(settings!.Email!, settings!.OctopusPassword!, accountNumber, from.Value, to.Value, propertyId: device?.PropertyId, mpxn: device?.Mpan);
+            var data = await client.GetCostOfUsageAsync(settings!,accountNumber, from.Value, to.Value, propertyId: device?.PropertyId, mpxn: device?.Mpan);
 
             // Surface any GraphQL errors so the UI can display them
             JsonElement? errors = data.RootElement.TryGetProperty("errors", out var errEl) ? errEl : null;
@@ -1055,7 +1055,7 @@ public static class HeatPumpEndpoints
                             try
                             {
                                 var tsData = await octopusClient.GetHeatPumpTimeSeriesPerformanceAsync(
-                                    settings.Email!, settings.OctopusPassword!, device.AccountNumber, device.Euid, chunkStart, chunkEnd, "MONTH");
+                                    settings!,device.AccountNumber, device.Euid, chunkStart, chunkEnd, "MONTH");
                                 var tsRoot = tsData.RootElement.GetProperty("data");
 
                                 if (tsRoot.TryGetProperty("heatPumpTimeSeriesPerformance", out var tsSeries)
@@ -1195,7 +1195,7 @@ public static class HeatPumpEndpoints
                         logger.LogInformation("No stored cost data — fetching live from Octopus API for account {Account} from {From} to {To}",
                             device.AccountNumber, from, to);
 
-                        var costData = await octopusClient.GetCostOfUsageAsync(settings.Email!, settings.OctopusPassword!, device.AccountNumber, from, to, propertyId: device.PropertyId, mpxn: device.Mpan);
+                        var costData = await octopusClient.GetCostOfUsageAsync(settings!,device.AccountNumber, from, to, propertyId: device.PropertyId, mpxn: device.Mpan);
 
                         var costRoot = costData.RootElement.GetProperty("data");
 

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -11,13 +11,31 @@ export const Route = createFileRoute('/settings')({
   component: SettingsPage,
 })
 
-const schema = z.object({
-  accountNumber: z.string().min(1, 'Account number is required'),
-  apiKey: z.string().optional(),
-  email: z.string().email('Valid email required'),
-  octopusPassword: z.string().min(1, 'Password is required'),
-  anthropicApiKey: z.string().optional(),
-})
+const schema = z
+  .object({
+    accountNumber: z.string().min(1, 'Account number is required'),
+    authMode: z.enum(['apikey', 'password']),
+    apiKey: z.string().optional(),
+    email: z.string().optional(),
+    octopusPassword: z.string().optional(),
+    anthropicApiKey: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.authMode === 'apikey') {
+      if (!data.apiKey || data.apiKey.trim().length === 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'API key is required', path: ['apiKey'] })
+      }
+    } else {
+      if (!data.email || data.email.trim().length === 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Email is required', path: ['email'] })
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Valid email required', path: ['email'] })
+      }
+      if (!data.octopusPassword || data.octopusPassword.trim().length === 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Password is required', path: ['octopusPassword'] })
+      }
+    }
+  })
 
 type FormValues = z.infer<typeof schema>
 
@@ -36,32 +54,39 @@ function SettingsPage() {
     handleSubmit,
     formState: { errors, isDirty },
     reset,
+    control,
+    setValue,
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     values: existing
       ? {
           accountNumber: existing.accountNumber,
+          authMode: existing.authMode ?? 'apikey',
           apiKey: existing.apiKey,
           email: '',
           octopusPassword: '',
           anthropicApiKey: existing.anthropicApiKey ?? '',
         }
-      : undefined,
+      : { accountNumber: '', authMode: 'apikey', apiKey: '', email: '', octopusPassword: '', anthropicApiKey: '' },
   })
+
+  const authMode = useWatch({ control, name: 'authMode' })
 
   const saveMutation = useMutation({
     mutationFn: (values: FormValues) =>
       api.settings.upsert({
         accountNumber: values.accountNumber,
-        apiKey: values.apiKey || null,
-        email: values.email,
-        octopusPassword: values.octopusPassword,
+        authMode: values.authMode,
+        apiKey: values.authMode === 'apikey' ? (values.apiKey || null) : null,
+        email: values.authMode === 'password' ? (values.email || null) : null,
+        octopusPassword: values.authMode === 'password' ? (values.octopusPassword || null) : null,
         anthropicApiKey: values.anthropicApiKey || null,
       }),
     onSuccess: (saved) => {
       queryClient.setQueryData(queryKeys.settings.all(), saved ? [saved] : [])
       reset({
         accountNumber: saved?.accountNumber ?? '',
+        authMode: saved?.authMode ?? 'apikey',
         apiKey: saved?.apiKey ?? '',
         email: '',
         octopusPassword: '',
@@ -107,32 +132,72 @@ function SettingsPage() {
             />
           </Field>
 
-          <Field label="Email" error={errors.email?.message}>
-            <input
-              {...register('email')}
-              type="email"
-              placeholder="you@example.com"
-              className={inputCls(!!errors.email)}
-            />
-          </Field>
+          {/* Auth mode toggle */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-ink2">Authentication Method</label>
+            <div className="flex rounded-lg border border-border-subtle overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setValue('authMode', 'apikey', { shouldDirty: true })}
+                className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+                  authMode === 'apikey'
+                    ? 'bg-ink text-white'
+                    : 'bg-bg-base text-ink2 hover:bg-bg-surface'
+                }`}
+              >
+                API Key
+              </button>
+              <button
+                type="button"
+                onClick={() => setValue('authMode', 'password', { shouldDirty: true })}
+                className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+                  authMode === 'password'
+                    ? 'bg-ink text-white'
+                    : 'bg-bg-base text-ink2 hover:bg-bg-surface'
+                }`}
+              >
+                Email &amp; Password
+              </button>
+            </div>
+            <p className="text-[11px] text-ink3">
+              {authMode === 'apikey'
+                ? 'Find your API key at octopus.energy/dashboard/developer-settings'
+                : 'Use your Octopus Energy login credentials'}
+            </p>
+          </div>
 
-          <Field label="Password" error={errors.octopusPassword?.message} hint="Re-enter each time you save settings.">
-            <input
-              {...register('octopusPassword')}
-              type="password"
-              placeholder="Your Octopus account password"
-              className={inputCls(!!errors.octopusPassword)}
-            />
-          </Field>
+          {authMode === 'apikey' && (
+            <Field label="API Key" error={errors.apiKey?.message}>
+              <input
+                {...register('apiKey')}
+                type="password"
+                placeholder="sk_live_..."
+                className={inputCls(!!errors.apiKey)}
+              />
+            </Field>
+          )}
 
-          <Field label="API Key" error={errors.apiKey?.message} hint="Optional — used for some legacy endpoints.">
-            <input
-              {...register('apiKey')}
-              type="password"
-              placeholder="sk_live_..."
-              className={inputCls(!!errors.apiKey)}
-            />
-          </Field>
+          {authMode === 'password' && (
+            <>
+              <Field label="Email" error={errors.email?.message}>
+                <input
+                  {...register('email')}
+                  type="email"
+                  placeholder="you@example.com"
+                  className={inputCls(!!errors.email)}
+                />
+              </Field>
+
+              <Field label="Password" error={errors.octopusPassword?.message} hint="Re-enter each time you save settings.">
+                <input
+                  {...register('octopusPassword')}
+                  type="password"
+                  placeholder="Your Octopus account password"
+                  className={inputCls(!!errors.octopusPassword)}
+                />
+              </Field>
+            </>
+          )}
         </div>
 
         <div className="rounded-[10px] border border-border-subtle bg-white p-5 flex flex-col gap-4">

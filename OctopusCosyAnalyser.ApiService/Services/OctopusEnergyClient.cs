@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using OctopusCosyAnalyser.ApiService.Models;
 
 namespace OctopusCosyAnalyser.ApiService.Services;
 
@@ -11,6 +12,11 @@ public class OctopusEnergyClient : IOctopusEnergyClient
     private sealed record TokenCacheEntry(string Token, DateTime ExpiresAt);
 
     private static readonly ConcurrentDictionary<string, TokenCacheEntry> TokenCache = new();
+
+    // Serialize token acquisition so only one request is in-flight at a time
+    // (prevents concurrent workers from racing and obtaining multiple tokens,
+    //  which can cause the Octopus API to invalidate earlier tokens)
+    private static readonly SemaphoreSlim TokenSemaphore = new(1, 1);
 
     // Allowlist: alphanumeric, hyphens, underscores, dots — defence-in-depth input validation
     // (no longer the primary injection guard; all queries now use parameterised GraphQL variables)
@@ -34,40 +40,60 @@ public class OctopusEnergyClient : IOctopusEnergyClient
 
     // ── Authentication ───────────────────────────────────────────────
 
-    private async Task<string> GetAuthTokenAsync(string email, string password, CancellationToken cancellationToken = default)
+    private async Task<string> GetAuthTokenAsync(string email, string password)
     {
-        if (string.IsNullOrWhiteSpace(email))
-            throw new ArgumentException("Email is required for Octopus API authentication.", nameof(email));
-        if (string.IsNullOrWhiteSpace(password))
-            throw new ArgumentException("Password is required for Octopus API authentication.", nameof(password));
+        if (settings.AuthMode == "apikey")
+        {
+            if (string.IsNullOrWhiteSpace(settings.ApiKey))
+                throw new ArgumentException("API key is required for API key authentication.");
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(settings.Email))
+                throw new ArgumentException("Email is required for password authentication.");
+            if (string.IsNullOrWhiteSpace(settings.OctopusPassword))
+                throw new ArgumentException("Password is required for password authentication.");
+        }
 
-        if (TokenCache.TryGetValue(email, out var cached) && DateTime.UtcNow < cached.ExpiresAt)
+        var cacheKey = GetCacheKey(settings);
+
+        // Fast path: return cached token without acquiring lock
+        if (TokenCache.TryGetValue(cacheKey, out var cached) && DateTime.UtcNow < cached.ExpiresAt)
             return cached.Token;
 
-        var query = "mutation ObtainToken($input: ObtainJSONWebTokenInput!) { obtainKrakenToken(input: $input) { token } }";
-        var payload = JsonSerializer.Serialize(new
+        // Serialize token acquisition — prevents multiple workers from racing to
+        // obtain separate tokens (which can cause the API to invalidate earlier ones)
+        await TokenSemaphore.WaitAsync();
+        try
         {
-            query,
-            variables = new { input = new { email, password } }
-        });
+            // Double-check after acquiring lock — another thread may have cached a token
+            if (TokenCache.TryGetValue(cacheKey, out cached) && DateTime.UtcNow < cached.ExpiresAt)
+                return cached.Token;
 
         var content = new StringContent(payload, Encoding.UTF8, "application/json");
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.octopus.energy/v1/graphql/");
-        request.Content = content;
-        var response = await _httpClient.SendAsync(request, cancellationToken);
+        var response = await _httpClient.PostAsync("https://api.octopus.energy/v1/graphql/", content);
         response.EnsureSuccessStatusCode();
 
-        var result = await response.Content.ReadAsStringAsync(cancellationToken);
+        var result = await response.Content.ReadAsStringAsync();
         var json = JsonDocument.Parse(result);
         var token = json.RootElement.GetProperty("data").GetProperty("obtainKrakenToken").GetProperty("token").GetString();
 
-        if (string.IsNullOrWhiteSpace(token))
-            throw new InvalidOperationException("Octopus API token was empty.");
+            var result = await response.Content.ReadAsStringAsync();
+            var json = JsonDocument.Parse(result);
+            var token = json.RootElement.GetProperty("data").GetProperty("obtainKrakenToken").GetProperty("token").GetString();
 
-        var entry = new TokenCacheEntry(token, DateTime.UtcNow.AddMinutes(Constants.TokenExpiryMinutes));
+        var entry = new TokenCacheEntry(token, DateTime.UtcNow.AddMinutes(55));
         TokenCache[email] = entry;
 
-        return token;
+            var entry = new TokenCacheEntry(token, DateTime.UtcNow.AddMinutes(55));
+            TokenCache[cacheKey] = entry;
+
+            return token;
+        }
+        finally
+        {
+            TokenSemaphore.Release();
+        }
     }
 
     // ── Account & Device Discovery ───────────────────────────────────
@@ -76,7 +102,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
     /// Gets electricity agreements, meter points, MPAN, serial numbers, and smart device IDs.
     /// Used during device setup to discover the smart meter and device ID.
     /// </summary>
-    public async Task<JsonDocument> GetAccountAsync(string email, string password, string accountNumber, CancellationToken cancellationToken = default)
+    public async Task<JsonDocument> GetAccountAsync(string email, string password, string accountNumber)
     {
         ValidateIdentifier(accountNumber, nameof(accountNumber));
 
@@ -96,13 +122,13 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         }
         """;
 
-        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { accountNumber }), cancellationToken);
+        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { accountNumber }));
     }
 
     /// <summary>
     /// Gets account properties and occupierEuids (needed to find the heat pump EUID).
     /// </summary>
-    public async Task<JsonDocument> GetViewerPropertiesAsync(string email, string password, CancellationToken cancellationToken = default)
+    public async Task<JsonDocument> GetViewerPropertiesAsync(string email, string password)
     {
         var query = """
         query {
@@ -115,13 +141,13 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         }
         """;
 
-        return await ExecuteRawQueryAsync(email, password, query, cancellationToken: cancellationToken);
+        return await ExecuteRawQueryAsync(email, password, query);
     }
 
     /// <summary>
     /// Gets EUIDs directly from the heat pump controller API. Fallback when viewer query doesn't return EUIDs.
     /// </summary>
-    public async Task<JsonDocument> GetHeatPumpControllerEuidsAsync(string email, string password, string accountNumber, CancellationToken cancellationToken = default)
+    public async Task<JsonDocument> GetHeatPumpControllerEuidsAsync(string email, string password, string accountNumber)
     {
         ValidateIdentifier(accountNumber, nameof(accountNumber));
 
@@ -131,13 +157,13 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         }
         """;
 
-        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { accountNumber }), cancellationToken);
+        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { accountNumber }));
     }
 
     /// <summary>
     /// Gets heat pump device info (serial, make, model) by property ID.
     /// </summary>
-    public async Task<JsonDocument> GetHeatPumpDeviceAsync(string email, string password, string accountNumber, int propertyId, CancellationToken cancellationToken = default)
+    public async Task<JsonDocument> GetHeatPumpDeviceAsync(string email, string password, string accountNumber, int propertyId)
     {
         ValidateIdentifier(accountNumber, nameof(accountNumber));
 
@@ -149,14 +175,14 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         }
         """;
 
-        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { accountNumber, propertyId }), cancellationToken);
+        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { accountNumber, propertyId }));
     }
 
     /// <summary>
     /// Gets viewer properties including heat pump device details and EUIDs.
     /// NOTE: This queries the viewer/properties, not the heatPumpControllerConfiguration API.
     /// </summary>
-    public async Task<JsonDocument> GetViewerPropertiesWithDevicesAsync(string email, string password, CancellationToken cancellationToken = default)
+    public async Task<JsonDocument> GetViewerPropertiesWithDevicesAsync(string email, string password)
     {
         var query = """
         query {
@@ -173,7 +199,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         }
         """;
 
-        return await ExecuteRawQueryAsync(email, password, query, cancellationToken: cancellationToken);
+        return await ExecuteRawQueryAsync(email, password, query);
     }
 
     // ── Smart Meter ──────────────────────────────────────────────────
@@ -181,7 +207,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
     /// <summary>
     /// Gets live smart meter telemetry: consumption, consumptionDelta, demand.
     /// </summary>
-    public async Task<JsonDocument> GetSmartMeterTelemetryAsync(string email, string password, string deviceId, CancellationToken cancellationToken = default)
+    public async Task<JsonDocument> GetSmartMeterTelemetryAsync(string email, string password, string deviceId)
     {
         ValidateIdentifier(deviceId, nameof(deviceId));
 
@@ -193,7 +219,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         }
         """;
 
-        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { deviceId }), cancellationToken);
+        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { deviceId }));
     }
 
     /// <summary>
@@ -244,7 +270,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
     /// Gets basic heat pump status: isConnected, climateControlStatus, waterTemperatureStatus.
     /// Uses the older heatPumpStatus query on api.octopus.energy (doesn't require EUID).
     /// </summary>
-    public async Task<JsonDocument> GetHeatPumpStatusAsync(string email, string password, string accountNumber, CancellationToken cancellationToken = default)
+    public async Task<JsonDocument> GetHeatPumpStatusAsync(string email, string password)
     {
         ValidateIdentifier(accountNumber, nameof(accountNumber));
 
@@ -265,13 +291,13 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         }
         """;
 
-        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { accountNumber }), cancellationToken);
+        return await ExecuteRawQueryAsync(email, password, query);
     }
 
     /// <summary>
     /// Lists available heat pump makes and models.
     /// </summary>
-    public async Task<JsonDocument> GetHeatPumpVariantsAsync(string email, string password, string? make = null, CancellationToken cancellationToken = default)
+    public async Task<JsonDocument> GetHeatPumpVariantsAsync(string email, string password, string? make = null)
     {
         if (make != null)
             ValidateIdentifier(make, nameof(make));
@@ -287,7 +313,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
             }
             """;
 
-            return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { make }), cancellationToken);
+            return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { make }));
         }
         else
         {
@@ -300,7 +326,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
             }
             """;
 
-            return await ExecuteRawQueryAsync(email, password, query, cancellationToken: cancellationToken);
+            return await ExecuteRawQueryAsync(email, password, query);
         }
     }
 
@@ -316,7 +342,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
     /// Used by /summary endpoint and the HeatPumpSnapshotWorker.
     /// Requests all available fields from the Octopus API schema.
     /// </summary>
-    public async Task<JsonDocument> GetHeatPumpStatusAndConfigAsync(string email, string password, string accountNumber, string euid, CancellationToken cancellationToken = default)
+    public async Task<JsonDocument> GetHeatPumpStatusAndConfigAsync(string email, string password, string accountNumber, string euid)
     {
         var now = DateTime.UtcNow;
         var liveStartAt = now.AddMinutes(-30).ToString(Constants.OctopusDateFormat);
@@ -407,7 +433,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
 
         var variables = new { accountNumber, euid, liveStartAt, liveEndAt };
 
-        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(variables), cancellationToken);
+        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(variables));
     }
 
     // ── Heat Pump – Historic Performance ─────────────────────────────
@@ -417,7 +443,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
     /// Returns: coefficientOfPerformance, energyOutput, energyInput.
     /// NOTE: Does NOT have a performanceGrouping parameter.
     /// </summary>
-    public async Task<JsonDocument> GetHeatPumpTimeRangedPerformanceAsync(string email, string password, string accountNumber, string euid, DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    public async Task<JsonDocument> GetHeatPumpTimeRangedPerformanceAsync(string email, string password, string accountNumber, string euid, DateTime from, DateTime to)
     {
         var fromStr = from.ToString(Constants.OctopusDateFormat);
         var toStr = to.ToString(Constants.OctopusDateFormat);
@@ -450,7 +476,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
             endAt = toStr
         };
 
-        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(variables), cancellationToken);
+        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(variables));
     }
 
     /// <summary>
@@ -465,7 +491,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
     ///   MONTH → 1-day buckets     (e.g. 30 rows for a month)
     ///   YEAR  → 1-month buckets   (e.g. 12 rows for a year)
     /// </summary>
-    public async Task<JsonDocument> GetHeatPumpTimeSeriesPerformanceAsync(string email, string password, string accountNumber, string euid, DateTime from, DateTime to, string? performanceGroupingOverride = null, CancellationToken cancellationToken = default)
+    public async Task<JsonDocument> GetHeatPumpTimeSeriesPerformanceAsync(string email, string password, string accountNumber, string euid, DateTime from, DateTime to, string? performanceGroupingOverride = null)
     {
         var fromStr = from.ToString(Constants.OctopusDateFormat);
         var toStr = to.ToString(Constants.OctopusDateFormat);
@@ -522,7 +548,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
             performanceGrouping
         };
 
-        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(variables), cancellationToken);
+        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(variables));
     }
 
     // ── Heat Pump – Controllers at Location ──────────────────────────
@@ -531,7 +557,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
     /// Discovers all heat pump controllers at a given location.
     /// Useful for multi-HP setups and as a fallback during device discovery.
     /// </summary>
-    public async Task<JsonDocument> GetHeatPumpControllersAtLocationAsync(string email, string password, string accountNumber, int propertyId, CancellationToken cancellationToken = default)
+    public async Task<JsonDocument> GetHeatPumpControllersAtLocationAsync(string email, string password, string accountNumber, int propertyId)
     {
         var query = """
         query GetControllersAtLocation($accountNumber: String!, $propertyId: ID!) {
@@ -544,7 +570,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         }
         """;
 
-        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { accountNumber, propertyId = propertyId.ToString() }), cancellationToken);
+        return await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(new { accountNumber, propertyId }));
     }
 
     // ── Tariff Rates ───────────────────────────────────────────────
@@ -553,7 +579,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
     /// Gets applicable tariff rates for an account and meter point.
     /// Returns rate periods via Relay connection (edges/node pattern).
     /// </summary>
-    public async Task<JsonDocument> GetApplicableRatesAsync(string email, string password, string accountNumber, string mpxn, DateTime startAt, DateTime endAt, CancellationToken cancellationToken = default)
+    public async Task<JsonDocument> GetApplicableRatesAsync(string email, string password, string accountNumber, string mpxn, DateTime startAt, DateTime endAt)
     {
         var startAtStr = startAt.ToString(Constants.OctopusDateFormat);
         var endAtStr = endAt.ToString(Constants.OctopusDateFormat);
@@ -606,7 +632,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
                 ["after"] = cursor
             };
 
-            var result = await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(variables), cancellationToken);
+            var result = await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(variables));
             var root = result.RootElement;
 
             // If there are errors, return the result as-is
@@ -672,9 +698,11 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         List<string> NodeFieldNames);
 
     /// <summary>
-    /// Recursively unwraps NON_NULL / LIST wrappers to find the named inner type.
+    /// Returns the known costOfUsage schema.
+    /// Previously used introspection (__schema / __type queries), but Octopus now blocks
+    /// introspection on the backend API (returns 403). The schema is hardcoded instead.
     /// </summary>
-    private static (string TypeName, bool IsArray, bool IsConnection) UnwrapGraphQLType(JsonElement typeEl)
+    private static CostOfUsageSchema GetCostOfUsageSchema()
     {
         var kind = typeEl.TryGetProperty("kind", out var k) ? k.GetString() ?? "" : "";
         var name = typeEl.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String
@@ -699,12 +727,12 @@ public class OctopusEnergyClient : IOctopusEnergyClient
     /// Introspects a connection type to discover the node type's field names.
     /// Follows the chain: ConnectionType -> edges field -> EdgeType -> node field -> NodeType -> fields.
     /// </summary>
-    private async Task<List<string>> DiscoverNodeTypeFieldsAsync(string email, string password, string connectionTypeName, CancellationToken cancellationToken = default)
+    private async Task<List<string>> DiscoverNodeTypeFieldsAsync(string email, string password, string connectionTypeName)
     {
         // Introspect the connection type to find the edges field's type
         var connIntrospection = await ExecuteRawQueryAsync(email, password, $$"""
             { __type(name: "{{connectionTypeName}}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }
-        """, cancellationToken: cancellationToken);
+        """);
 
         var connData = connIntrospection.RootElement.GetProperty("data");
         if (!connData.TryGetProperty("__type", out var connType) || connType.ValueKind == JsonValueKind.Null)
@@ -728,7 +756,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         // Introspect the edge type to find the 'node' field's type
         var edgeIntrospection = await ExecuteRawQueryAsync(email, password, $$"""
             { __type(name: "{{edgeTypeName}}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }
-        """, cancellationToken: cancellationToken);
+        """);
 
         var edgeData = edgeIntrospection.RootElement.GetProperty("data");
         if (!edgeData.TryGetProperty("__type", out var edgeType) || edgeType.ValueKind == JsonValueKind.Null)
@@ -751,7 +779,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         // Introspect the node type to get its field names
         var nodeIntrospection = await ExecuteRawQueryAsync(email, password, $$"""
             { __type(name: "{{nodeTypeName}}") { fields { name } } }
-        """, cancellationToken: cancellationToken);
+        """);
 
         var nodeData = nodeIntrospection.RootElement.GetProperty("data");
         if (!nodeData.TryGetProperty("__type", out var nodeType) || nodeType.ValueKind == JsonValueKind.Null)
@@ -767,34 +795,19 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         return nodeFields;
     }
 
-    private async Task<CostOfUsageSchema> DiscoverCostOfUsageSchemaAsync(string email, string password, CancellationToken cancellationToken = default)
+    private async Task<CostOfUsageSchema> DiscoverCostOfUsageSchemaAsync(string email, string password)
     {
-        if (_costOfUsageSchema is not null)
-            return _costOfUsageSchema;
-
-        await _schemaLock.WaitAsync(cancellationToken);
-        try
-        {
-        // Double-check after acquiring lock
         if (_costOfUsageSchema is not null)
             return _costOfUsageSchema;
 
         // Use deeper ofType nesting to handle NON_NULL(LIST(NON_NULL(Type))) patterns
         var introspectionQuery = """
         {
-          __schema {
-            queryType {
-              fields {
-                name
-                args { name type { name kind ofType { name kind ofType { name kind } } } }
-                type { name kind ofType { name kind ofType { name kind ofType { name kind } } fields { name } } }
-              }
-            }
-          }
-        }
-        """;
+            "accountNumber", "startAt", "endAt", "grouping",
+            "propertyId", "mpxn", "first", "after"
+        };
 
-        var result = await ExecuteRawQueryAsync(email, password, introspectionQuery, cancellationToken: cancellationToken);
+        var result = await ExecuteRawQueryAsync(email, password, introspectionQuery);
         var fields = result.RootElement
             .GetProperty("data")
             .GetProperty("__schema")
@@ -804,15 +817,12 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         JsonElement? costField = null;
         foreach (var field in fields.EnumerateArray())
         {
-            if (field.GetProperty("name").GetString() == "costOfUsage")
-            {
-                costField = field;
-                break;
-            }
-        }
+            "startAt", "endAt", "costInclTax", "costExclTax",
+            "consumptionKwh", "unitRateInclTax", "unitRateExclTax",
+            "standingCharge", "costCurrency"
+        };
 
-        if (costField is null)
-            throw new InvalidOperationException("costOfUsage query not found in Octopus API schema");
+        var connectionFieldNames = new List<string> { "edges", "pageInfo" };
 
         var argNames = new List<string>();
         foreach (var arg in costField.Value.GetProperty("args").EnumerateArray())
@@ -845,7 +855,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         // Introspect the return type's fields
         var typeIntrospection = await ExecuteRawQueryAsync(email, password, $$"""
             { __type(name: "{{innerTypeName}}") { name kind fields { name type { name kind ofType { name } } } } }
-        """, cancellationToken: cancellationToken);
+        """);
 
         var fieldNames = new List<string>();
         var typeData = typeIntrospection.RootElement.GetProperty("data");
@@ -871,7 +881,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
             try
             {
                 // Find the edges field's inner type from the connection type introspection
-                var edgesTypeName = await DiscoverNodeTypeFieldsAsync(email, password, innerTypeName, cancellationToken);
+                var edgesTypeName = await DiscoverNodeTypeFieldsAsync(email, password, innerTypeName);
                 if (edgesTypeName.Count > 0)
                     nodeFieldNames = edgesTypeName;
                 else
@@ -891,9 +901,14 @@ public class OctopusEnergyClient : IOctopusEnergyClient
             string.Join(", ", fieldNames), string.Join(", ", nodeFieldNames));
 
         _costOfUsageSchema = new CostOfUsageSchema(
-            argNames, startArg, endArg,
-            innerTypeName,
-            isConnection, isArray, fieldNames, nodeFieldNames);
+            argNames,
+            StartArg: "startAt",
+            EndArg: "endAt",
+            ReturnTypeName: "CostOfUsageConnection",
+            IsConnection: true,
+            IsArray: false,
+            FieldNames: connectionFieldNames,
+            NodeFieldNames: nodeFieldNames);
 
         return _costOfUsageSchema;
         }
@@ -906,30 +921,26 @@ public class OctopusEnergyClient : IOctopusEnergyClient
     /// <summary>
     /// Clears the cached costOfUsage schema so it will be re-discovered on next call.
     /// </summary>
-    private static void InvalidateCostOfUsageSchemaCache()
-    {
-        Interlocked.Exchange(ref _costOfUsageSchema, null);
-    }
+    private static void InvalidateCostOfUsageSchemaCache() => _costOfUsageSchema = null;
 
     /// <summary>
     /// Gets the actual cost of energy usage for a date range.
-    /// Schema is auto-discovered via introspection on first call.
-    /// If the query fails with schema validation errors, the cache is cleared and retried.
+    /// Uses a hardcoded schema definition (introspection is blocked by the Octopus backend API).
     /// grouping: HALF_HOUR, DAY, WEEK, MONTH, QUARTER
     /// </summary>
-    public async Task<JsonDocument> GetCostOfUsageAsync(string email, string password, string accountNumber, DateTime from, DateTime to, string grouping = "DAY", int? propertyId = null, string? mpxn = null, CancellationToken cancellationToken = default)
+    public async Task<JsonDocument> GetCostOfUsageAsync(string email, string password, string accountNumber, DateTime from, DateTime to, string grouping = "DAY", int? propertyId = null, string? mpxn = null)
     {
         var fromStr = from.ToString(Constants.OctopusDateFormat);
         var toStr = to.ToString(Constants.OctopusDateFormat);
 
-        var schema = await DiscoverCostOfUsageSchemaAsync(email, password, cancellationToken);
+        var schema = await DiscoverCostOfUsageSchemaAsync(email, password);
         _logger.LogDebug("Cost of usage schema: args=[{Args}], startArg={Start}, endArg={End}, isConnection={IsConn}",
             string.Join(", ", schema.ArgNames), schema.StartArg, schema.EndArg, schema.IsConnection);
 
         JsonDocument result;
         try
         {
-            result = await ExecuteCostOfUsageQueryAsync(email, password, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn, cancellationToken);
+            result = await ExecuteCostOfUsageQueryAsync(email, password, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn);
         }
         catch (HttpRequestException ex)
         {
@@ -939,8 +950,8 @@ public class OctopusEnergyClient : IOctopusEnergyClient
             // Schema may be stale - clear cache and retry with fresh introspection
             _logger.LogWarning(ex, "costOfUsage query returned 400, clearing schema cache and retrying");
             InvalidateCostOfUsageSchemaCache();
-            schema = await DiscoverCostOfUsageSchemaAsync(email, password, cancellationToken);
-            result = await ExecuteCostOfUsageQueryAsync(email, password, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn, cancellationToken);
+            schema = await DiscoverCostOfUsageSchemaAsync(email, password);
+            result = await ExecuteCostOfUsageQueryAsync(email, password, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn);
         }
 
         // Also handle GraphQL-level errors (some servers return 200 with errors array)
@@ -953,9 +964,9 @@ public class OctopusEnergyClient : IOctopusEnergyClient
             {
                 _logger.LogWarning("costOfUsage query returned schema error: {Error}, clearing cache and retrying", firstError);
                 InvalidateCostOfUsageSchemaCache();
-                schema = await DiscoverCostOfUsageSchemaAsync(email, password, cancellationToken);
+                schema = await DiscoverCostOfUsageSchemaAsync(email, password);
                 result.Dispose();
-                result = await ExecuteCostOfUsageQueryAsync(email, password, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn, cancellationToken);
+                result = await ExecuteCostOfUsageQueryAsync(email, password, accountNumber, fromStr, toStr, grouping, schema, propertyId, mpxn);
             }
         }
 
@@ -963,7 +974,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
     }
 
     private async Task<JsonDocument> ExecuteCostOfUsageQueryAsync(
-        string email, string password, string accountNumber, string fromStr, string toStr, string grouping, CostOfUsageSchema schema, int? propertyId = null, string? mpxn = null, CancellationToken cancellationToken = default)
+        string email, string password, string accountNumber, string fromStr, string toStr, string grouping, CostOfUsageSchema schema, int? propertyId = null, string? mpxn = null)
     {
         var variables = new Dictionary<string, object?>();
         if (schema.ArgNames.Contains("accountNumber"))
@@ -1054,7 +1065,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
                 if (schema.ArgNames.Contains("after"))
                     variables["after"] = cursor;
 
-                var result = await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(variables), cancellationToken);
+                var result = await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(variables));
                 if (result.RootElement.TryGetProperty("errors", out _))
                     return result;
 
@@ -1095,7 +1106,7 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         }
         else
         {
-            var result = await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(variables), cancellationToken);
+            var result = await ExecuteRawQueryAsync(email, password, query, JsonSerializer.SerializeToElement(variables));
             if (result.RootElement.TryGetProperty("errors", out _))
                 return result;
 
@@ -1149,31 +1160,52 @@ public class OctopusEnergyClient : IOctopusEnergyClient
     /// Executes an arbitrary GraphQL query with optional variables.
     /// Used by the /graphql pass-through endpoint and by parameterised queries above.
     /// </summary>
-    public async Task<JsonDocument> ExecuteRawQueryAsync(string email, string password, string query, JsonElement? variables = null, CancellationToken cancellationToken = default)
+    public async Task<JsonDocument> ExecuteRawQueryAsync(string email, string password, string query, JsonElement? variables = null)
     {
         var payload = variables.HasValue
             ? JsonSerializer.Serialize(new { query, variables = variables.Value })
             : JsonSerializer.Serialize(new { query });
 
-        return await ExecuteQueryAsync(email, password, payload, cancellationToken);
+        return await ExecuteQueryAsync(email, password, payload);
     }
 
     // ── Transport ────────────────────────────────────────────────────
 
-    private async Task<JsonDocument> ExecuteQueryAsync(string email, string password, string query, CancellationToken cancellationToken = default)
+    private async Task<JsonDocument> ExecuteQueryAsync(string email, string password, string query)
     {
-        var token = await GetAuthTokenAsync(email, password, cancellationToken);
+        var token = await GetAuthTokenAsync(email, password);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "");
-        request.Headers.TryAddWithoutValidation("Authorization", token);
-        request.Content = new StringContent(query, Encoding.UTF8, "application/json");
+        for (var attempt = 0; attempt <= maxRetries; attempt++)
+        {
+            var token = await GetAuthTokenAsync(settings);
 
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        var result = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var response = await _httpClient.SendAsync(request);
+        var result = await response.Content.ReadAsStringAsync();
 
-        if (!response.IsSuccessStatusCode)
+            using var response = await _httpClient.SendAsync(request);
+            var result = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+                return JsonDocument.Parse(result);
+
+            if ((int)response.StatusCode == 403 && attempt < maxRetries)
+            {
+                // 403 from the CDN/WAF is typically transient rate-limiting.
+                // Evict the cached token and retry after a backoff.
+                _logger.LogWarning(
+                    "Octopus API returned 403 (attempt {Attempt}/{Max}), evicting token and retrying after backoff. Response: {Response}",
+                    attempt + 1, maxRetries, result);
+
+                TokenCache.TryRemove(cacheKey, out _);
+
+                var delay = TimeSpan.FromSeconds(2 * (attempt + 1)); // 2s, 4s, 6s
+                await Task.Delay(delay);
+                continue;
+            }
+
             throw new HttpRequestException($"Octopus API returned {(int)response.StatusCode}: {result}");
+        }
 
-        return JsonDocument.Parse(result);
+        throw new HttpRequestException("Octopus API request failed after all retry attempts");
     }
 }
