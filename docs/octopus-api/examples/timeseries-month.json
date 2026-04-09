@@ -2,7 +2,7 @@
   "grouping": "MONTH",
   "description": "Daily granularity over longer period. Max window: <60 days.",
   "request": {
-    "query": "query { heatPumpTimeSeriesPerformance(accountNumber: \"A-1C3B4330\", euid: \"00:1e:5e:09:02:ba:5d:84\", startAt: \"2026-02-09T00:00:00Z\", endAt: \"2026-04-09T00:00:00Z\", performanceGrouping: MONTH) { startAt endAt energyInput { value unit } energyOutput { value unit } outdoorTemperature { value unit } } }",
+    "query": "query { heatPumpTimeSeriesPerformance(accountNumber: \"A-XXXXXXXX\", euid: \"XX:XX:XX:XX:XX:XX:XX:XX\", startAt: \"2026-02-09T00:00:00Z\", endAt: \"2026-04-09T00:00:00Z\", performanceGrouping: MONTH) { startAt endAt energyInput { value unit } energyOutput { value unit } outdoorTemperature { value unit } } }",
     "dateRange": "2026-02-09 to 2026-04-09 (59 days)"
   },
   "response": {

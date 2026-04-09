@@ -1,6 +1,6 @@
 {
   "request": {
-    "query": "query { heatPumpControllerStatus(accountNumber: \"A-1C3B4330\", euid: \"00:1e:5e:09:02:ba:5d:84\") { sensors { code connectivity { online retrievedAt } telemetry { temperatureInCelsius humidityPercentage rssi voltage retrievedAt } } zones { zone telemetry { setpointInCelsius mode relaySwitchedOn heatDemand retrievedAt } } } }"
+    "query": "query { heatPumpControllerStatus(accountNumber: \"A-XXXXXXXX\", euid: \"XX:XX:XX:XX:XX:XX:XX:XX\") { sensors { code connectivity { online retrievedAt } telemetry { temperatureInCelsius humidityPercentage rssi voltage retrievedAt } } zones { zone telemetry { setpointInCelsius mode relaySwitchedOn heatDemand retrievedAt } } } }"
   },
   "response": {
     "data": {

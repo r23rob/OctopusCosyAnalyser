@@ -1,14 +1,14 @@
 {
   "request": {
-    "query": "query { heatPumpControllerConfiguration(accountNumber: \"A-1C3B4330\", euid: \"00:1e:5e:09:02:ba:5d:84\") { controller { firmwareConfiguration { esp32 efr32 eui } state accessPointPassword heatPumpTimezone connected lastReset } zones { configuration { code zoneType enabled displayName primarySensor currentOperation { mode setpointInCelsius action end } previousOperation { mode setpointInCelsius action } callForHeat heatDemand emergency sensors { ... on ADCSensorConfiguration { code displayName type enabled } ... on ZigbeeSensorConfiguration { code displayName type id firmwareVersion boostEnabled } } } schedules { days settings { startTime action setpointInCelsius zoneState } } } heatPump { serialNumber model hardwareVersion faultCodes weatherCompensation { enabled allowableMinimumTemperatureRange { minimum { value unit } maximum { value unit } } allowableMaximumTemperatureRange { minimum { value unit } maximum { value unit } } currentRange { minimum { value unit } maximum { value unit } } } heatingFlowTemperature { allowableRange { minimum { value unit } maximum { value unit } } currentTemperature { value unit } } manifoldEnabled hasHeatPumpCompatibleCylinder maxWaterSetpoint minWaterSetpoint latestCounterReset quieterModeEnabled } } }"
+    "query": "query { heatPumpControllerConfiguration(accountNumber: \"A-XXXXXXXX\", euid: \"XX:XX:XX:XX:XX:XX:XX:XX\") { controller { firmwareConfiguration { esp32 efr32 eui } state heatPumpTimezone connected lastReset } zones { configuration { code zoneType enabled displayName primarySensor currentOperation { mode setpointInCelsius action end } previousOperation { mode setpointInCelsius action } callForHeat heatDemand emergency sensors { ... on ADCSensorConfiguration { code displayName type enabled } ... on ZigbeeSensorConfiguration { code displayName type id firmwareVersion boostEnabled } } } schedules { days settings { startTime action setpointInCelsius zoneState } } } heatPump { serialNumber model hardwareVersion faultCodes weatherCompensation { enabled allowableMinimumTemperatureRange { minimum { value unit } maximum { value unit } } allowableMaximumTemperatureRange { minimum { value unit } maximum { value unit } } currentRange { minimum { value unit } maximum { value unit } } } heatingFlowTemperature { allowableRange { minimum { value unit } maximum { value unit } } currentTemperature { value unit } } manifoldEnabled hasHeatPumpCompatibleCylinder maxWaterSetpoint minWaterSetpoint latestCounterReset quieterModeEnabled } } }"
   },
   "response": {
     "data": {
       "heatPumpControllerConfiguration": {
         "controller": {
-          "firmwareConfiguration": { "esp32": "v1.1.1", "efr32": "15", "eui": "001E5E0902BA5D84" },
+          "firmwareConfiguration": { "esp32": "v1.1.1", "efr32": "15", "eui": "XXXXXXXXXXXXXXXX" },
           "state": ["NORMAL_MODE"],
-          "accessPointPassword": "G2STNB0N",
+          "accessPointPassword": "[REDACTED]",
           "heatPumpTimezone": "GMT0BST,M3.5.0/1,M10.5.0",
           "connected": true,
           "lastReset": "2026-03-30T12:20:43+00:00"
@@ -60,9 +60,9 @@
               "heatDemand": false,
               "emergency": false,
               "sensors": [
-                { "code": "SENSOR01", "displayName": "lounge", "type": "ZIGBEE", "id": "001E5E0902BBE2D8", "firmwareVersion": "0D", "boostEnabled": true },
-                { "code": "SENSOR02", "displayName": "Lily", "type": "ZIGBEE", "id": "001E5E0902BBDC4F", "firmwareVersion": "0D", "boostEnabled": true },
-                { "code": "SENSOR03", "displayName": "Rob Office", "type": "ZIGBEE", "id": "001E5E0902BBE5D7", "firmwareVersion": "0D", "boostEnabled": true }
+                { "code": "SENSOR01", "displayName": "Living Room", "type": "ZIGBEE", "id": "XXXXXXXXXXXXXXXX", "firmwareVersion": "0D", "boostEnabled": true },
+                { "code": "SENSOR02", "displayName": "Bedroom 1", "type": "ZIGBEE", "id": "YYYYYYYYYYYYYYYY", "firmwareVersion": "0D", "boostEnabled": true },
+                { "code": "SENSOR03", "displayName": "Office", "type": "ZIGBEE", "id": "ZZZZZZZZZZZZZZZZ", "firmwareVersion": "0D", "boostEnabled": true }
               ]
             },
             "schedules": [
@@ -137,7 +137,7 @@
           }
         ],
         "heatPump": {
-          "serialNumber": "0000000000000255001F",
+          "serialNumber": "XXXXXXXXXXXXXXXXXXXX",
           "model": "Cosy 6",
           "hardwareVersion": "v5.1.0",
           "faultCodes": [],

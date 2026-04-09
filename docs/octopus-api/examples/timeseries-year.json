@@ -2,7 +2,7 @@
   "grouping": "YEAR",
   "description": "Monthly granularity. Max lookback: 13 months.",
   "request": {
-    "query": "query { heatPumpTimeSeriesPerformance(accountNumber: \"A-1C3B4330\", euid: \"00:1e:5e:09:02:ba:5d:84\", startAt: \"2025-10-01T00:00:00Z\", endAt: \"2026-04-01T00:00:00Z\", performanceGrouping: YEAR) { startAt endAt energyInput { value unit } energyOutput { value unit } outdoorTemperature { value unit } } }",
+    "query": "query { heatPumpTimeSeriesPerformance(accountNumber: \"A-XXXXXXXX\", euid: \"XX:XX:XX:XX:XX:XX:XX:XX\", startAt: \"2025-10-01T00:00:00Z\", endAt: \"2026-04-01T00:00:00Z\", performanceGrouping: YEAR) { startAt endAt energyInput { value unit } energyOutput { value unit } outdoorTemperature { value unit } } }",
     "dateRange": "2025-10-01 to 2026-04-01 (6 months)"
   },
   "response": {

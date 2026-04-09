@@ -1,6 +1,6 @@
 {
   "request": {
-    "query": "query { heatPumpLivePerformance(accountNumber: \"A-1C3B4330\", euid: \"00:1e:5e:09:02:ba:5d:84\") { readAt coefficientOfPerformance powerInput { value unit } heatOutput { value unit } outdoorTemperature { value unit } } }"
+    "query": "query { heatPumpLivePerformance(accountNumber: \"A-XXXXXXXX\", euid: \"XX:XX:XX:XX:XX:XX:XX:XX\") { readAt coefficientOfPerformance powerInput { value unit } heatOutput { value unit } outdoorTemperature { value unit } } }"
   },
   "response": {
     "data": {

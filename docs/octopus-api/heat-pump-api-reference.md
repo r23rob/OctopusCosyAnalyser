@@ -1,10 +1,10 @@
 # Octopus Energy Heat Pump GraphQL API Reference
 
-**Endpoint:** `https://api.backend.octopus.energy/v1/graphql/`
+**Data endpoint:** `https://api.backend.octopus.energy/v1/graphql/`
+**Auth endpoint (token acquisition only):** `https://api.octopus.energy/v1/graphql/`
 **Auth:** `Authorization` header with JWT token (expires after ~1 hour)
-**Account:** `A-1C3B4330`
-**Controller EUID:** `00:1e:5e:09:02:ba:5d:84`
-**Heat Pump Model:** Cosy 6 (hardware v5.1.0, firmware ESP32 v1.1.1)
+**Account:** `A-XXXXXXXX` *(replace with your account number)*
+**Controller EUID:** `XX:XX:XX:XX:XX:XX:XX:XX` *(replace with your controller EUID)*
 
 ---
 
@@ -18,15 +18,15 @@
 
 | Arg | Type | Required | Description |
 |-----|------|----------|-------------|
-| `accountNumber` | `String!` | Yes | Octopus account number (e.g. `"A-1C3B4330"`) |
-| `euid` | `ID!` | Yes | Controller hardware ID (e.g. `"00:1e:5e:09:02:ba:5d:84"`) |
+| `accountNumber` | `String!` | Yes | Octopus account number (e.g. `"A-XXXXXXXX"`) |
+| `euid` | `ID!` | Yes | Controller hardware ID (e.g. `"XX:XX:XX:XX:XX:XX:XX:XX"`) |
 
 **Returns:** `HeatPumpControllerStatus`
 
 **Full query with all fields:**
 ```graphql
 query {
-  heatPumpControllerStatus(accountNumber: "A-1C3B4330", euid: "00:1e:5e:09:02:ba:5d:84") {
+  heatPumpControllerStatus(accountNumber: "A-XXXXXXXX", euid: "XX:XX:XX:XX:XX:XX:XX:XX") {
     sensors {
       code
       connectivity {
@@ -93,7 +93,7 @@ query {
 **Full query with all fields:**
 ```graphql
 query {
-  heatPumpControllerConfiguration(accountNumber: "A-1C3B4330", euid: "00:1e:5e:09:02:ba:5d:84") {
+  heatPumpControllerConfiguration(accountNumber: "A-XXXXXXXX", euid: "XX:XX:XX:XX:XX:XX:XX:XX") {
     controller {
       firmwareConfiguration {
         esp32
@@ -101,7 +101,7 @@ query {
         eui
       }
       state
-      accessPointPassword
+     
       heatPumpTimezone
       connected
       lastReset
@@ -243,7 +243,7 @@ query {
 **Full query:**
 ```graphql
 query {
-  heatPumpLivePerformance(accountNumber: "A-1C3B4330", euid: "00:1e:5e:09:02:ba:5d:84") {
+  heatPumpLivePerformance(accountNumber: "A-XXXXXXXX", euid: "XX:XX:XX:XX:XX:XX:XX:XX") {
     readAt
     coefficientOfPerformance
     powerInput { value unit }
@@ -283,7 +283,7 @@ query {
 **Full query:**
 ```graphql
 query {
-  heatPumpLifetimePerformance(accountNumber: "A-1C3B4330", euid: "00:1e:5e:09:02:ba:5d:84") {
+  heatPumpLifetimePerformance(accountNumber: "A-XXXXXXXX", euid: "XX:XX:XX:XX:XX:XX:XX:XX") {
     readAt
     seasonalCoefficientOfPerformance
     energyInput { value unit }
@@ -324,8 +324,8 @@ query {
 ```graphql
 query {
   heatPumpTimeRangedPerformance(
-    accountNumber: "A-1C3B4330"
-    euid: "00:1e:5e:09:02:ba:5d:84"
+    accountNumber: "A-XXXXXXXX"
+    euid: "XX:XX:XX:XX:XX:XX:XX:XX"
     startAt: "2026-04-02T00:00:00Z"
     endAt: "2026-04-09T00:00:00Z"
   ) {
@@ -368,8 +368,8 @@ query {
 ```graphql
 query {
   heatPumpTimeSeriesPerformance(
-    accountNumber: "A-1C3B4330"
-    euid: "00:1e:5e:09:02:ba:5d:84"
+    accountNumber: "A-XXXXXXXX"
+    euid: "XX:XX:XX:XX:XX:XX:XX:XX"
     startAt: "2026-04-08T00:00:00Z"
     endAt: "2026-04-09T23:00:00Z"
     performanceGrouping: DAY
@@ -539,16 +539,16 @@ These mutations modify the heat pump configuration. Each takes an `input` object
 | `ADC2` | NTC (wired) | Unused (-273.1°C) | WATER |
 | `ADC3` | NTC (wired) | Unused (-273.1°C) | WATER |
 | `ADC4` | NTC (wired) | Unused (-273.1°C) | WATER |
-| `SENSOR01` | Zigbee (wireless) | Lounge | ZONE_1 (primary) |
-| `SENSOR02` | Zigbee (wireless) | Lily's room | ZONE_1 |
-| `SENSOR03` | Zigbee (wireless) | Rob's Office | ZONE_1 |
+| `SENSOR01` | Zigbee (wireless) | Living Room | ZONE_1 (primary) |
+| `SENSOR02` | Zigbee (wireless) | Bedroom 1 | ZONE_1 |
+| `SENSOR03` | Zigbee (wireless) | Office | ZONE_1 |
 
 ## Zone Configuration (This System)
 
 | Zone | Type | Enabled | Primary Sensor | Mode |
 |------|------|---------|----------------|------|
 | `WATER` | Water heating | Yes | ADC1 | AUTO |
-| `ZONE_1` | Space heating | Yes | SENSOR01 (lounge) | AUTO |
+| `ZONE_1` | Space heating | Yes | SENSOR01 (Living Room) | AUTO |
 | `ZONE_2` | Space heating | No | SENSOR02 | OFF |
 | `AUXILIARY` | Space heating | No | None | OFF |
 

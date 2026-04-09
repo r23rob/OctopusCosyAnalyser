@@ -2,7 +2,7 @@
   "grouping": "LIVE",
   "description": "Minute-by-minute granularity. Max window: <1 hour.",
   "request": {
-    "query": "query { heatPumpTimeSeriesPerformance(accountNumber: \"A-1C3B4330\", euid: \"00:1e:5e:09:02:ba:5d:84\", startAt: \"2026-04-09T20:30:00Z\", endAt: \"2026-04-09T21:29:00Z\", performanceGrouping: LIVE) { startAt endAt energyInput { value unit } energyOutput { value unit } outdoorTemperature { value unit } } }",
+    "query": "query { heatPumpTimeSeriesPerformance(accountNumber: \"A-XXXXXXXX\", euid: \"XX:XX:XX:XX:XX:XX:XX:XX\", startAt: \"2026-04-09T20:30:00Z\", endAt: \"2026-04-09T21:29:00Z\", performanceGrouping: LIVE) { startAt endAt energyInput { value unit } energyOutput { value unit } outdoorTemperature { value unit } } }",
     "dateRange": "2026-04-09T20:30 to 2026-04-09T21:29 (59 minutes)"
   },
   "response": {

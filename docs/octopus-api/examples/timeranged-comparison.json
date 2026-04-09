@@ -1,6 +1,6 @@
 {
   "description": "heatPumpTimeRangedPerformance - same query, different date ranges. Returns a single aggregated CoP + energy totals for the whole period.",
-  "request_template": "query { heatPumpTimeRangedPerformance(accountNumber: \"A-1C3B4330\", euid: \"00:1e:5e:09:02:ba:5d:84\", startAt: \"...\", endAt: \"...\") { coefficientOfPerformance energyInput { value unit } energyOutput { value unit } } }",
+  "request_template": "query { heatPumpTimeRangedPerformance(accountNumber: \"A-XXXXXXXX\", euid: \"XX:XX:XX:XX:XX:XX:XX:XX\", startAt: \"...\", endAt: \"...\") { coefficientOfPerformance energyInput { value unit } energyOutput { value unit } } }",
   "results": {
     "today": {
       "range": "2026-04-09 (1 day)",

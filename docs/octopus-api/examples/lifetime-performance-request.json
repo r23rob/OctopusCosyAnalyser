@@ -1,3 +1,3 @@
 {
-  "query": "query { heatPumpLifetimePerformance(accountNumber: \"A-1C3B4330\", euid: \"00:1e:5e:09:02:ba:5d:84\") { readAt seasonalCoefficientOfPerformance energyInput { value unit } heatOutput { value unit } } }"
+  "query": "query { heatPumpLifetimePerformance(accountNumber: \"A-XXXXXXXX\", euid: \"XX:XX:XX:XX:XX:XX:XX:XX\") { readAt seasonalCoefficientOfPerformance energyInput { value unit } heatOutput { value unit } } }"
 }
