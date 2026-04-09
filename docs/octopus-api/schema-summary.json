@@ -1,0 +1,116 @@
+{
+  "generatedAt": "2026-04-09T20:55:00Z",
+  "accountNumber": "A-1C3B4330",
+  "euid": "00:1e:5e:09:02:ba:5d:84",
+
+  "heatPumpQueries": [
+    {
+      "name": "heatPumpControllerStatus",
+      "args": [
+        { "name": "accountNumber", "type": "String!" },
+        { "name": "euid", "type": "ID!" }
+      ],
+      "returnType": "HeatPumpControllerStatus",
+      "status": "EXECUTED"
+    },
+    {
+      "name": "heatPumpControllerConfiguration",
+      "args": [
+        { "name": "accountNumber", "type": "String!" },
+        { "name": "euid", "type": "ID!" }
+      ],
+      "returnType": "ControllerAndZoneConfiguration",
+      "status": "EXECUTED"
+    },
+    {
+      "name": "heatPumpLifetimePerformance",
+      "args": [
+        { "name": "accountNumber", "type": "String!" },
+        { "name": "euid", "type": "ID!" }
+      ],
+      "returnType": "HeatPumpLifetimePerformance",
+      "status": "EXECUTED"
+    },
+    {
+      "name": "heatPumpLivePerformance",
+      "args": [
+        { "name": "accountNumber", "type": "String!" },
+        { "name": "euid", "type": "ID!" }
+      ],
+      "returnType": "HeatPumpLivePerformance",
+      "status": "EXECUTED"
+    },
+    {
+      "name": "heatPumpTimeRangedPerformance",
+      "args": [
+        { "name": "accountNumber", "type": "String!" },
+        { "name": "euid", "type": "ID!" },
+        { "name": "startAt", "type": "DateTime!" },
+        { "name": "endAt", "type": "DateTime!" }
+      ],
+      "returnType": "HeatPumpTimeRangedPerformance",
+      "status": "EXECUTED"
+    },
+    {
+      "name": "heatPumpTimeSeriesPerformance",
+      "args": [
+        { "name": "accountNumber", "type": "String!" },
+        { "name": "euid", "type": "ID!" },
+        { "name": "startAt", "type": "DateTime!" },
+        { "name": "endAt", "type": "DateTime!" },
+        { "name": "performanceGrouping", "type": "PerformanceGrouping!" }
+      ],
+      "returnType": "[HeatPumpTimeSeriesPerformance]",
+      "performanceGroupingValues": ["LIVE", "DAY", "WEEK", "MONTH", "YEAR"],
+      "status": "EXECUTED"
+    },
+    {
+      "name": "heatPumpQuote",
+      "args": [{ "name": "code", "type": "UUID!" }],
+      "returnType": "HeatPumpQuote",
+      "status": "SKIPPED - requires UUID code not available"
+    },
+    {
+      "name": "heatPumpQuoteFinanceOffer",
+      "args": [{ "name": "code", "type": "UUID!" }],
+      "returnType": "HeatPumpQuoteFinanceOffer",
+      "status": "SKIPPED - requires UUID code not available"
+    },
+    {
+      "name": "heatPumpControllersAtLocation",
+      "args": [
+        { "name": "accountNumber", "type": "String!" },
+        { "name": "propertyId", "type": "ID!" }
+      ],
+      "returnType": "HeatPumpControllersAtLocation",
+      "status": "SKIPPED - requires propertyId not available"
+    }
+  ],
+
+  "heatPumpMutations": [
+    { "name": "requestHeatPumpDepositFollowUp", "inputType": "RequestHeatPumpDepositFollowUpInput!" },
+    { "name": "setHeatPumpQuoteJourneyVersion", "inputType": "SetHeatPumpQuoteJourneyVersionInput!" },
+    { "name": "createHeatPumpQuote", "inputType": "CreateHeatPumpQuoteInput!" },
+    { "name": "requestHeatPumpQuoteCallback", "inputType": "RequestHeatPumpQuoteCallbackInput!" },
+    { "name": "requestIneligibleHeatPumpQuoteFollowUp", "inputType": "RequestIneligibleHeatPumpQuoteFollowUpInput!" },
+    { "name": "emailHeatPumpQuote", "inputType": "EmailHeatPumpQuoteInput!" },
+    { "name": "updateHeatPumpQuote", "inputType": "UpdateHeatPumpQuoteInput!" },
+    { "name": "acceptHeatPumpQuote", "inputType": "AcceptHeatPumpQuoteInput!" },
+    { "name": "initiateHeatPumpDepositPayment", "inputType": "InitiateHeatPumpDepositPaymentInput!" },
+    { "name": "confirmHeatPumpQuoteDepositPayment", "inputType": "ConfirmHeatPumpQuoteDepositPaymentInput!" },
+    { "name": "selectHeatPumpQuoteProduct", "inputType": "SelectHeatPumpQuoteProductInput!" },
+    { "name": "updateHeatPumpQuoteFinanceOfferTerms", "inputType": "UpdateHeatPumpQuoteFinanceOfferTermsInput!" },
+    { "name": "heatPumpRequestProvisioningClaimCertificate", "inputType": "HeatPumpRequestProvisioningClaimCertificateInput!" },
+    { "name": "heatPumpSetHushMode", "inputType": "HeatPumpSetHushModeInput!" },
+    { "name": "heatPumpSetZonePrimarySensor", "inputType": "HeatPumpSetZonePrimarySensorInput!" },
+    { "name": "heatPumpBulkUpdateSensorDisplayName", "inputType": "HeatPumpBulkUpdateSensorDisplayNameInput!" },
+    { "name": "heatPumpUpdateFlowTemperatureConfiguration", "inputType": "HeatPumpUpdateFlowTemperatureConfigurationInput!" },
+    { "name": "heatPumpSetZoneSchedules", "inputType": "HeatPumpSetZoneSchedulesInput!" },
+    { "name": "heatPumpSetZoneMode", "inputType": "HeatPumpSetZoneModeInput!" },
+    { "name": "heatPumpBulkUpdateZoneDisplayNames", "inputType": "HeatPumpBulkUpdateZoneDisplayNamesInput!" },
+    { "name": "heatPumpSetupSmartControl", "inputType": "HeatPumpSetupSmartControlInput!" },
+    { "name": "heatPumpMarkAsDeprovisioned", "inputType": "HeatPumpMarkAsDeprovisionedInput!" }
+  ],
+
+  "note": "Mutations were NOT executed as they modify data. Only their schema is documented here."
+}

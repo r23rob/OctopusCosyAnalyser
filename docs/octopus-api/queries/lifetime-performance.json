@@ -1,0 +1,15 @@
+{
+  "request": {
+    "query": "query { heatPumpLifetimePerformance(accountNumber: \"A-1C3B4330\", euid: \"00:1e:5e:09:02:ba:5d:84\") { readAt seasonalCoefficientOfPerformance energyInput { value unit } heatOutput { value unit } } }"
+  },
+  "response": {
+    "data": {
+      "heatPumpLifetimePerformance": {
+        "readAt": "2026-04-09T20:55:02.670000+00:00",
+        "seasonalCoefficientOfPerformance": "3.891",
+        "energyInput": { "value": "3262.762", "unit": "KILOWATT_HOUR" },
+        "heatOutput": { "value": "12694.476", "unit": "KILOWATT_HOUR" }
+      }
+    }
+  }
+}

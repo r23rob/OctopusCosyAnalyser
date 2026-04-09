@@ -1,0 +1,18 @@
+{
+  "grouping": "LIVE",
+  "description": "Minute-by-minute granularity. Max window: <1 hour.",
+  "request": {
+    "query": "query { heatPumpTimeSeriesPerformance(accountNumber: \"A-1C3B4330\", euid: \"00:1e:5e:09:02:ba:5d:84\", startAt: \"2026-04-09T20:30:00Z\", endAt: \"2026-04-09T21:29:00Z\", performanceGrouping: LIVE) { startAt endAt energyInput { value unit } energyOutput { value unit } outdoorTemperature { value unit } } }",
+    "dateRange": "2026-04-09T20:30 to 2026-04-09T21:29 (59 minutes)"
+  },
+  "response": {
+    "entryCount": 59,
+    "bucketSize": "1 minute",
+    "sampleEntries": [
+      { "startAt": "2026-04-09T20:30:00+00:00", "endAt": "2026-04-09T20:31:00+00:00", "energyInput": { "value": "0.000", "unit": "KILOWATT_HOUR" }, "energyOutput": { "value": "0.000", "unit": "KILOWATT_HOUR" }, "outdoorTemperature": { "value": "9.000", "unit": "DEGREES_CELSIUS" } },
+      { "startAt": "2026-04-09T20:31:00+00:00", "endAt": "2026-04-09T20:32:00+00:00", "energyInput": { "value": "0.000", "unit": "KILOWATT_HOUR" }, "energyOutput": { "value": "0.000", "unit": "KILOWATT_HOUR" }, "outdoorTemperature": { "value": "9.000", "unit": "DEGREES_CELSIUS" } },
+      { "startAt": "2026-04-09T21:27:00+00:00", "endAt": "2026-04-09T21:28:00+00:00", "energyInput": { "value": "0.000", "unit": "KILOWATT_HOUR" }, "energyOutput": { "value": "0.000", "unit": "KILOWATT_HOUR" }, "outdoorTemperature": { "value": "8.300", "unit": "DEGREES_CELSIUS" } },
+      { "startAt": "2026-04-09T21:28:00+00:00", "endAt": "2026-04-09T21:29:00+00:00", "energyInput": { "value": "0.000", "unit": "KILOWATT_HOUR" }, "energyOutput": { "value": "0.000", "unit": "KILOWATT_HOUR" }, "outdoorTemperature": { "value": "8.300", "unit": "DEGREES_CELSIUS" } }
+    ]
+  }
+}

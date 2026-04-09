@@ -1,0 +1,83 @@
+{
+  "title": "Octopus Energy Heat Pump API - Performance Grouping Comparison",
+  "generatedAt": "2026-04-09T21:30:00Z",
+  "account": "A-1C3B4330",
+  "euid": "00:1e:5e:09:02:ba:5d:84",
+
+  "performanceGroupingExplained": {
+    "LIVE": {
+      "bucketSize": "1 minute",
+      "maxDateWindow": "<1 hour",
+      "entriesReturned": 59,
+      "useCase": "Real-time monitoring. See minute-by-minute energy in/out and outdoor temp."
+    },
+    "DAY": {
+      "bucketSize": "1 hour",
+      "maxDateWindow": "<2 days",
+      "entriesReturned": 46,
+      "useCase": "Intra-day analysis. See hourly patterns across 1-2 days."
+    },
+    "WEEK": {
+      "bucketSize": "1 day",
+      "maxDateWindow": "<14 days",
+      "entriesReturned": 14,
+      "useCase": "Weekly trends. See daily totals across up to 2 weeks."
+    },
+    "MONTH": {
+      "bucketSize": "1 day",
+      "maxDateWindow": "<60 days",
+      "entriesReturned": 60,
+      "useCase": "Monthly trends. See daily totals across up to 2 months."
+    },
+    "YEAR": {
+      "bucketSize": "1 month",
+      "maxDateWindow": "13 months back max",
+      "entriesReturned": 6,
+      "useCase": "Seasonal overview. See monthly totals across the year."
+    }
+  },
+
+  "keyDifferenceBetweenGroupings": {
+    "summary": "The performanceGrouping controls the BUCKET SIZE of each returned entry. All groupings return the same fields (startAt, endAt, energyInput, energyOutput, outdoorTemperature) but at different resolutions.",
+    "resolution_ladder": [
+      "LIVE  → 1-minute buckets  (max 1hr window)   → ~60 data points",
+      "DAY   → 1-hour buckets    (max 2-day window)  → ~48 data points",
+      "WEEK  → 1-day buckets     (max 14-day window)  → ~14 data points",
+      "MONTH → 1-day buckets     (max 60-day window)  → ~60 data points",
+      "YEAR  → 1-month buckets   (max 13-month window) → ~13 data points"
+    ],
+    "note": "WEEK and MONTH both return daily buckets but MONTH allows a much wider date range (60 days vs 14 days). The API enforces strict max window sizes per grouping."
+  },
+
+  "timeSeriesVsTimeRanged": {
+    "heatPumpTimeSeriesPerformance": {
+      "returns": "Array of time-bucketed entries (many rows)",
+      "fields": "startAt, endAt, energyInput, energyOutput, outdoorTemperature",
+      "useCase": "Plotting charts, trending over time, granular analysis"
+    },
+    "heatPumpTimeRangedPerformance": {
+      "returns": "Single aggregated object (one row)",
+      "fields": "coefficientOfPerformance, energyInput, energyOutput",
+      "useCase": "Summary stats for a period - total energy and average CoP"
+    }
+  },
+
+  "yourHeatPumpPerformance": {
+    "copByPeriod": {
+      "today_Apr9":       { "CoP": 3.642, "input_kWh": 1.312,    "output_kWh": 4.778 },
+      "yesterday_Apr8":   { "CoP": 4.261, "input_kWh": 4.164,    "output_kWh": 17.742 },
+      "last7days":        { "CoP": 4.062, "input_kWh": 63.426,   "output_kWh": 257.622 },
+      "last30days":       { "CoP": 3.990, "input_kWh": 363.084,  "output_kWh": 1448.542 },
+      "last90days":       { "CoP": 4.035, "input_kWh": 1366.472, "output_kWh": 5513.994 },
+      "lifetime":         { "CoP": 3.891, "input_kWh": 3262.762, "output_kWh": 12694.476 }
+    },
+    "monthlyBreakdown_fromYEAR": [
+      { "month": "Oct 2025", "input_kWh": 251.733, "output_kWh": 1089.230, "avgOutdoorTemp_C": 14.2, "impliedCoP": 4.33 },
+      { "month": "Nov 2025", "input_kWh": 422.753, "output_kWh": 1594.424, "avgOutdoorTemp_C": 8.8,  "impliedCoP": 3.77 },
+      { "month": "Dec 2025", "input_kWh": 607.624, "output_kWh": 2337.560, "avgOutdoorTemp_C": 6.4,  "impliedCoP": 3.85 },
+      { "month": "Jan 2026", "input_kWh": 674.744, "output_kWh": 2491.392, "avgOutdoorTemp_C": 6.5,  "impliedCoP": 3.69 },
+      { "month": "Feb 2026", "input_kWh": 455.697, "output_kWh": 1863.633, "avgOutdoorTemp_C": 8.6,  "impliedCoP": 4.09 },
+      { "month": "Mar 2026", "input_kWh": 406.726, "output_kWh": 1642.497, "avgOutdoorTemp_C": 9.5,  "impliedCoP": 4.04 }
+    ]
+  }
+}

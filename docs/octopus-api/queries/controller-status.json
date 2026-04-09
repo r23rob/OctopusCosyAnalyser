@@ -1,0 +1,54 @@
+{
+  "request": {
+    "query": "query { heatPumpControllerStatus(accountNumber: \"A-1C3B4330\", euid: \"00:1e:5e:09:02:ba:5d:84\") { sensors { code connectivity { online retrievedAt } telemetry { temperatureInCelsius humidityPercentage rssi voltage retrievedAt } } zones { zone telemetry { setpointInCelsius mode relaySwitchedOn heatDemand retrievedAt } } } }"
+  },
+  "response": {
+    "data": {
+      "heatPumpControllerStatus": {
+        "sensors": [
+          {
+            "code": "ADC1",
+            "connectivity": { "online": true, "retrievedAt": "2026-04-09T20:54:49.017000+00:00" },
+            "telemetry": { "temperatureInCelsius": 36.8, "humidityPercentage": null, "rssi": null, "voltage": null, "retrievedAt": "2026-04-09T20:54:46.986000+00:00" }
+          },
+          {
+            "code": "ADC2",
+            "connectivity": { "online": true, "retrievedAt": "2026-04-09T20:54:49.018000+00:00" },
+            "telemetry": { "temperatureInCelsius": -273.1, "humidityPercentage": null, "rssi": null, "voltage": null, "retrievedAt": "2026-04-09T20:54:46.986000+00:00" }
+          },
+          {
+            "code": "ADC3",
+            "connectivity": { "online": true, "retrievedAt": "2026-04-09T20:54:49.018000+00:00" },
+            "telemetry": { "temperatureInCelsius": -273.1, "humidityPercentage": null, "rssi": null, "voltage": null, "retrievedAt": "2026-04-09T20:54:46.986000+00:00" }
+          },
+          {
+            "code": "ADC4",
+            "connectivity": { "online": true, "retrievedAt": "2026-04-09T20:54:49.019000+00:00" },
+            "telemetry": { "temperatureInCelsius": -273.1, "humidityPercentage": null, "rssi": null, "voltage": null, "retrievedAt": "2026-04-09T20:54:46.986000+00:00" }
+          },
+          {
+            "code": "SENSOR01",
+            "connectivity": { "online": true, "retrievedAt": "2026-04-09T20:54:49.019000+00:00" },
+            "telemetry": { "temperatureInCelsius": 21, "humidityPercentage": 48, "rssi": -66, "voltage": 2.9, "retrievedAt": "2026-04-09T20:53:54.115000+00:00" }
+          },
+          {
+            "code": "SENSOR02",
+            "connectivity": { "online": true, "retrievedAt": "2026-04-09T20:54:49.021000+00:00" },
+            "telemetry": { "temperatureInCelsius": 21.9, "humidityPercentage": 47, "rssi": -52, "voltage": 2.9, "retrievedAt": "2026-04-09T20:52:55.424000+00:00" }
+          },
+          {
+            "code": "SENSOR03",
+            "connectivity": { "online": true, "retrievedAt": "2026-04-09T20:54:49.022000+00:00" },
+            "telemetry": { "temperatureInCelsius": 22.2, "humidityPercentage": 46, "rssi": -68, "voltage": 3, "retrievedAt": "2026-04-09T20:53:54.706000+00:00" }
+          }
+        ],
+        "zones": [
+          { "zone": "WATER", "telemetry": { "setpointInCelsius": -300, "mode": "AUTO", "relaySwitchedOn": false, "heatDemand": false, "retrievedAt": "2026-04-09T20:54:57.053000+00:00" } },
+          { "zone": "ZONE_1", "telemetry": { "setpointInCelsius": 20.5, "mode": "AUTO", "relaySwitchedOn": false, "heatDemand": false, "retrievedAt": "2026-04-09T20:54:57.055000+00:00" } },
+          { "zone": "ZONE_2", "telemetry": { "setpointInCelsius": 7, "mode": "OFF", "relaySwitchedOn": false, "heatDemand": false, "retrievedAt": "2026-04-09T20:54:57.056000+00:00" } },
+          { "zone": "AUXILIARY", "telemetry": { "setpointInCelsius": 7, "mode": "OFF", "relaySwitchedOn": false, "heatDemand": false, "retrievedAt": "2026-04-09T20:54:57.058000+00:00" } }
+        ]
+      }
+    }
+  }
+}
