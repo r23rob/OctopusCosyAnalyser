@@ -1,0 +1,16 @@
+{
+  "request": {
+    "query": "query { heatPumpLivePerformance(accountNumber: \"A-XXXXXXXX\", euid: \"XX:XX:XX:XX:XX:XX:XX:XX\") { readAt coefficientOfPerformance powerInput { value unit } heatOutput { value unit } outdoorTemperature { value unit } } }"
+  },
+  "response": {
+    "data": {
+      "heatPumpLivePerformance": {
+        "readAt": "2026-04-09T20:55:02.673000+00:00",
+        "coefficientOfPerformance": "3.210",
+        "powerInput": { "value": "0.000", "unit": "KILOWATT" },
+        "heatOutput": { "value": "0.000", "unit": "KILOWATT" },
+        "outdoorTemperature": { "value": "8.700", "unit": "DEGREES_CELSIUS" }
+      }
+    }
+  }
+}

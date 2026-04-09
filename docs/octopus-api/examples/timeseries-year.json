@@ -1,0 +1,20 @@
+{
+  "grouping": "YEAR",
+  "description": "Monthly granularity. Max lookback: 13 months.",
+  "request": {
+    "query": "query { heatPumpTimeSeriesPerformance(accountNumber: \"A-XXXXXXXX\", euid: \"XX:XX:XX:XX:XX:XX:XX:XX\", startAt: \"2025-10-01T00:00:00Z\", endAt: \"2026-04-01T00:00:00Z\", performanceGrouping: YEAR) { startAt endAt energyInput { value unit } energyOutput { value unit } outdoorTemperature { value unit } } }",
+    "dateRange": "2025-10-01 to 2026-04-01 (6 months)"
+  },
+  "response": {
+    "entryCount": 6,
+    "bucketSize": "1 month",
+    "entries": [
+      { "startAt": "2025-10-01T00:00:00+00:00", "endAt": "2025-11-01T00:00:00+00:00", "energyInput": { "value": "251.733", "unit": "KILOWATT_HOUR" }, "energyOutput": { "value": "1089.230", "unit": "KILOWATT_HOUR" }, "outdoorTemperature": { "value": "14.200", "unit": "DEGREES_CELSIUS" } },
+      { "startAt": "2025-11-01T00:00:00+00:00", "endAt": "2025-12-01T00:00:00+00:00", "energyInput": { "value": "422.753", "unit": "KILOWATT_HOUR" }, "energyOutput": { "value": "1594.424", "unit": "KILOWATT_HOUR" }, "outdoorTemperature": { "value": "8.800", "unit": "DEGREES_CELSIUS" } },
+      { "startAt": "2025-12-01T00:00:00+00:00", "endAt": "2026-01-01T00:00:00+00:00", "energyInput": { "value": "607.624", "unit": "KILOWATT_HOUR" }, "energyOutput": { "value": "2337.560", "unit": "KILOWATT_HOUR" }, "outdoorTemperature": { "value": "6.400", "unit": "DEGREES_CELSIUS" } },
+      { "startAt": "2026-01-01T00:00:00+00:00", "endAt": "2026-02-01T00:00:00+00:00", "energyInput": { "value": "674.744", "unit": "KILOWATT_HOUR" }, "energyOutput": { "value": "2491.392", "unit": "KILOWATT_HOUR" }, "outdoorTemperature": { "value": "6.500", "unit": "DEGREES_CELSIUS" } },
+      { "startAt": "2026-02-01T00:00:00+00:00", "endAt": "2026-03-01T00:00:00+00:00", "energyInput": { "value": "455.697", "unit": "KILOWATT_HOUR" }, "energyOutput": { "value": "1863.633", "unit": "KILOWATT_HOUR" }, "outdoorTemperature": { "value": "8.600", "unit": "DEGREES_CELSIUS" } },
+      { "startAt": "2026-03-01T00:00:00+00:00", "endAt": "2026-04-01T00:00:00+00:00", "energyInput": { "value": "406.726", "unit": "KILOWATT_HOUR" }, "energyOutput": { "value": "1642.497", "unit": "KILOWATT_HOUR" }, "outdoorTemperature": { "value": "9.500", "unit": "DEGREES_CELSIUS" } }
+    ]
+  }
+}

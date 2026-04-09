@@ -1,0 +1,36 @@
+{
+  "description": "heatPumpTimeRangedPerformance - same query, different date ranges. Returns a single aggregated CoP + energy totals for the whole period.",
+  "request_template": "query { heatPumpTimeRangedPerformance(accountNumber: \"A-XXXXXXXX\", euid: \"XX:XX:XX:XX:XX:XX:XX:XX\", startAt: \"...\", endAt: \"...\") { coefficientOfPerformance energyInput { value unit } energyOutput { value unit } } }",
+  "results": {
+    "today": {
+      "range": "2026-04-09 (1 day)",
+      "coefficientOfPerformance": "3.642",
+      "energyInput_kWh": 1.312,
+      "energyOutput_kWh": 4.778
+    },
+    "yesterday": {
+      "range": "2026-04-08 (1 day)",
+      "coefficientOfPerformance": "4.261",
+      "energyInput_kWh": 4.164,
+      "energyOutput_kWh": 17.742
+    },
+    "last7days": {
+      "range": "2026-04-02 to 2026-04-09",
+      "coefficientOfPerformance": "4.062",
+      "energyInput_kWh": 63.426,
+      "energyOutput_kWh": 257.622
+    },
+    "last30days": {
+      "range": "2026-03-10 to 2026-04-09",
+      "coefficientOfPerformance": "3.990",
+      "energyInput_kWh": 363.084,
+      "energyOutput_kWh": 1448.542
+    },
+    "last90days": {
+      "range": "2026-01-09 to 2026-04-09",
+      "coefficientOfPerformance": "4.035",
+      "energyInput_kWh": 1366.472,
+      "energyOutput_kWh": 5513.994
+    }
+  }
+}

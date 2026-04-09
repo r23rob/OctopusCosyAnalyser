@@ -1,0 +1,3 @@
+{
+  "query": "query { heatPumpControllerStatus(accountNumber: \"A-XXXXXXXX\", euid: \"XX:XX:XX:XX:XX:XX:XX:XX\") { sensors { code connectivity { online retrievedAt } telemetry { temperatureInCelsius humidityPercentage rssi voltage retrievedAt } } zones { zone telemetry { setpointInCelsius mode relaySwitchedOn heatDemand retrievedAt } } } }"
+}

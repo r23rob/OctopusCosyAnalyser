@@ -1,0 +1,176 @@
+{
+  "request": {
+    "query": "query { heatPumpControllerConfiguration(accountNumber: \"A-XXXXXXXX\", euid: \"XX:XX:XX:XX:XX:XX:XX:XX\") { controller { firmwareConfiguration { esp32 efr32 eui } state heatPumpTimezone connected lastReset } zones { configuration { code zoneType enabled displayName primarySensor currentOperation { mode setpointInCelsius action end } previousOperation { mode setpointInCelsius action } callForHeat heatDemand emergency sensors { ... on ADCSensorConfiguration { code displayName type enabled } ... on ZigbeeSensorConfiguration { code displayName type id firmwareVersion boostEnabled } } } schedules { days settings { startTime action setpointInCelsius zoneState } } } heatPump { serialNumber model hardwareVersion faultCodes weatherCompensation { enabled allowableMinimumTemperatureRange { minimum { value unit } maximum { value unit } } allowableMaximumTemperatureRange { minimum { value unit } maximum { value unit } } currentRange { minimum { value unit } maximum { value unit } } } heatingFlowTemperature { allowableRange { minimum { value unit } maximum { value unit } } currentTemperature { value unit } } manifoldEnabled hasHeatPumpCompatibleCylinder maxWaterSetpoint minWaterSetpoint latestCounterReset quieterModeEnabled } } }"
+  },
+  "response": {
+    "data": {
+      "heatPumpControllerConfiguration": {
+        "controller": {
+          "firmwareConfiguration": { "esp32": "v1.1.1", "efr32": "15", "eui": "XXXXXXXXXXXXXXXX" },
+          "state": ["NORMAL_MODE"],
+          "accessPointPassword": "[REDACTED]",
+          "heatPumpTimezone": "GMT0BST,M3.5.0/1,M10.5.0",
+          "connected": true,
+          "lastReset": "2026-03-30T12:20:43+00:00"
+        },
+        "zones": [
+          {
+            "configuration": {
+              "code": "WATER",
+              "zoneType": "WATER",
+              "enabled": true,
+              "displayName": "WATER",
+              "primarySensor": "ADC1",
+              "currentOperation": { "mode": "AUTO", "setpointInCelsius": null, "action": "OFF", "end": "1970-01-01T00:00:00+00:00" },
+              "previousOperation": { "mode": "AUTO", "setpointInCelsius": null, "action": "OFF" },
+              "callForHeat": false,
+              "heatDemand": false,
+              "emergency": false,
+              "sensors": [
+                { "code": "ADC1", "displayName": "ADC1", "type": "NTC", "enabled": true },
+                { "code": "ADC2", "displayName": "ADC2", "type": "NTC", "enabled": true },
+                { "code": "ADC3", "displayName": "ADC3", "type": "NTC", "enabled": true },
+                { "code": "ADC4", "displayName": "ADC4", "type": "NTC", "enabled": true }
+              ]
+            },
+            "schedules": [
+              {
+                "days": "1111111",
+                "settings": [
+                  { "startTime": "01:30:00", "action": "OFF", "setpointInCelsius": null, "zoneState": "OFF" },
+                  { "startTime": "04:00:00", "action": "OFF", "setpointInCelsius": null, "zoneState": "OFF" },
+                  { "startTime": "10:00:00", "action": "60.0", "setpointInCelsius": 60, "zoneState": "ON" },
+                  { "startTime": "11:20:00", "action": "OFF", "setpointInCelsius": null, "zoneState": "OFF" },
+                  { "startTime": "22:00:00", "action": "OFF", "setpointInCelsius": null, "zoneState": "OFF" },
+                  { "startTime": "23:55:00", "action": "60.0", "setpointInCelsius": 60, "zoneState": "ON" }
+                ]
+              }
+            ]
+          },
+          {
+            "configuration": {
+              "code": "ZONE_1",
+              "zoneType": "HEAT",
+              "enabled": true,
+              "displayName": "ZONE1",
+              "primarySensor": "SENSOR01",
+              "currentOperation": { "mode": "AUTO", "setpointInCelsius": 20.5, "action": null, "end": "1970-01-01T00:00:00+00:00" },
+              "previousOperation": { "mode": "AUTO", "setpointInCelsius": 20, "action": null },
+              "callForHeat": false,
+              "heatDemand": false,
+              "emergency": false,
+              "sensors": [
+                { "code": "SENSOR01", "displayName": "Living Room", "type": "ZIGBEE", "id": "XXXXXXXXXXXXXXXX", "firmwareVersion": "0D", "boostEnabled": true },
+                { "code": "SENSOR02", "displayName": "Bedroom 1", "type": "ZIGBEE", "id": "YYYYYYYYYYYYYYYY", "firmwareVersion": "0D", "boostEnabled": true },
+                { "code": "SENSOR03", "displayName": "Office", "type": "ZIGBEE", "id": "ZZZZZZZZZZZZZZZZ", "firmwareVersion": "0D", "boostEnabled": true }
+              ]
+            },
+            "schedules": [
+              {
+                "days": "1111111",
+                "settings": [
+                  { "startTime": "03:30:00", "action": "20.5", "setpointInCelsius": 20.5, "zoneState": "ON" },
+                  { "startTime": "06:30:00", "action": "20.5", "setpointInCelsius": 20.5, "zoneState": "ON" },
+                  { "startTime": "10:00:00", "action": "20.0", "setpointInCelsius": 20, "zoneState": "ON" },
+                  { "startTime": "15:00:00", "action": "20.5", "setpointInCelsius": 20.5, "zoneState": "ON" },
+                  { "startTime": "16:00:00", "action": "20.5", "setpointInCelsius": 20.5, "zoneState": "ON" },
+                  { "startTime": "23:30:00", "action": "20.5", "setpointInCelsius": 20.5, "zoneState": "ON" }
+                ]
+              }
+            ]
+          },
+          {
+            "configuration": {
+              "code": "ZONE_2",
+              "zoneType": "HEAT",
+              "enabled": false,
+              "displayName": "ZONE2",
+              "primarySensor": "SENSOR02",
+              "currentOperation": { "mode": "OFF", "setpointInCelsius": 7, "action": null, "end": "1970-01-01T00:00:00+00:00" },
+              "previousOperation": { "mode": "OFF", "setpointInCelsius": 7, "action": null },
+              "callForHeat": false,
+              "heatDemand": false,
+              "emergency": true,
+              "sensors": []
+            },
+            "schedules": [
+              {
+                "days": "1111111",
+                "settings": [
+                  { "startTime": "06:00:00", "action": "20.0", "setpointInCelsius": 20, "zoneState": "ON" },
+                  { "startTime": "08:00:00", "action": "10.0", "setpointInCelsius": 10, "zoneState": "ON" },
+                  { "startTime": "10:00:00", "action": "10.0", "setpointInCelsius": 10, "zoneState": "ON" },
+                  { "startTime": "12:00:00", "action": "10.0", "setpointInCelsius": 10, "zoneState": "ON" },
+                  { "startTime": "16:00:00", "action": "18.0", "setpointInCelsius": 18, "zoneState": "ON" },
+                  { "startTime": "23:00:00", "action": "7.0", "setpointInCelsius": 7, "zoneState": "ON" }
+                ]
+              }
+            ]
+          },
+          {
+            "configuration": {
+              "code": "AUXILIARY",
+              "zoneType": "HEAT",
+              "enabled": false,
+              "displayName": "AUX",
+              "primarySensor": null,
+              "currentOperation": { "mode": "OFF", "setpointInCelsius": 7, "action": null, "end": "1970-01-01T00:00:00+00:00" },
+              "previousOperation": { "mode": "OFF", "setpointInCelsius": 18, "action": null },
+              "callForHeat": false,
+              "heatDemand": false,
+              "emergency": true,
+              "sensors": []
+            },
+            "schedules": [
+              {
+                "days": "1111111",
+                "settings": [
+                  { "startTime": "06:00:00", "action": "OFF", "setpointInCelsius": null, "zoneState": "OFF" },
+                  { "startTime": "08:00:00", "action": "OFF", "setpointInCelsius": null, "zoneState": "OFF" },
+                  { "startTime": "10:00:00", "action": "OFF", "setpointInCelsius": null, "zoneState": "OFF" },
+                  { "startTime": "12:00:00", "action": "OFF", "setpointInCelsius": null, "zoneState": "OFF" },
+                  { "startTime": "16:00:00", "action": "OFF", "setpointInCelsius": null, "zoneState": "OFF" },
+                  { "startTime": "23:00:00", "action": "OFF", "setpointInCelsius": null, "zoneState": "OFF" }
+                ]
+              }
+            ]
+          }
+        ],
+        "heatPump": {
+          "serialNumber": "XXXXXXXXXXXXXXXXXXXX",
+          "model": "Cosy 6",
+          "hardwareVersion": "v5.1.0",
+          "faultCodes": [],
+          "weatherCompensation": {
+            "enabled": true,
+            "allowableMinimumTemperatureRange": {
+              "minimum": { "value": "30", "unit": "DEGREES_CELSIUS" },
+              "maximum": { "value": "40", "unit": "DEGREES_CELSIUS" }
+            },
+            "allowableMaximumTemperatureRange": {
+              "minimum": { "value": "45", "unit": "DEGREES_CELSIUS" },
+              "maximum": { "value": "70", "unit": "DEGREES_CELSIUS" }
+            },
+            "currentRange": {
+              "minimum": { "value": "37", "unit": "DEGREES_CELSIUS" },
+              "maximum": { "value": "58", "unit": "DEGREES_CELSIUS" }
+            }
+          },
+          "heatingFlowTemperature": {
+            "allowableRange": {
+              "minimum": { "value": "30", "unit": "DEGREES_CELSIUS" },
+              "maximum": { "value": "70", "unit": "DEGREES_CELSIUS" }
+            },
+            "currentTemperature": { "value": "65.5", "unit": "DEGREES_CELSIUS" }
+          },
+          "manifoldEnabled": false,
+          "hasHeatPumpCompatibleCylinder": true,
+          "maxWaterSetpoint": 60,
+          "minWaterSetpoint": 40,
+          "latestCounterReset": "2025-07-03T09:03:08.383000+00:00",
+          "quieterModeEnabled": false
+        }
+      }
+    }
+  }
+}

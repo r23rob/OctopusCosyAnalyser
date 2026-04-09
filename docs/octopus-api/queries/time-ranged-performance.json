@@ -1,0 +1,14 @@
+{
+  "request": {
+    "query": "query { heatPumpTimeRangedPerformance(accountNumber: \"A-XXXXXXXX\", euid: \"XX:XX:XX:XX:XX:XX:XX:XX\", startAt: \"2026-04-02T00:00:00Z\", endAt: \"2026-04-09T00:00:00Z\") { coefficientOfPerformance energyInput { value unit } energyOutput { value unit } } }"
+  },
+  "response": {
+    "data": {
+      "heatPumpTimeRangedPerformance": {
+        "coefficientOfPerformance": "4.062",
+        "energyInput": { "value": "63.426", "unit": "KILOWATT_HOUR" },
+        "energyOutput": { "value": "257.622", "unit": "KILOWATT_HOUR" }
+      }
+    }
+  }
+}

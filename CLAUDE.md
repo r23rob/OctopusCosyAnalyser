@@ -105,9 +105,14 @@ Unique constraints prevent duplicate snapshots `(DeviceId, SnapshotTakenAt)` and
 
 Full schema reference (auto-generated from introspection): [`docs/octopus-graphql-schema.md`](docs/octopus-graphql-schema.md)
 
-Base URL: `https://api.octopus.energy/v1/graphql/`
+Heat pump query docs, example requests/responses, and time-series samples: [`docs/octopus-api/heat-pump-api-reference.md`](docs/octopus-api/heat-pump-api-reference.md)
 
-Authentication: POST to GraphQL with `obtainKrakenToken(input: {APIKey: "..."})` mutation → returns JWT. Token cached for 55 minutes in a `ConcurrentDictionary`.
+**Auth endpoint (token acquisition):** `https://api.octopus.energy/v1/graphql/`
+**Data endpoint (heat pump queries):** `https://api.backend.octopus.energy/v1/graphql/`
+
+Both endpoints accept GraphQL over HTTPS. Authentication uses the auth endpoint; all heat pump queries (status, config, performance) use the backend endpoint. See `OctopusEnergyClient.cs` for how the two base URLs are configured.
+
+Authentication: POST to the auth endpoint with `obtainKrakenToken(input: {APIKey: "..."})` mutation → returns JWT. Token cached for 55 minutes in a `ConcurrentDictionary`.
 
 All user-supplied values (`apiKey`, `accountNumber`, `euid`, `deviceId`, `make`) are validated against `^[A-Za-z0-9\-_]{1,200}` before string interpolation into GraphQL payloads to prevent injection.
 
