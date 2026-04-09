@@ -21,11 +21,18 @@ body:json {
   }
 }
 
+vars:pre-request {
+  token: yJhbGciOiJSUzI1NiIsImlzcyI6Imh0dHBzOi8vYXBpLm9jdG9wdXMuZW5lcmd5L3YxL2dyYXBocWwvIiwiamt1IjoiaHR0cHM6Ly9hdXRoLm9jdG9wdXMuZW5lcmd5Ly53ZWxsLWtub3duL2p3a3MuanNvbiIsImtpZCI6InFRb3hIbzhiTF91Wi1NdE9kQ2labDZacjFaMWsyM1l2Y0taZnU5QldHNkEiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiJrcmFrZW58YWNjb3VudC11c2VyOjc1NjI0MzgiLCJndHkiOiJFTUFJTC1BTkQtUEFTU1dPUkQiLCJlbWFpbCI6InJvYkBodXRjaGluLmNvLnVrIiwidG9rZW5Vc2UiOiJhY2Nlc3MiLCJpc3MiOiJodHRwczovL2FwaS5vY3RvcHVzLmVuZXJneS92MS9ncmFwaHFsLyIsImlhdCI6MTc3NTY4NDI4OSwiZXhwIjoxNzc1Njg3ODg5LCJvcmlnSWF0IjoxNzc1Njg0Mjg5fQ.hvDtVW48kePgVXJ6mdY2zez1Y375jWyUok1Bw2K9PySOrEjt-HioTfpkH1ZUu3UpfPkEhve3504G06G_42iR1e2VZgKdXXvPFB2UcLpZzCBLTw6IEBUrd0DEHwtWiGTlLzUb_EumQo1WuFMC41Wh0tiIoWlIdKMf7N8H3Nk_i8WGF3lzyB0WzqSwtiriZZW21p8m6TITmffyh-D2SiY8NkV3c4ui-Od1CRekZGVbiUSF1zbSa_WrpbcWG9PLAorTymq2_nEnxt9AknOJWaXGB4mHdKcZ-VRW29V3YtA1lMYlYopvSkTbS-lj_Iquf-QhOz3sttA9gaKtk3Imy1edbw
+  dataEndpoint: https://api.backend.octopus.energy/v1/graphql/
+  accountNumber: A-1C3B4330
+  euid: 00:1e:5e:09:02:ba:5d:84
+}
+
 tests {
   test("should return 200", function() {
     expect(res.status).to.equal(200);
   });
-
+  
   test("should not have errors", function() {
     expect(res.body.errors).to.be.undefined;
   });

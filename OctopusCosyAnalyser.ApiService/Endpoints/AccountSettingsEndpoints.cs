@@ -39,9 +39,6 @@ public static class AccountSettingsEndpoints
             if (authMode is not "apikey" and not "password")
                 return Results.BadRequest("AuthMode must be 'apikey' or 'password'");
 
-            var authMode = string.IsNullOrWhiteSpace(request.AuthMode) ? "apikey" : request.AuthMode.Trim().ToLowerInvariant();
-            if (authMode is not "apikey" and not "password")
-                return Results.BadRequest("AuthMode must be 'apikey' or 'password'");
 
             if (authMode == "password")
             {
