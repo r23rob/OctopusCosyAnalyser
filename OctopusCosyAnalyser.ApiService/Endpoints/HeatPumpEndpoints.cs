@@ -1259,8 +1259,16 @@ public static class HeatPumpEndpoints
         {
             from ??= DateTime.UtcNow.AddDays(-7);
             to ??= DateTime.UtcNow;
-            grouping ??= "day";
+            grouping = (grouping?.ToLowerInvariant()) switch
+            {
+                "week" => "week",
+                "month" => "month",
+                "day" or null => "day",
+                _ => null
+            };
 
+            if (grouping is null)
+                return Results.BadRequest("Invalid grouping. Allowed values: day, week, month.");
             if (from >= to)
                 return Results.BadRequest("'from' must be before 'to'.");
             if ((to.Value - from.Value).TotalDays > Constants.MaxAggregateSpanDays)
@@ -1271,7 +1279,7 @@ public static class HeatPumpEndpoints
                 .Where(e => e.DeviceId == deviceId && e.IntervalStart >= from && e.IntervalStart <= to)
                 .ToListAsync(ct);
 
-            var grouped = grouping.ToLowerInvariant() switch
+            var grouped = grouping switch
             {
                 "week" => intervals.GroupBy(e => GetWeekStart(e.IntervalStart)),
                 "month" => intervals.GroupBy(e => new DateTime(e.IntervalStart.Year, e.IntervalStart.Month, 1, 0, 0, 0, DateTimeKind.Utc)),
@@ -1289,7 +1297,7 @@ public static class HeatPumpEndpoints
                     return new EnergySummaryDto
                     {
                         PeriodStart = g.Key,
-                        PeriodEnd = grouping.ToLowerInvariant() switch
+                        PeriodEnd = grouping switch
                         {
                             "week" => g.Key.AddDays(7),
                             "month" => g.Key.AddMonths(1),

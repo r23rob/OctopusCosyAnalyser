@@ -127,6 +127,7 @@ public class TariffSyncService : ITariffSyncService
             .Where(r => r.DeviceId == deviceId
                 && r.ValidFrom <= timestamp
                 && (r.ValidTo == null || r.ValidTo > timestamp))
+            .OrderByDescending(r => r.ValidFrom)
             .Select(r => (decimal?)r.UnitRatePence)
             .FirstOrDefaultAsync(cancellationToken);
     }

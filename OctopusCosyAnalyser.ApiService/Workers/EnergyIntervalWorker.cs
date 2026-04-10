@@ -69,6 +69,8 @@ public class EnergyIntervalWorker : BackgroundService
             try
             {
                 await ProcessDeviceAsync(db, tariffService, device, stoppingToken);
+                // Clear change tracker between devices to bound memory during long backfills
+                db.ChangeTracker.Clear();
             }
             catch (Exception ex)
             {
@@ -93,6 +95,16 @@ public class EnergyIntervalWorker : BackgroundService
             rangeStart = DateTime.UtcNow.AddDays(-BackfillDays);
             _logger.LogInformation("First run for device {DeviceId}: backfilling {Days} days of energy intervals",
                 device.DeviceId, BackfillDays);
+
+            // Sync tariff rates for the full backfill range before computing intervals
+            var settings = await db.OctopusAccountSettings
+                .FirstOrDefaultAsync(s => s.AccountNumber == device.AccountNumber, stoppingToken);
+            if (settings is not null)
+            {
+                _logger.LogInformation("Syncing tariff rates for backfill range ({Days} days) for device {DeviceId}",
+                    BackfillDays, device.DeviceId);
+                await tariffService.SyncRatesAsync(db, settings, device, rangeStart, DateTime.UtcNow, stoppingToken);
+            }
         }
         else
         {
@@ -118,14 +130,16 @@ public class EnergyIntervalWorker : BackgroundService
             var chunkEnd = currentDate.AddDays(ChunkSizeDays);
             if (chunkEnd > cutoff) chunkEnd = cutoff;
 
-            await ProcessWindowsForRangeAsync(db, tariffService, device.DeviceId, chunkStart, chunkEnd, stoppingToken);
+            await ProcessWindowsForRangeAsync(db, device.DeviceId, chunkStart, chunkEnd, stoppingToken);
+
+            // Clear change tracker between chunks to bound memory during backfills
+            db.ChangeTracker.Clear();
             currentDate = currentDate.AddDays(ChunkSizeDays);
         }
     }
 
     private async Task ProcessWindowsForRangeAsync(
         CosyDbContext db,
-        ITariffSyncService tariffService,
         string deviceId,
         DateTime rangeStart,
         DateTime rangeEnd,
@@ -138,22 +152,47 @@ public class EnergyIntervalWorker : BackgroundService
         var firstWindow = windowStarts[0];
         var lastWindowEnd = windowStarts[^1].AddMinutes(30);
 
-        // Batch-load snapshots for the entire range
+        // Batch-load snapshots for the entire range (AsNoTracking — read-only)
         var snapshots = await db.HeatPumpSnapshots
+            .AsNoTracking()
             .Where(s => s.DeviceId == deviceId
                 && s.SnapshotTakenAt >= firstWindow
                 && s.SnapshotTakenAt < lastWindowEnd)
             .OrderBy(s => s.SnapshotTakenAt)
             .ToListAsync(stoppingToken);
 
-        // Batch-load consumption readings for the range
+        // Group snapshots by window once — O(n) instead of O(windows * snapshots)
+        var snapshotsByWindow = snapshots
+            .GroupBy(s => AlignToWindow(s.SnapshotTakenAt))
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Batch-load consumption readings for the range (AsNoTracking — read-only)
         var consumption = await db.ConsumptionReadings
+            .AsNoTracking()
             .Where(c => c.DeviceId == deviceId
                 && c.ReadAt >= firstWindow
                 && c.ReadAt < lastWindowEnd)
             .ToDictionaryAsync(c => AlignToWindow(c.ReadAt), stoppingToken);
 
-        // Load existing intervals for upsert
+        // Batch-load tariff rates covering the range — avoids N+1 per-window DB queries
+        var tariffRates = await db.TariffRates
+            .AsNoTracking()
+            .Where(r => r.DeviceId == deviceId
+                && r.ValidFrom <= lastWindowEnd
+                && (r.ValidTo == null || r.ValidTo > firstWindow))
+            .OrderByDescending(r => r.ValidFrom)
+            .ToListAsync(stoppingToken);
+
+        // Batch-load standing charges from DailyCostRecords for days in this range
+        var firstDate = DateOnly.FromDateTime(firstWindow);
+        var lastDate = DateOnly.FromDateTime(lastWindowEnd);
+        var standingCharges = await db.DailyCostRecords
+            .AsNoTracking()
+            .Where(r => r.DeviceId == deviceId && r.Date >= firstDate && r.Date <= lastDate)
+            .Where(r => r.StandingChargePence != null)
+            .ToDictionaryAsync(r => r.Date, r => r.StandingChargePence, stoppingToken);
+
+        // Load existing intervals for upsert (tracked — we need to update them)
         var existingIntervals = await db.EnergyIntervals
             .Where(e => e.DeviceId == deviceId
                 && e.IntervalStart >= firstWindow
@@ -167,23 +206,29 @@ public class EnergyIntervalWorker : BackgroundService
         {
             var windowEnd = windowStart.AddMinutes(30);
 
-            // Find snapshots in this window
-            var windowSnapshots = snapshots
-                .Where(s => s.SnapshotTakenAt >= windowStart && s.SnapshotTakenAt < windowEnd)
-                .ToList();
+            // Look up snapshots from pre-grouped dictionary — O(1)
+            snapshotsByWindow.TryGetValue(windowStart, out var windowSnapshots);
+            windowSnapshots ??= [];
 
             // Find consumption reading for this window
             consumption.TryGetValue(windowStart, out var consumptionReading);
 
-            // Look up tariff rate
-            var unitRate = await tariffService.GetUnitRateAtAsync(db, deviceId, windowStart, stoppingToken);
+            // Look up tariff rate from in-memory list — most recent rate where ValidFrom <= windowStart
+            var unitRate = LookupUnitRate(tariffRates, windowStart);
+
+            // Look up standing charge (only for first interval of the day)
+            decimal? standingCharge = null;
+            if (windowStart.TimeOfDay == TimeSpan.Zero)
+            {
+                var dateKey = DateOnly.FromDateTime(windowStart);
+                standingCharges.TryGetValue(dateKey, out standingCharge);
+            }
 
             // Compute interval values
-            var interval = ComputeInterval(deviceId, windowStart, windowEnd, windowSnapshots, consumptionReading, unitRate);
+            var interval = ComputeInterval(deviceId, windowStart, windowEnd, windowSnapshots, consumptionReading, unitRate, standingCharge);
 
             if (existingIntervals.TryGetValue(windowStart, out var existing))
             {
-                // Update if data has changed (e.g., late-arriving consumption or tariff)
                 if (UpdateIfChanged(existing, interval))
                     updatedCount++;
             }
@@ -202,13 +247,28 @@ public class EnergyIntervalWorker : BackgroundService
         }
     }
 
+    /// <summary>
+    /// In-memory point-in-time tariff rate lookup. Rates are pre-sorted by ValidFrom descending,
+    /// so the first match where ValidFrom &lt;= timestamp is the most recent applicable rate.
+    /// </summary>
+    private static decimal? LookupUnitRate(List<TariffRate> rates, DateTime timestamp)
+    {
+        foreach (var rate in rates)
+        {
+            if (rate.ValidFrom <= timestamp && (rate.ValidTo == null || rate.ValidTo > timestamp))
+                return rate.UnitRatePence;
+        }
+        return null;
+    }
+
     private static EnergyInterval ComputeInterval(
         string deviceId,
         DateTime windowStart,
         DateTime windowEnd,
         List<HeatPumpSnapshot> snapshots,
         ConsumptionReading? consumption,
-        decimal? unitRate)
+        decimal? unitRate,
+        decimal? standingCharge)
     {
         var snapshotCount = (short)snapshots.Count;
 
@@ -230,11 +290,10 @@ public class EnergyIntervalWorker : BackgroundService
             var powerInputs = snapshots.Where(s => s.PowerInputKilowatt.HasValue).ToList();
             avgPowerInputKw = powerInputs.Count > 0 ? powerInputs.Average(s => s.PowerInputKilowatt!.Value) : null;
 
-            // Heat output: sum kW * (interval per snapshot in hours)
-            // Each snapshot covers ~15 min = 0.25h
+            // Heat output: sum kW * snapshot interval in hours (uses shared constant)
             var heatOutputs = snapshots.Where(s => s.HeatOutputKilowatt.HasValue).ToList();
             heatOutputKwh = heatOutputs.Count > 0
-                ? heatOutputs.Sum(s => s.HeatOutputKilowatt!.Value * 0.25m)
+                ? heatOutputs.Sum(s => s.HeatOutputKilowatt!.Value * (decimal)Constants.SnapshotIntervalHours)
                 : null;
 
             var outdoorTemps = snapshots.Where(s => s.OutdoorTemperatureCelsius.HasValue).ToList();
@@ -254,17 +313,12 @@ public class EnergyIntervalWorker : BackgroundService
         decimal? consumptionKwh = consumption?.Consumption;
         decimal? demandW = consumption?.Demand;
 
-        // Standing charge: only on first interval of the day
-        decimal? standingCharge = null;
-        if (windowStart.TimeOfDay == TimeSpan.Zero)
-        {
-            // Standing charge is set at the day level; the nightly sync populates this
-            // from DailyCostRecord if available
-        }
-
-        // Derived cost
-        decimal? costPence = (consumptionKwh.HasValue && unitRate.HasValue)
+        // Derived cost: energy cost + standing charge (if first interval of day)
+        decimal? energyCostPence = (consumptionKwh.HasValue && unitRate.HasValue)
             ? consumptionKwh.Value * unitRate.Value
+            : null;
+        decimal? costPence = (energyCostPence.HasValue || standingCharge.HasValue)
+            ? (energyCostPence ?? 0m) + (standingCharge ?? 0m)
             : null;
 
         return new EnergyInterval
@@ -314,6 +368,13 @@ public class EnergyIntervalWorker : BackgroundService
             changed = true;
         }
 
+        // Patch null standing charge
+        if (!existing.StandingChargePence.HasValue && computed.StandingChargePence.HasValue)
+        {
+            existing.StandingChargePence = computed.StandingChargePence;
+            changed = true;
+        }
+
         // Patch null snapshot data (if snapshots arrived late or were reprocessed)
         if (existing.SnapshotCount == 0 && computed.SnapshotCount > 0)
         {
@@ -332,7 +393,8 @@ public class EnergyIntervalWorker : BackgroundService
         // Recompute cost if components now available
         if (!existing.CostPence.HasValue && existing.ConsumptionKwh.HasValue && existing.UnitRatePencePerKwh.HasValue)
         {
-            existing.CostPence = existing.ConsumptionKwh.Value * existing.UnitRatePencePerKwh.Value;
+            var energyCost = existing.ConsumptionKwh.Value * existing.UnitRatePencePerKwh.Value;
+            existing.CostPence = energyCost + (existing.StandingChargePence ?? 0m);
             changed = true;
         }
 
@@ -363,7 +425,6 @@ public class EnergyIntervalWorker : BackgroundService
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
         var tariffService = scope.ServiceProvider.GetRequiredService<ITariffSyncService>();
-        var client = scope.ServiceProvider.GetRequiredService<IOctopusEnergyClient>();
 
         var devices = await db.HeatPumpDevices
             .Where(d => d.IsActive)
@@ -387,7 +448,7 @@ public class EnergyIntervalWorker : BackgroundService
 
                 // Re-process yesterday's 48 windows
                 var yesterday = now.Date.AddDays(-1);
-                await ProcessWindowsForRangeAsync(db, tariffService, device.DeviceId,
+                await ProcessWindowsForRangeAsync(db, device.DeviceId,
                     yesterday, yesterday.AddDays(1), stoppingToken);
 
                 // Also patch any intervals from the last 7 days that still have null cost
@@ -402,7 +463,8 @@ public class EnergyIntervalWorker : BackgroundService
 
                 foreach (var interval in nullCostIntervals)
                 {
-                    interval.CostPence = interval.ConsumptionKwh!.Value * interval.UnitRatePencePerKwh!.Value;
+                    interval.CostPence = interval.ConsumptionKwh!.Value * interval.UnitRatePencePerKwh!.Value
+                        + (interval.StandingChargePence ?? 0m);
                     interval.UpdatedAt = DateTime.UtcNow;
                 }
 
