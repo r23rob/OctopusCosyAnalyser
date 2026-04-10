@@ -62,7 +62,7 @@ function GaugeSvg({ cop, color }: { cop: number; color: string }) {
   const [b4x, b4y] = pa(ea)
 
   return (
-    <svg width="240" height="132" viewBox="0 0 210 116" className="my-[-2px]">
+    <svg width="240" height="132.6" viewBox="0 0 210 116" className="my-[-2px]">
       {/* Background arcs */}
       <path
         d={`M${x1},${y1} A${r},${r} 0 0,1 ${b2x.toFixed(1)},${b2y.toFixed(1)}`}
