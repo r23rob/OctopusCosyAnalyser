@@ -10,9 +10,9 @@ interface Props {
 export function MetricsStrip({ periodSummary: p, previousPeriodSummary: prev, vsLabel = '' }: Props) {
   if (!p) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-[88px] rounded-[10px] bg-white border border-border-subtle animate-pulse" />
+          <div key={i} className="h-[100px] rounded-[10px] bg-white border border-border-subtle animate-pulse" />
         ))}
       </div>
     )
@@ -67,7 +67,7 @@ export function MetricsStrip({ periodSummary: p, previousPeriodSummary: prev, vs
   ]
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
       {kpis.map((k, i) => (
         <KpiCard key={i} {...k} vsLabel={vsLabel} delay={i * 0.04} />
       ))}
@@ -91,17 +91,17 @@ function KpiCard({ label, value, unit, current, previous, higherIsBetter, vsLabe
 
   return (
     <div
-      className="bg-white border border-border-subtle rounded-[10px] px-[14px] pt-[15px] pb-3 hover:border-border-card transition-colors duration-150"
+      className="bg-white border border-border-subtle rounded-[10px] px-[18px] pt-[18px] pb-4 hover:border-border-card transition-colors duration-150"
       style={{ animation: `slide-up 0.4s ease both`, animationDelay: `${delay}s` }}
     >
-      <div className="font-mono text-[11px] tracking-[.1em] uppercase text-ink3 mb-[7px]">{label}</div>
-      <div className="font-mono text-[26px] font-normal tracking-tight leading-none text-ink">
+      <div className="font-mono text-[12px] tracking-[.1em] uppercase text-ink3 mb-[7px]">{label}</div>
+      <div className="font-mono text-[32px] font-normal tracking-tight leading-none text-ink">
         {value}
-        {unit && <span className="text-[14px] font-light text-ink3 ml-[2px]">{unit}</span>}
+        {unit && <span className="text-[16px] font-light text-ink3 ml-[2px]">{unit}</span>}
       </div>
       {delta && (
         <div
-          className={`inline-flex items-center gap-0.5 mt-[5px] font-mono text-[10px] px-1.5 py-0.5 rounded ${
+          className={`inline-flex items-center gap-0.5 mt-[5px] font-mono text-[11px] px-1.5 py-0.5 rounded ${
             delta.good
               ? 'bg-success-bg text-success'
               : 'bg-danger-bg text-danger'

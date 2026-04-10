@@ -17,16 +17,16 @@ export function CopGaugeCard({ cop, flowTemp, setpointTemp }: Props) {
     : 'rgba(255,255,255,0.3)'
 
   return (
-    <div className="bg-ink rounded-[10px] p-5 flex flex-col items-center">
-      <div className="font-mono text-[10px] tracking-[.1em] uppercase text-white/20 self-start mb-0.5">
+    <div className="bg-ink rounded-[10px] p-6 flex flex-col items-center">
+      <div className="font-mono text-[11px] tracking-[.1em] uppercase text-white/20 self-start mb-0.5">
         Avg COP
       </div>
       <GaugeSvg cop={cop ?? 0} color={clr} />
-      <div className="font-mono text-[44px] font-normal leading-none tracking-tight" style={{ color: clr }}>
+      <div className="font-mono text-[52px] font-normal leading-none tracking-tight" style={{ color: clr }}>
         {fmtDec(cop, 2)}
       </div>
       <div
-        className={`font-mono text-[10px] tracking-[.08em] uppercase mt-1.5 px-[9px] py-[3px] rounded ${
+        className={`font-mono text-[11px] tracking-[.08em] uppercase mt-1.5 px-[9px] py-[3px] rounded ${
           cls === 'g' ? 'bg-[rgba(22,163,74,0.18)] text-[#4ADE80]'
           : cls === 'w' ? 'bg-[rgba(217,119,6,0.18)] text-[#FCD34D]'
           : 'bg-[rgba(220,38,38,0.18)] text-[#F87171]'
@@ -35,8 +35,8 @@ export function CopGaugeCard({ cop, flowTemp, setpointTemp }: Props) {
         {label}
       </div>
       <div className="flex justify-between items-center self-stretch mt-2.5 px-2.5 py-[7px] bg-white/[0.06] rounded-[7px]">
-        <span className="font-mono text-[10px] tracking-[.07em] uppercase text-white/30">Flow vs setpoint</span>
-        <span className="font-mono text-[14px]" style={{ color: spColor }}>
+        <span className="font-mono text-[11px] tracking-[.07em] uppercase text-white/30">Flow vs setpoint</span>
+        <span className="font-mono text-[16px]" style={{ color: spColor }}>
           {spDelta != null ? `${spDelta > 0 ? '+' : ''}${spDelta}°` : '—'}
         </span>
       </div>
@@ -62,7 +62,7 @@ function GaugeSvg({ cop, color }: { cop: number; color: string }) {
   const [b4x, b4y] = pa(ea)
 
   return (
-    <svg width="210" height="116" viewBox="0 0 210 116" className="my-[-2px]">
+    <svg width="240" height="132" viewBox="0 0 210 116" className="my-[-2px]">
       {/* Background arcs */}
       <path
         d={`M${x1},${y1} A${r},${r} 0 0,1 ${b2x.toFixed(1)},${b2y.toFixed(1)}`}
