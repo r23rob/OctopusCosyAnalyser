@@ -1214,6 +1214,126 @@ public static class HeatPumpEndpoints
             var summary = await aiService.GenerateDashboardSummaryAsync(deviceId, forceRefresh: true, anthropicApiKey: anthropicKey);
             return Results.Ok(summary);
         }).WithName("RefreshAiSummary");
+
+        // ── Energy Intervals ──────────────────────────────────────────
+
+        group.MapGet("/energy-intervals/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, CosyDbContext db, CancellationToken ct) =>
+        {
+            from ??= DateTime.UtcNow.AddDays(-7);
+            to ??= DateTime.UtcNow;
+
+            if (from >= to)
+                return Results.BadRequest("'from' must be before 'to'.");
+            if ((to.Value - from.Value).TotalDays > Constants.MaxAggregateSpanDays)
+                return Results.BadRequest($"Maximum range is {Constants.MaxAggregateSpanDays} days.");
+
+            var intervals = await db.EnergyIntervals
+                .AsNoTracking()
+                .Where(e => e.DeviceId == deviceId && e.IntervalStart >= from && e.IntervalStart <= to)
+                .OrderBy(e => e.IntervalStart)
+                .Select(e => new EnergyIntervalDto
+                {
+                    IntervalStart = e.IntervalStart,
+                    IntervalEnd = e.IntervalEnd,
+                    ConsumptionKwh = e.ConsumptionKwh,
+                    DemandW = e.DemandW,
+                    HeatOutputKwh = e.HeatOutputKwh,
+                    AvgCop = e.AvgCop,
+                    AvgPowerInputKw = e.AvgPowerInputKw,
+                    AvgOutdoorTempC = e.AvgOutdoorTempC,
+                    AvgRoomTempC = e.AvgRoomTempC,
+                    AvgFlowTempC = e.AvgFlowTempC,
+                    WasHeating = e.WasHeating,
+                    WasHotWater = e.WasHotWater,
+                    SnapshotCount = e.SnapshotCount,
+                    UnitRatePencePerKwh = e.UnitRatePencePerKwh,
+                    StandingChargePence = e.StandingChargePence,
+                    CostPence = e.CostPence
+                })
+                .ToListAsync(ct);
+
+            return Results.Ok(intervals);
+        }).WithName("GetEnergyIntervals");
+
+        group.MapGet("/energy-summary/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, string? grouping, CosyDbContext db, CancellationToken ct) =>
+        {
+            from ??= DateTime.UtcNow.AddDays(-7);
+            to ??= DateTime.UtcNow;
+            grouping ??= "day";
+
+            if (from >= to)
+                return Results.BadRequest("'from' must be before 'to'.");
+            if ((to.Value - from.Value).TotalDays > Constants.MaxAggregateSpanDays)
+                return Results.BadRequest($"Maximum range is {Constants.MaxAggregateSpanDays} days.");
+
+            var intervals = await db.EnergyIntervals
+                .AsNoTracking()
+                .Where(e => e.DeviceId == deviceId && e.IntervalStart >= from && e.IntervalStart <= to)
+                .ToListAsync(ct);
+
+            var grouped = grouping.ToLowerInvariant() switch
+            {
+                "week" => intervals.GroupBy(e => GetWeekStart(e.IntervalStart)),
+                "month" => intervals.GroupBy(e => new DateTime(e.IntervalStart.Year, e.IntervalStart.Month, 1, 0, 0, 0, DateTimeKind.Utc)),
+                _ => intervals.GroupBy(e => e.IntervalStart.Date) // "day" default
+            };
+
+            var periods = grouped
+                .OrderBy(g => g.Key)
+                .Select(g =>
+                {
+                    var items = g.ToList();
+                    var heatingIntervals = items.Where(i => i.WasHeating == true).ToList();
+                    var hwIntervals = items.Where(i => i.WasHotWater == true).ToList();
+
+                    return new EnergySummaryDto
+                    {
+                        PeriodStart = g.Key,
+                        PeriodEnd = grouping.ToLowerInvariant() switch
+                        {
+                            "week" => g.Key.AddDays(7),
+                            "month" => g.Key.AddMonths(1),
+                            _ => g.Key.AddDays(1)
+                        },
+                        IntervalCount = items.Count,
+                        TotalConsumptionKwh = items.Where(i => i.ConsumptionKwh.HasValue).Sum(i => i.ConsumptionKwh),
+                        TotalHeatOutputKwh = items.Where(i => i.HeatOutputKwh.HasValue).Sum(i => i.HeatOutputKwh),
+                        TotalCostPence = items.Where(i => i.CostPence.HasValue).Sum(i => i.CostPence),
+                        AvgCop = heatingIntervals.Count > 0 && heatingIntervals.Any(i => i.AvgCop.HasValue)
+                            ? heatingIntervals.Where(i => i.AvgCop.HasValue).Average(i => i.AvgCop!.Value)
+                            : null,
+                        AvgOutdoorTempC = items.Where(i => i.AvgOutdoorTempC.HasValue).Any()
+                            ? items.Where(i => i.AvgOutdoorTempC.HasValue).Average(i => i.AvgOutdoorTempC!.Value)
+                            : null,
+                        AvgUnitRatePence = items.Where(i => i.UnitRatePencePerKwh.HasValue).Any()
+                            ? items.Where(i => i.UnitRatePencePerKwh.HasValue).Average(i => i.UnitRatePencePerKwh!.Value)
+                            : null,
+                        TotalStandingChargePence = items.Where(i => i.StandingChargePence.HasValue).Sum(i => i.StandingChargePence),
+                        HeatingDutyCyclePercent = items.Count > 0
+                            ? Math.Round(heatingIntervals.Count * 100m / items.Count, 1)
+                            : null,
+                        HotWaterDutyCyclePercent = items.Count > 0
+                            ? Math.Round(hwIntervals.Count * 100m / items.Count, 1)
+                            : null
+                    };
+                })
+                .ToList();
+
+            return Results.Ok(new EnergySummaryResponseDto
+            {
+                DeviceId = deviceId,
+                From = from.Value,
+                To = to.Value,
+                Grouping = grouping,
+                Periods = periods
+            });
+        }).WithName("GetEnergySummary");
+    }
+
+    private static DateTime GetWeekStart(DateTime date)
+    {
+        var diff = (7 + (date.DayOfWeek - DayOfWeek.Monday)) % 7;
+        return date.Date.AddDays(-diff);
     }
 
     public sealed record GraphqlQueryRequest(string AccountNumber, string Query, JsonElement? Variables);

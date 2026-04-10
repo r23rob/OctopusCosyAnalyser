@@ -6,6 +6,8 @@ import type {
   AiSummaryDto,
   ConsumptionResponseDto,
   DailyAggregateDto,
+  EnergyIntervalDto,
+  EnergySummaryResponseDto,
   HeatPumpDeviceDto,
   HeatPumpSnapshotDto,
   HeatPumpSummaryDto,
@@ -274,6 +276,18 @@ export const api = {
     getSnapshotsList: async (deviceId: string, from?: Date, to?: Date): Promise<HeatPumpSnapshotDto[]> => {
       const resp = await api.heatpump.getSnapshots(deviceId, from, to)
       return resp.snapshots
+    },
+
+    getEnergyIntervals: (deviceId: string, from?: Date, to?: Date) => {
+      const fromStr = encodeURIComponent(toOctopusIso(from ?? defaultFrom(7)))
+      const toStr = encodeURIComponent(toOctopusIso(to ?? new Date()))
+      return get<EnergyIntervalDto[]>(`/api/heatpump/energy-intervals/${deviceId}?from=${fromStr}&to=${toStr}`)
+    },
+
+    getEnergySummary: (deviceId: string, from?: Date, to?: Date, grouping = 'day') => {
+      const fromStr = encodeURIComponent(toOctopusIso(from ?? defaultFrom(7)))
+      const toStr = encodeURIComponent(toOctopusIso(to ?? new Date()))
+      return get<EnergySummaryResponseDto>(`/api/heatpump/energy-summary/${deviceId}?from=${fromStr}&to=${toStr}&grouping=${grouping}`)
     },
   },
 }
