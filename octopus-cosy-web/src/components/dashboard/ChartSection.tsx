@@ -45,9 +45,9 @@ export function ChartSection({ snapshots, isLoading }: Props) {
   }
 
   return (
-    <div className="bg-white border border-border-subtle rounded-[10px] p-4 hover:border-border-card transition-colors duration-150">
+    <div className="bg-white border border-border-subtle rounded-[10px] p-5 hover:border-border-card transition-colors duration-150">
       <div className="flex justify-between items-start mb-2.5 gap-2">
-        <div className="font-mono text-[10px] tracking-[.1em] uppercase text-ink3">
+        <div className="font-mono text-[11px] tracking-[.1em] uppercase text-ink3">
           Energy · COP · Temperature · Setpoint
         </div>
         <div className="flex flex-wrap gap-[3px]">
@@ -62,7 +62,7 @@ export function ChartSection({ snapshots, isLoading }: Props) {
           ))}
         </div>
       </div>
-      <div className="relative h-[300px]">
+      <div className="relative h-[360px]">
         {isLoading ? (
           <div className="h-full flex items-center justify-center">
             <LoadingSpinner label="Loading data…" />
@@ -82,7 +82,7 @@ export function ChartSection({ snapshots, isLoading }: Props) {
               strokeDasharray: s.dash,
             }))}
             dualAxis
-            height={300}
+            height={360}
           />
         )}
       </div>

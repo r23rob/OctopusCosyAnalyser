@@ -26,15 +26,15 @@ export function CopByTempCard({ snapshots }: Props) {
   }).filter(r => r.count > 0), [snapshots])
 
   return (
-    <div className="bg-white border border-border-subtle rounded-[10px] p-4 hover:border-border-card transition-colors duration-150">
-      <div className="font-mono text-[10px] tracking-[.1em] uppercase text-ink3 mb-[5px]">COP by outdoor temp</div>
+    <div className="bg-white border border-border-subtle rounded-[10px] p-5 hover:border-border-card transition-colors duration-150">
+      <div className="font-mono text-[11px] tracking-[.1em] uppercase text-ink3 mb-[5px]">COP by outdoor temp</div>
 
       <table className="w-full border-collapse mt-0.5">
         <thead>
           <tr>
-            <th className="font-mono text-[10px] tracking-[.08em] uppercase text-ink3 py-[5px] border-b border-border-subtle font-normal text-left">Outdoor</th>
-            <th className="font-mono text-[10px] tracking-[.08em] uppercase text-ink3 py-[5px] border-b border-border-subtle font-normal text-right">Actual</th>
-            <th className="font-mono text-[10px] tracking-[.08em] uppercase text-ink3 py-[5px] border-b border-border-subtle font-normal text-right">Expected</th>
+            <th className="font-mono text-[11px] tracking-[.08em] uppercase text-ink3 py-[5px] border-b border-border-subtle font-normal text-left">Outdoor</th>
+            <th className="font-mono text-[11px] tracking-[.08em] uppercase text-ink3 py-[5px] border-b border-border-subtle font-normal text-right">Actual</th>
+            <th className="font-mono text-[11px] tracking-[.08em] uppercase text-ink3 py-[5px] border-b border-border-subtle font-normal text-right">Expected</th>
           </tr>
         </thead>
         <tbody>
@@ -47,16 +47,16 @@ export function CopByTempCard({ snapshots }: Props) {
 
             return (
               <tr key={r.label}>
-                <td className="font-mono text-[11px] text-ink2 py-[7px] border-b border-border-subtle last:border-b-0">{r.label}</td>
-                <td className="font-mono text-[12px] py-[7px] border-b border-border-subtle text-right last:border-b-0">
+                <td className="font-mono text-[12px] text-ink2 py-[7px] border-b border-border-subtle last:border-b-0">{r.label}</td>
+                <td className="font-mono text-[13px] py-[7px] border-b border-border-subtle text-right last:border-b-0">
                   <div className="flex items-center gap-1.5 justify-end">
-                    <div className="w-10 h-[4px] bg-bg-elevated rounded-sm relative flex-shrink-0">
+                    <div className="w-10 h-[5px] bg-bg-elevated rounded-sm relative flex-shrink-0">
                       <div className="h-full rounded-sm absolute left-0" style={{ width: `${pct}%`, background: clr }} />
                     </div>
-                    <span style={{ color: clr, fontSize: '13px' }}>{r.actual ?? '—'}</span>
+                    <span style={{ color: clr, fontSize: '14px' }}>{r.actual ?? '—'}</span>
                   </div>
                 </td>
-                <td className="font-mono text-[11px] text-ink3 py-[7px] border-b border-border-subtle text-right last:border-b-0">
+                <td className="font-mono text-[12px] text-ink3 py-[7px] border-b border-border-subtle text-right last:border-b-0">
                   {r.exp[0]}–{r.exp[1]}
                 </td>
               </tr>

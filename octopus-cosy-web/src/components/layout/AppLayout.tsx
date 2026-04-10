@@ -8,7 +8,7 @@ export function AppLayout() {
     <AiDrawerProvider>
       <div className="flex flex-col min-h-screen bg-bg-base">
         <NavBar />
-        <main className="flex-1 px-4 sm:px-6 py-5 pb-16 sm:pb-5 max-w-[1300px] w-full mx-auto">
+        <main className="flex-1 px-4 sm:px-8 py-5 pb-16 sm:pb-5 max-w-[1440px] w-full mx-auto">
           <Outlet />
         </main>
         <AiDrawer />
