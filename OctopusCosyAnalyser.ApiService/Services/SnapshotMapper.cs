@@ -36,7 +36,8 @@ public static class SnapshotMapper
         if (timeSeries is not { Length: > 0 })
             return;
 
-        var live = timeSeries[^1];
+        // Select the last non-null entry — the schema allows nullable elements in the list
+        var live = Array.FindLast(timeSeries, entry => entry is not null);
         if (live is null)
             return;
 

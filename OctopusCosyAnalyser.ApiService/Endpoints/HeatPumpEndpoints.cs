@@ -524,9 +524,11 @@ public static class HeatPumpEndpoints
             if (validationError is not null)
                 return Results.BadRequest(new { error = validationError });
 
-            var data = await graphqlService.GetHeatPumpTimeSeriesPerformanceAsync(
+            var entries = await graphqlService.GetHeatPumpTimeSeriesPerformanceAsync(
                 settings!, accountNumber, euid, from.Value, to.Value, grouping, ct);
 
+            // Wrap in the same structure the frontend parser expects
+            // (data.octoHeatPumpTimeSeriesPerformance)
             return Results.Ok(new
             {
                 accountNumber,
@@ -534,7 +536,7 @@ public static class HeatPumpEndpoints
                 from,
                 to,
                 grouping = grouping ?? "auto",
-                data
+                data = new { octoHeatPumpTimeSeriesPerformance = entries }
             });
         }).WithName("GetHeatPumpTimeSeriesPerformance");
 
@@ -646,7 +648,7 @@ public static class HeatPumpEndpoints
                 chunkStart = chunkEnd;
             }
 
-            return Results.Ok(new { synced, from, to });
+            return Results.Ok(new { synced, skipped = 0, from, to });
         }).WithName("SyncTimeSeries");
 
         // ── Controllers at Location (Multi-HP) ────────────────────────

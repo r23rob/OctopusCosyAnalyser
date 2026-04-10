@@ -1,3 +1,4 @@
+using System.Globalization;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.ApiService.Services.GraphQL.Responses;
 
@@ -60,12 +61,12 @@ public static class HeatPumpMappingService
     {
         return new HeatPumpZoneStatus
         {
-            Zone = zone.Zone?.ToString(),
+            Zone = ToWireFormat(zone.Zone),
             Telemetry = zone.Telemetry is { } tel
                 ? new HeatPumpZoneTelemetry
                 {
                     SetpointInCelsius = tel.SetpointInCelsius is { } sp ? (decimal)sp : null,
-                    Mode = tel.Mode?.ToString(),
+                    Mode = ToWireFormat(tel.Mode),
                     RelaySwitchedOn = tel.RelaySwitchedOn,
                     HeatDemand = tel.HeatDemand,
                     RetrievedAt = tel.RetrievedAt?.ToString("o")
@@ -85,7 +86,7 @@ public static class HeatPumpMappingService
                 {
                     State = ctrl.State?
                         .Where(s => s.HasValue)
-                        .Select(s => s!.Value.ToString())
+                        .Select(s => ToWireFormat(s!.Value))
                         .ToList() ?? [],
                     HeatPumpTimezone = ctrl.HeatPumpTimezone,
                     Connected = ctrl.Connected
@@ -132,17 +133,17 @@ public static class HeatPumpMappingService
             Configuration = zone.Configuration is { } cfg
                 ? new HeatPumpZoneConfig
                 {
-                    Code = cfg.Code?.ToString(),
-                    ZoneType = cfg.ZoneType?.ToString(),
+                    Code = ToWireFormat(cfg.Code),
+                    ZoneType = ToWireFormat(cfg.ZoneType),
                     Enabled = cfg.Enabled,
                     DisplayName = cfg.DisplayName,
                     PrimarySensor = cfg.PrimarySensor,
                     CurrentOperation = cfg.CurrentOperation is { } op
                         ? new HeatPumpCurrentOperation
                         {
-                            Mode = op.Mode?.ToString(),
+                            Mode = ToWireFormat(op.Mode),
                             SetpointInCelsius = op.SetpointInCelsius is { } sp ? (decimal)sp : null,
-                            Action = op.Action?.ToString(),
+                            Action = ToWireFormat(op.Action),
                             End = op.End?.ToString("o")
                         }
                         : null,
@@ -161,7 +162,8 @@ public static class HeatPumpMappingService
         if (timeSeries is not { Length: > 0 })
             return null;
 
-        var live = timeSeries[^1];
+        // Select the last non-null entry — the schema allows nullable elements in the list
+        var live = Array.FindLast(timeSeries, entry => entry is not null);
         if (live is null)
             return null;
 
@@ -170,7 +172,7 @@ public static class HeatPumpMappingService
         var eIn = live.EnergyInput?.Value;
         var eOut = live.EnergyOutput?.Value;
         if (eIn is > 0 && eOut.HasValue)
-            cop = (eOut.Value / eIn.Value).ToString("F2");
+            cop = (eOut.Value / eIn.Value).ToString("F2", CultureInfo.InvariantCulture);
 
         return new HeatPumpLivePerformance
         {
@@ -188,7 +190,7 @@ public static class HeatPumpMappingService
 
         return new HeatPumpLifetimePerformance
         {
-            SeasonalCoefficientOfPerformance = lifetime.SeasonalCoefficientOfPerformance?.ToString(),
+            SeasonalCoefficientOfPerformance = lifetime.SeasonalCoefficientOfPerformance?.ToString(CultureInfo.InvariantCulture),
             HeatOutput = MapMeasurement(lifetime.HeatOutput),
             EnergyInput = MapMeasurement(lifetime.EnergyInput),
             ReadAt = lifetime.ReadAt.ToString("o")
@@ -201,7 +203,7 @@ public static class HeatPumpMappingService
 
         return new HeatPumpValueAndUnit
         {
-            Value = measurement.Value?.ToString(),
+            Value = measurement.Value?.ToString(CultureInfo.InvariantCulture),
             Unit = null // Unit is implicit in ZeroQL responses (kWh for energy, °C for temp)
         };
     }
@@ -215,5 +217,32 @@ public static class HeatPumpMappingService
             Minimum = MapMeasurement(range.Minimum),
             Maximum = MapMeasurement(range.Maximum)
         };
+    }
+
+    /// <summary>
+    /// Converts a ZeroQL enum value to its GraphQL wire format (SCREAMING_SNAKE_CASE).
+    /// ZeroQL generates PascalCase C# enums from SCREAMING_SNAKE GraphQL enums.
+    /// </summary>
+    private static string? ToWireFormat<T>(T? value) where T : struct, Enum
+        => value.HasValue ? ToWireFormat(value.Value) : null;
+
+    private static string ToWireFormat<T>(T value) where T : struct, Enum
+    {
+        var name = value.ToString();
+        // Convert PascalCase to SCREAMING_SNAKE_CASE
+        // e.g. "NormalMode" → "NORMAL_MODE", "Heat" → "HEAT", "Zone1" → "ZONE_1"
+        return string.Create(name.Length * 2, name, (span, src) =>
+        {
+            var pos = 0;
+            for (var i = 0; i < src.Length; i++)
+            {
+                var c = src[i];
+                if (i > 0 && (char.IsUpper(c) || (char.IsDigit(c) && !char.IsDigit(src[i - 1]))))
+                {
+                    span[pos++] = '_';
+                }
+                span[pos++] = char.ToUpperInvariant(c);
+            }
+        }).TrimEnd('\0');
     }
 }
