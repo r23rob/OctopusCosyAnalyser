@@ -15,6 +15,8 @@ public class CosyDbContext : DbContext
     public DbSet<HeatPumpSnapshot> HeatPumpSnapshots { get; set; }
     public DbSet<HeatPumpTimeSeriesRecord> HeatPumpTimeSeriesRecords { get; set; }
     public DbSet<DailyCostRecord> DailyCostRecords { get; set; }
+    public DbSet<TariffRate> TariffRates { get; set; }
+    public DbSet<EnergyInterval> EnergyIntervals { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

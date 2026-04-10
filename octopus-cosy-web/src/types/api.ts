@@ -401,3 +401,47 @@ export const FlowTempMode = {
   WeatherCompensation: 'WeatherCompensation',
   FixedFlow: 'FixedFlow',
 } as const
+
+// ── Energy Intervals ─────────────────────────────────────────────────
+
+export interface EnergyIntervalDto {
+  intervalStart: string
+  intervalEnd: string
+  consumptionKwh: number | null
+  demandW: number | null
+  heatOutputKwh: number | null
+  avgCop: number | null
+  avgPowerInputKw: number | null
+  avgOutdoorTempC: number | null
+  avgRoomTempC: number | null
+  avgFlowTempC: number | null
+  wasHeating: boolean | null
+  wasHotWater: boolean | null
+  snapshotCount: number
+  unitRatePencePerKwh: number | null
+  standingChargePence: number | null
+  costPence: number | null
+}
+
+export interface EnergySummaryDto {
+  periodStart: string
+  periodEnd: string
+  intervalCount: number
+  totalConsumptionKwh: number | null
+  totalHeatOutputKwh: number | null
+  totalCostPence: number | null
+  avgCop: number | null
+  avgOutdoorTempC: number | null
+  avgUnitRatePence: number | null
+  totalStandingChargePence: number | null
+  heatingDutyCyclePercent: number | null
+  hotWaterDutyCyclePercent: number | null
+}
+
+export interface EnergySummaryResponseDto {
+  deviceId: string
+  from: string
+  to: string
+  grouping: string
+  periods: EnergySummaryDto[]
+}

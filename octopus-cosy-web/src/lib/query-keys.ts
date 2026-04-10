@@ -32,5 +32,9 @@ export const queryKeys = {
       ['heatpump', 'cost', accountNumber, from, to] as const,
     storedCostData: (deviceId: string, from: string, to: string) =>
       ['heatpump', 'cost-stored', deviceId, from, to] as const,
+    energyIntervals: (deviceId: string, from: string, to: string) =>
+      ['heatpump', 'energy-intervals', deviceId, from, to] as const,
+    energySummary: (deviceId: string, from: string, to: string, grouping: string) =>
+      ['heatpump', 'energy-summary', deviceId, from, to, grouping] as const,
   },
 }

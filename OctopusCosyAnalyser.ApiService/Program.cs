@@ -77,6 +77,9 @@ builder.Services.AddScoped<IHeatPumpAiService, HeatPumpAiService>();
 // Add Heat Pump Data Service (daily aggregates, time series enrichment)
 builder.Services.AddSingleton<IHeatPumpDataService, HeatPumpDataService>();
 
+// Add Tariff Sync Service
+builder.Services.AddScoped<ITariffSyncService, TariffSyncService>();
+
 // Add Heat Pump Snapshot Worker
 builder.Services.AddHostedService<HeatPumpSnapshotWorker>();
 
@@ -85,6 +88,9 @@ builder.Services.AddHostedService<HeatPumpTimeSeriesSyncWorker>();
 
 // Add Cost Data Sync Worker (every 6 hours)
 builder.Services.AddHostedService<CostDataSyncWorker>();
+
+// Add Energy Interval Worker (every 35 min, closes 30-min windows)
+builder.Services.AddHostedService<EnergyIntervalWorker>();
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
