@@ -1,6 +1,7 @@
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.ApiService.Services;
+using OctopusCosyAnalyser.ApiService.Services.GraphQL;
 using Microsoft.EntityFrameworkCore;
 
 namespace OctopusCosyAnalyser.ApiService.Workers;
@@ -42,7 +43,7 @@ public class HeatPumpSnapshotWorker : BackgroundService
     {
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
-        var client = scope.ServiceProvider.GetRequiredService<IOctopusEnergyClient>();
+        var graphqlService = scope.ServiceProvider.GetRequiredService<IOctopusGraphQLService>();
 
         var devices = await db.HeatPumpDevices
             .Where(d => d.IsActive)
@@ -52,13 +53,15 @@ public class HeatPumpSnapshotWorker : BackgroundService
 
         foreach (var device in devices)
         {
-            await SnapshotDeviceAsync(db, client, device, stoppingToken);
+            await SnapshotDeviceAsync(db, graphqlService, device, stoppingToken);
         }
 
         await db.SaveChangesAsync(stoppingToken);
     }
 
-    private async Task SnapshotDeviceAsync(CosyDbContext db, IOctopusEnergyClient client, HeatPumpDevice device, CancellationToken stoppingToken)
+    private async Task SnapshotDeviceAsync(
+        CosyDbContext db, IOctopusGraphQLService graphqlService,
+        HeatPumpDevice device, CancellationToken stoppingToken)
     {
         if (string.IsNullOrWhiteSpace(device.Euid))
         {
@@ -77,13 +80,19 @@ public class HeatPumpSnapshotWorker : BackgroundService
 
         try
         {
-            var data = await client.GetHeatPumpStatusAndConfigAsync(settings, device.AccountNumber, device.Euid);
-            var root = data.RootElement.GetProperty("data");
+            var response = await graphqlService.GetHeatPumpStatusAndConfigAsync(
+                settings, device.AccountNumber, device.Euid, stoppingToken);
 
-            var snapshot = SnapshotMapper.MapFromStatusAndConfig(data, device.DeviceId, device.AccountNumber);
+            if (response is null)
+            {
+                _logger.LogWarning("No data returned for device {DeviceId}", device.DeviceId);
+                return;
+            }
+
+            var snapshot = SnapshotMapper.MapFromStatusAndConfig(response, device.DeviceId, device.AccountNumber);
             if (snapshot is null)
             {
-                _logger.LogWarning("Failed to map snapshot for device {DeviceId} — JSON missing 'data' root", device.DeviceId);
+                _logger.LogWarning("Failed to map snapshot for device {DeviceId}", device.DeviceId);
                 return;
             }
 

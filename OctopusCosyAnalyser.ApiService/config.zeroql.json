@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/byme8/ZeroQL/main/schema.verified.json",
+  "graphql": "./schema.graphql",
+  "namespace": "OctopusCosyAnalyser.ApiService.GraphQL",
+  "clientName": "OctopusGraphQLClient",
+  "visibility": "Public",
+  "scalars": {
+    "DateTime": "System.DateTimeOffset",
+    "BigInt": "System.Int64"
+  }
+}

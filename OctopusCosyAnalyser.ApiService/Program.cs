@@ -3,7 +3,9 @@ using Microsoft.Extensions.Http.Resilience;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Endpoints;
 using OctopusCosyAnalyser.ApiService.Options;
+using OctopusCosyAnalyser.ApiService.GraphQL;
 using OctopusCosyAnalyser.ApiService.Services;
+using OctopusCosyAnalyser.ApiService.Services.GraphQL;
 using OctopusCosyAnalyser.ApiService.Workers;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,6 +36,23 @@ builder.Services.AddHttpClient<IOctopusEnergyClient, OctopusEnergyClient>()
         options.AttemptTimeout.Timeout = octopusOptions.AttemptTimeout;
         options.CircuitBreaker.SamplingDuration = octopusOptions.CircuitBreakerSamplingDuration;
     });
+
+// Add ZeroQL-based typed GraphQL service for backend API (heat pump queries)
+builder.Services.AddSingleton<IOctopusTokenService, OctopusTokenService>();
+builder.Services.AddTransient<OctopusAuthHandler>();
+builder.Services.AddHttpClient<OctopusGraphQLClient>(client =>
+    {
+        client.BaseAddress = new Uri(octopusOptions.BackendApiUrl);
+        client.Timeout = octopusOptions.HttpTimeout;
+    })
+    .AddHttpMessageHandler<OctopusAuthHandler>()
+    .AddStandardResilienceHandler(options =>
+    {
+        options.TotalRequestTimeout.Timeout = octopusOptions.HttpTimeout;
+        options.AttemptTimeout.Timeout = octopusOptions.AttemptTimeout;
+        options.CircuitBreaker.SamplingDuration = octopusOptions.CircuitBreakerSamplingDuration;
+    });
+builder.Services.AddScoped<IOctopusGraphQLService, OctopusGraphQLService>();
 
 // Add AI services
 // API key can come from DB (Account Settings) or from config/env var as fallback

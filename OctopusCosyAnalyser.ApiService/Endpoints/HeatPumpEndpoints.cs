@@ -3,6 +3,8 @@ using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Helpers;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.ApiService.Services;
+using OctopusCosyAnalyser.ApiService.Services.GraphQL;
+using OctopusCosyAnalyser.ApiService.Workers;
 using OctopusCosyAnalyser.Shared.Models;
 using System.Text.Json;
 using static OctopusCosyAnalyser.ApiService.Helpers.JsonHelpers;
@@ -54,7 +56,7 @@ public static class HeatPumpEndpoints
         }
 
         // Get account info and set up device
-        group.MapPost("/setup", async (string accountNumber, IOctopusEnergyClient client, CosyDbContext db, CancellationToken ct) =>
+        group.MapPost("/setup", async (string accountNumber, IOctopusEnergyClient client, IOctopusGraphQLService graphqlService, CosyDbContext db, CancellationToken ct) =>
         {
             var (settings, settingsError) = await GetSettingsForAccountAsync(db, accountNumber, ct);
             if (settingsError is not null)
@@ -140,13 +142,11 @@ public static class HeatPumpEndpoints
             {
                 try
                 {
-                    var controllersData = await client.GetHeatPumpControllersAtLocationAsync(settings!,accountNumber, propertyId.Value);
-                    if (controllersData.RootElement.TryGetProperty("data", out var locData)
-                        && locData.TryGetProperty("heatPumpControllersAtLocation", out var controllers)
-                        && controllers.ValueKind == JsonValueKind.Array
-                        && controllers.GetArrayLength() > 0)
+                    var controllers = await graphqlService.GetHeatPumpControllersAtLocationAsync(
+                        settings!, accountNumber, propertyId.Value, ct);
+                    if (controllers is { Length: > 0 } && controllers[0] is { Euid: not null } first)
                     {
-                        euid = controllers[0].GetString();
+                        euid = first.Euid;
                     }
                 }
                 catch (Exception ex)
@@ -355,7 +355,7 @@ public static class HeatPumpEndpoints
         }).WithName("GetHeatPumpVariants");
 
         // Get complete heat pump data (COP, temperatures, performance — uses primary batched query)
-        group.MapGet("/heatpump-complete/{accountNumber}/{euid}", async (string accountNumber, string euid, IOctopusEnergyClient client, CosyDbContext db, CancellationToken ct) =>
+        group.MapGet("/heatpump-complete/{accountNumber}/{euid}", async (string accountNumber, string euid, IOctopusGraphQLService graphqlService, CosyDbContext db, CancellationToken ct) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber, ct);
             if (error is not null)
@@ -365,7 +365,7 @@ public static class HeatPumpEndpoints
             if (device is null)
                 return Results.NotFound("Device not found for this account");
 
-            var data = await client.GetHeatPumpStatusAndConfigAsync(settings!,accountNumber, euid);
+            var data = await graphqlService.GetHeatPumpStatusAndConfigAsync(settings!, accountNumber, euid, ct);
             return Results.Ok(data);
         }).WithName("GetHeatPumpCompleteData");
 
@@ -409,7 +409,7 @@ public static class HeatPumpEndpoints
             return Results.Ok(euids);
         }).WithName("GetHeatPumpControllerEuids");
 
-        group.MapGet("/summary/{deviceId}", async (string deviceId, IOctopusEnergyClient client, CosyDbContext db, CancellationToken ct) =>
+        group.MapGet("/summary/{deviceId}", async (string deviceId, IOctopusGraphQLService graphqlService, CosyDbContext db, CancellationToken ct) =>
         {
             var (device, settings, error) = await GetDeviceAndSettingsAsync(db, deviceId, ct);
             if (error is not null)
@@ -418,10 +418,13 @@ public static class HeatPumpEndpoints
             if (string.IsNullOrWhiteSpace(device!.Euid))
                 return Results.Problem("EUID not found for device. Run setup first.");
 
-            var data = await client.GetHeatPumpStatusAndConfigAsync(settings!,device.AccountNumber, device.Euid);
-            var root = data.RootElement.GetProperty("data");
+            var response = await graphqlService.GetHeatPumpStatusAndConfigAsync(
+                settings!, device.AccountNumber, device.Euid, ct);
 
-            var summary = HeatPumpMappingService.MapHeatPumpSummary(root);
+            if (response is null)
+                return Results.Problem("No data returned from Octopus API.");
+
+            var summary = HeatPumpMappingService.MapHeatPumpSummary(response);
             return Results.Ok(summary);
         }).WithName("GetHeatPumpSummary");
 
@@ -476,7 +479,7 @@ public static class HeatPumpEndpoints
             });
         }).WithName("GetLatestSnapshot");
 
-        group.MapGet("/time-ranged/{accountNumber}/{euid}", async (string accountNumber, string euid, DateTime? from, DateTime? to, IOctopusEnergyClient client, CosyDbContext db, CancellationToken ct) =>
+        group.MapGet("/time-ranged/{accountNumber}/{euid}", async (string accountNumber, string euid, DateTime? from, DateTime? to, IOctopusGraphQLService graphqlService, CosyDbContext db, CancellationToken ct) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber, ct);
             if (error is not null)
@@ -485,20 +488,20 @@ public static class HeatPumpEndpoints
             from ??= DateTime.UtcNow.AddDays(-7);
             to ??= DateTime.UtcNow;
 
-            var data = await client.GetHeatPumpTimeRangedPerformanceAsync(settings!,accountNumber, euid, from.Value, to.Value);
-            var root = data.RootElement.GetProperty("data");
-            
+            var data = await graphqlService.GetHeatPumpTimeRangedPerformanceAsync(
+                settings!, accountNumber, euid, from.Value, to.Value, ct);
+
             return Results.Ok(new
             {
                 accountNumber,
                 euid,
                 from,
                 to,
-                data = root
+                data
             });
         }).WithName("GetHeatPumpTimeRangedPerformance");
 
-        group.MapGet("/time-series/{accountNumber}/{euid}", async (string accountNumber, string euid, DateTime? from, DateTime? to, string? grouping, IOctopusEnergyClient client, CosyDbContext db, CancellationToken ct) =>
+        group.MapGet("/time-series/{accountNumber}/{euid}", async (string accountNumber, string euid, DateTime? from, DateTime? to, string? grouping, IOctopusGraphQLService graphqlService, CosyDbContext db, CancellationToken ct) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber, ct);
             if (error is not null)
@@ -521,9 +524,11 @@ public static class HeatPumpEndpoints
             if (validationError is not null)
                 return Results.BadRequest(new { error = validationError });
 
-            var data = await client.GetHeatPumpTimeSeriesPerformanceAsync(settings!,accountNumber, euid, from.Value, to.Value, grouping);
-            var root = data.RootElement.GetProperty("data");
-            
+            var entries = await graphqlService.GetHeatPumpTimeSeriesPerformanceAsync(
+                settings!, accountNumber, euid, from.Value, to.Value, grouping, ct);
+
+            // Wrap in the same structure the frontend parser expects
+            // (data.octoHeatPumpTimeSeriesPerformance)
             return Results.Ok(new
             {
                 accountNumber,
@@ -531,7 +536,7 @@ public static class HeatPumpEndpoints
                 from,
                 to,
                 grouping = grouping ?? "auto",
-                data = root
+                data = new { octoHeatPumpTimeSeriesPerformance = entries }
             });
         }).WithName("GetHeatPumpTimeSeriesPerformance");
 
@@ -582,7 +587,7 @@ public static class HeatPumpEndpoints
         }).WithName("GetStoredTimeSeries");
 
         group.MapPost("/sync-timeseries/{deviceId}", async (string deviceId, DateTime? from, DateTime? to,
-            IOctopusEnergyClient client, CosyDbContext db, ILoggerFactory loggerFactory, CancellationToken ct) =>
+            IOctopusGraphQLService graphqlService, CosyDbContext db, ILoggerFactory loggerFactory, CancellationToken ct) =>
         {
             var (device, settings, error) = await GetDeviceAndSettingsAsync(db, deviceId, ct);
             if (error is not null)
@@ -601,7 +606,6 @@ public static class HeatPumpEndpoints
                 return Results.BadRequest(new { error = $"Maximum sync range is {Constants.MaxSyncRangeDays} days." });
 
             var synced = 0;
-            var skipped = 0;
             var chunkStart = from.Value;
             var chunkSize = TimeSpan.FromDays(Constants.TimeSeriesChunkDays); // MONTH grouping max span
             var logger = loggerFactory.CreateLogger("TimeSeriesSync");
@@ -621,61 +625,11 @@ public static class HeatPumpEndpoints
 
                 try
                 {
-                    var data = await client.GetHeatPumpTimeSeriesPerformanceAsync(
-                        settings!,device.AccountNumber, device.Euid, chunkStart, chunkEnd, "MONTH");
-                    var root = data.RootElement.GetProperty("data");
+                    var entries = await graphqlService.GetHeatPumpTimeSeriesPerformanceAsync(
+                        settings!, device.AccountNumber, device.Euid, chunkStart, chunkEnd, "MONTH", ct);
 
-                    var chunkSynced = 0;
-                    if (root.TryGetProperty("heatPumpTimeSeriesPerformance", out var series)
-                        && series.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var item in series.EnumerateArray())
-                        {
-                            if (!item.TryGetProperty("startAt", out var startAtEl)
-                                || !DateTimeOffset.TryParse(startAtEl.GetString(), System.Globalization.CultureInfo.InvariantCulture,
-                                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var startAtDto))
-                                continue;
-
-                            var startAt = startAtDto.UtcDateTime;
-
-                            // Skip records that already exist in the database
-                            if (existingSet.Contains(startAt))
-                            {
-                                skipped++;
-                                continue;
-                            }
-
-                            var endAtUtc = startAt.AddHours(1); // default for hourly buckets
-                            if (item.TryGetProperty("endAt", out var endAtEl)
-                                && DateTimeOffset.TryParse(endAtEl.GetString(), System.Globalization.CultureInfo.InvariantCulture,
-                                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var endAtDto))
-                                endAtUtc = endAtDto.UtcDateTime;
-
-                            var record = new HeatPumpTimeSeriesRecord
-                            {
-                                DeviceId = deviceId,
-                                StartAt = startAt,
-                                EndAt = endAtUtc,
-                                CreatedAt = DateTime.UtcNow
-                            };
-
-                            if (item.TryGetProperty("energyInput", out var ei) && ei.TryGetProperty("value", out var eiVal)
-                                && decimal.TryParse(eiVal.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var eiDec))
-                                record.EnergyInputKwh = eiDec;
-
-                            if (item.TryGetProperty("energyOutput", out var eo) && eo.TryGetProperty("value", out var eoVal)
-                                && decimal.TryParse(eoVal.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var eoDec))
-                                record.EnergyOutputKwh = eoDec;
-
-                            if (item.TryGetProperty("outdoorTemperature", out var ot) && ot.TryGetProperty("value", out var otVal)
-                                && decimal.TryParse(otVal.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var otDec))
-                                record.OutdoorTemperatureCelsius = otDec;
-
-                            db.HeatPumpTimeSeriesRecords.Add(record);
-                            existingSet.Add(startAt); // prevent duplicates within this sync run
-                            chunkSynced++;
-                        }
-                    }
+                    var chunkSynced = HeatPumpTimeSeriesSyncWorker.MapAndPersistTimeSeriesEntries(
+                        entries, deviceId, existingSet, db);
 
                     // Save per chunk to bound memory and make partial progress durable
                     if (chunkSynced > 0)
@@ -694,18 +648,19 @@ public static class HeatPumpEndpoints
                 chunkStart = chunkEnd;
             }
 
-            return Results.Ok(new { synced, skipped, from, to });
+            return Results.Ok(new { synced, skipped = 0, from, to });
         }).WithName("SyncTimeSeries");
 
         // ── Controllers at Location (Multi-HP) ────────────────────────
 
-        group.MapGet("/controllers-at-location/{accountNumber}/{propertyId:int}", async (string accountNumber, int propertyId, IOctopusEnergyClient client, CosyDbContext db, CancellationToken ct) =>
+        group.MapGet("/controllers-at-location/{accountNumber}/{propertyId:int}", async (string accountNumber, int propertyId, IOctopusGraphQLService graphqlService, CosyDbContext db, CancellationToken ct) =>
         {
             var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber, ct);
             if (error is not null)
                 return error;
 
-            var data = await client.GetHeatPumpControllersAtLocationAsync(settings!,accountNumber, propertyId);
+            var data = await graphqlService.GetHeatPumpControllersAtLocationAsync(
+                settings!, accountNumber, propertyId, ct);
             return Results.Ok(data);
         }).WithName("GetControllersAtLocation");
 
@@ -982,7 +937,7 @@ public static class HeatPumpEndpoints
         // ── AI Analysis ──────────────────────────────────────────────
 
         group.MapPost("/ai-analysis/{deviceId}", async (string deviceId, AiAnalysisRequestDto request,
-            IAiAnalysisService aiService, IOctopusEnergyClient octopusClient, IHeatPumpDataService dataService, CosyDbContext db,
+            IAiAnalysisService aiService, IOctopusEnergyClient octopusClient, IOctopusGraphQLService graphqlService, IHeatPumpDataService dataService, CosyDbContext db,
             ILogger<AiAnalysisService> logger, CancellationToken ct) =>
         {
             if (request.From >= request.To)
@@ -1054,60 +1009,14 @@ public static class HeatPumpEndpoints
 
                             try
                             {
-                                var tsData = await octopusClient.GetHeatPumpTimeSeriesPerformanceAsync(
-                                    settings!,device.AccountNumber, device.Euid, chunkStart, chunkEnd, "MONTH");
-                                var tsRoot = tsData.RootElement.GetProperty("data");
+                                var entries = await graphqlService.GetHeatPumpTimeSeriesPerformanceAsync(
+                                    settings!, device.AccountNumber, device.Euid, chunkStart, chunkEnd, "MONTH", ct);
 
-                                if (tsRoot.TryGetProperty("heatPumpTimeSeriesPerformance", out var tsSeries)
-                                    && tsSeries.ValueKind == JsonValueKind.Array)
+                                var chunkSynced = HeatPumpTimeSeriesSyncWorker.MapAndPersistTimeSeriesEntries(
+                                    entries, deviceId, existingSet, db);
+
+                                if (chunkSynced > 0)
                                 {
-                                    foreach (var item in tsSeries.EnumerateArray())
-                                    {
-                                        if (!item.TryGetProperty("startAt", out var startAtEl)
-                                            || !DateTimeOffset.TryParse(startAtEl.GetString(),
-                                                System.Globalization.CultureInfo.InvariantCulture,
-                                                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
-                                                out var startAtDto))
-                                            continue;
-
-                                        var startAt = startAtDto.UtcDateTime;
-                                        if (existingSet.Contains(startAt)) continue;
-
-                                        var endAtUtc = startAt.AddHours(1);
-                                        if (item.TryGetProperty("endAt", out var endAtEl)
-                                            && DateTimeOffset.TryParse(endAtEl.GetString(),
-                                                System.Globalization.CultureInfo.InvariantCulture,
-                                                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
-                                                out var endAtDto))
-                                            endAtUtc = endAtDto.UtcDateTime;
-
-                                        var record = new HeatPumpTimeSeriesRecord
-                                        {
-                                            DeviceId = deviceId,
-                                            StartAt = startAt,
-                                            EndAt = endAtUtc,
-                                            CreatedAt = DateTime.UtcNow
-                                        };
-
-                                        if (item.TryGetProperty("energyInput", out var ei) && ei.TryGetProperty("value", out var eiVal)
-                                            && decimal.TryParse(eiVal.GetString(), System.Globalization.NumberStyles.Any,
-                                                System.Globalization.CultureInfo.InvariantCulture, out var eiDec))
-                                            record.EnergyInputKwh = eiDec;
-
-                                        if (item.TryGetProperty("energyOutput", out var eo) && eo.TryGetProperty("value", out var eoVal)
-                                            && decimal.TryParse(eoVal.GetString(), System.Globalization.NumberStyles.Any,
-                                                System.Globalization.CultureInfo.InvariantCulture, out var eoDec))
-                                            record.EnergyOutputKwh = eoDec;
-
-                                        if (item.TryGetProperty("outdoorTemperature", out var ot) && ot.TryGetProperty("value", out var otVal)
-                                            && decimal.TryParse(otVal.GetString(), System.Globalization.NumberStyles.Any,
-                                                System.Globalization.CultureInfo.InvariantCulture, out var otDec))
-                                            record.OutdoorTemperatureCelsius = otDec;
-
-                                        db.HeatPumpTimeSeriesRecords.Add(record);
-                                        existingSet.Add(startAt);
-                                    }
-
                                     await db.SaveChangesAsync(ct);
                                     db.ChangeTracker.Clear();
                                 }

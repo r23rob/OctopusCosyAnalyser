@@ -105,9 +105,12 @@ function getNestedValue(item: Record<string, unknown>, property: string): number
   const prop = item[property] as Record<string, unknown> | null | undefined
   if (!prop) return null
   const val = prop['value']
-  if (typeof val !== 'string') return null
-  const n = parseFloat(val)
-  return isNaN(n) ? null : n
+  if (typeof val === 'number') return val
+  if (typeof val === 'string') {
+    const n = parseFloat(val)
+    return isNaN(n) ? null : n
+  }
+  return null
 }
 
 function parseStoredTimeSeriesJson(json: string): TimeSeriesResult {
