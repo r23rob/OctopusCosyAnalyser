@@ -1,0 +1,4148 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+type Query {
+  "Average coefficient of performance metrics (COPs) for the entire cosy fleet against external temperature."
+  cosyCharacterisation: [CosyCharacterisation!]!
+  "The average coefficient of performance (COPs) for the entire cosy fleet historically."
+  cosyEfficiency: CosyEfficiency
+  "The distribution of seasonal performance factors (SPF) across the Cosy fleet."
+  cosyDistribution: [CosyDistribution!]!
+  "The median seasonal performance factor (SPF) per region across the Cosy fleet."
+  cosyRegional: [CosyRegional!]!
+  "The average annual savings for Cosy tariff customers."
+  cosySavings: [CosySavings!]!
+  "The regional pricing adjustment for the quote."
+  quoteRegionalPricing("The quote code." quoteCode: UUID!): QuoteRegionalPricing
+  "Get a list of addresses for a given postcode."
+  getAddressesForPostcode("The postcode to look up." postcode: GBRPostCode!): [GBRSolarAddress]
+  "Aerial data for a property by its UPRN and postcode."
+  propertyAerialData("The Unique Property Reference Number (UPRN)." uprn: String! "The postcode of the property (optional)." postcode: String): GeoJsonFeature
+  "Get recommended solar panel systems for a property."
+  recommendedSystems(input: RecommendedSystemsInput!): RecommendedSystems
+  "Fetch data for a device's predicted consumption cycle (for example a washing machine), i.e. a device which is drawing power."
+  sherloctopusDevicePredictedConsumptionCycle("The account number for which data is requested." accountNumber: String! "The electricity smart meter device for which data is requested." deviceId: String!): [DevicePredictedConsumptionCycle!]!
+  "Fetch actual meaaured consumption data for device (for example a washing machine)."
+  sherloctopusDeviceMeasuredConsumption("The account number for which data is requested." accountNumber: String! "The electricity smart meter device for which data is requested." deviceId: String!): DeviceMeasuredConsumption
+  "Get retail finance instalments for certain purchase amount."
+  retailFinanceInstalmentsTerms("Total amount to calculate instalments for." amount: Float): [InstalmentMonthlyTerm]
+  "Generate an breakdown example of an instalment plan"
+  retailFinanceRepresentativeExample: RepresentativeExample
+  "Query product eligibility against all potentially eligible enrollment candidates for the given property and account."
+  productEnrollmentCandidatesEligibility("The account number for which info is requested." accountNumber: String! "Kraken Property ID to get enrollment candidates from." krakenPropertyId: Int! "Specifies which product is used when searching for the option." productLine: String! "An option within the product line. Leaving this empty selects the first available option." productLineOption: String): ProductEligibilityForGeneratedCandidates
+  "Query vehicle eligibility for IO Go smart product by providing registration number."
+  vehicleEligibilityForIoGo("Vehicle registration number." registrationNumber: String!): VehicleEligibilityForIOGo
+  "Returns all available smart product line options with their latest Kraken product codes."
+  smartProductLineOptions: [SmartProductLineOption]!
+  "The meter point."
+  meterPoint("The meter point MPXN." mpxn: String! "The meter point fuel type." fuelType: FuelType!): MeterPoint
+  "Retrieve an Ink live chat conversation by account number and optional conversation relay ID."
+  inkConversation("The account number to retrieve conversations for." accountNumber: String! "The conversation relay ID to retrieve" conversationRelayId: String): InkConversation
+  "Get account EV charge history during Greener Nights."
+  greenerNightsAccountEvChargeHistory("The account number for which data is requested." accountNumber: String! "Start date for the data retrieval period." dateFrom: Date! "End date for the data retrieval period." dateTo: Date!): [AccountEVChargeHistory]
+  greenerNightsAccountStats("The account number for which data is requested." accountNumber: String!): GreenerNightsAccountStats
+  "Get upcoming week Greener Nights forecast"
+  greenerNightsForecast: [GreenerNightsForecast]
+  "Get an estimate of the number of kWh an average domestic solar installation would produce for a given postcode."
+  solarGenerationEstimate("The postcode area to fetch estimate for." postcode: String! "The start date from which to pull a weeks worth of data." fromDate: Date! before: String after: String first: Int last: Int): SolarGenerationEstimateConnection
+  "Summary of an account's participation in Free Electricity across all events."
+  freeElectricityAccountSummary("The account number to get the summary for." accountNumber: String!): FreeElectricityAccountSummary
+  "List of Free Electricity events that an account participated in."
+  freeElectricityAccountEvents("The account number to get the events for." accountNumber: String! "Start datetime filter." startDate: DateTime "End datetime filter." endDate: DateTime before: String after: String first: Int last: Int): FreeElectricityAccountEventConnection
+  "Collective statistics for the Free Electricity campaign."
+  freeElectricityCollectiveStats: FreeElectricityCollectiveStats
+  evChargerPartnershipOffer("The code of the offer for which data is requested." offerCode: String!): EvChargerPartnershipOffer
+  "Search for address UPRNs matching the provided postcode."
+  addressUprns("The postcode to search for." postcode: String! "Filter to electricity-only addresses if True." electricityOnly: Boolean): [AddressUprn]
+  "Retrieve the supply point metadata for the given account number and external identifier."
+  supplyPointMetaData("The account number of the supply point." accountNumber: String! "The external identifier of the supply point." externalIdentifier: String!): SupplyPointMetaData
+  "Get sessions for a Flexibility Scheme that the member is enrolled in."
+  flexibilitySchemeSessions("The Flexibility Scheme slug" schemeSlug: NonEmptyString! "The details of the scheme member." member: FlexibilitySchemeMember! before: String after: String first: Int last: Int): FlexibilitySchemeSessionConnection!
+  "Renewable Energy Community stats, details and consumption data for an account (if they're a REC member)."
+  renewableEnergyCommunity(accountNumber: String!): RenewableEnergyCommunityMember
+  "Get the details of a basic Scheme."
+  scheme(slug: String!): Scheme!
+  "Get the scheme membership details for a member."
+  schemeMembership(slug: String! "The details of the scheme member." member: SchemeMember!): [SchemeMembership!]
+  "Check if a member candidate is eligible for the scheme at the time of the request."
+  isEligibleForScheme(slug: String! "The details of the member candidate." member: SchemeMember!): Eligibility!
+  "Show the account's charity donation amount choices."
+  charityDonationAmountChoices: CharityDonationAmountChoices
+  "Show the account's charity donation records, and the total amount donated."
+  charityDonationHistory("Account number." accountNumber: String!): CharityDonationHistory
+  "Show the account's charity donation settings."
+  charityDonationSettings("Account number." accountNumber: String!): CharityDonationSettings
+  "The device-specific credentials registered with the Kraken platform. This field does not include OCCP server related credentials."
+  octoChargerDeviceCredentials("The device UUID of the device." deviceUUID: ID!): ElectricChargerDeviceCredentials
+  "The charge-point-schedules associated with the device"
+  chargePointSchedules("The device UUID of the device." deviceUUID: UUID! "The account number of the device." accountNumber: String!): ChargePointSchedules!
+  "The charge points related to an account in a specific location."
+  chargePointsAtLocation("The account number to find the charge points for." accountNumber: String! "The property ID to find the charge points for." propertyId: String): ChargePointsAtLocation!
+  "The firmware version state of the charge point."
+  chargePointFirmwareVersionState("The device UUID of the device." deviceUUID: UUID! "The account number of the device." accountNumber: NonEmptyString!): ChargePointFirmwareVersionState!
+  "The history of charging sessions associated with the charger."
+  chargingSessions("The account number of the device." accountNumber: NonEmptyString! "The device UUID of the device." deviceUUID: UUID! "Only charging sessions after this time are returned. Must be a UTC timestamp." after: DateTime! "Only charging sessions after this time are returned. Must be a UTC timestamp, and form a period of less than 12 months total." before: DateTime! first: Int last: Int): ElectricChargerChargingSessionConnection!
+  wheelOfFortuneSegments("Account number" accountNumber: String!): [WheelOfFortunePrize]
+  wheelOfFortuneSpinsAllowed("Meter's fuel type" fuelType: FuelType! "Account number" accountNumber: String!): WheelOfFortuneSpinsAllowed
+  wheelOfFortunePrizeType("Account number" accountNumber: String!): WheelOfFortunePrizeType
+  wheelOfFortuneSpinHistory("Account number" accountNumber: String! "Meter's fuel type" fuelType: FuelType "Date from which to fetch the spin history. Defaults to one month ago." dateFrom: Date "Date to which to fetch the spin history. Defaults to now." dateTo: Date before: String after: String first: Int last: Int): WheelOfFortuneSpinConnection
+  "Total number of prizes won so far in the current period"
+  wheelOfFortunePrizesWon: Int
+  "Saving sessions queries for an account."
+  savingSessions: SavingSessionsType
+  "Octoplus Offer Groups available for a given account_user and account combination."
+  octoplusOfferGroups("Account number for the Octoplus-enrolled account." accountNumber: String! "ID of the Offer Group being queried." id: Int before: String after: String first: Int last: Int): OctoplusOfferGroupConnectionTypeConnection
+  "Octoplus Offer available for a given account_user and account combination."
+  octoplusOffer("Slug of the offer" slug: String! "Account number for the Octoplus-enrolled account." accountNumber: String!): OctoplusOfferType
+  "Octoplus Rewards for a given account user."
+  octoplusRewards("Id for the reward being queried." rewardId: Int "Account number for the Octoplus-enrolled account." accountNumber: String! "Slug of the offer being queried." offerSlug: String): [OctoplusRewardType]
+  "Describes availability of Shoptopus Vouchers for given Octopoint amounts."
+  shoptopusVoucherAvailability("The values (in Octopoints) for which to return voucher availability (maximum 5 values)." voucherValues: [Int]! "Account number for the Octoplus-enrolled account." accountNumber: String!): [ShoptopusVoucherAvailabilityType]
+  "The currently active charity partnership. Returns null if there are currently no active partnerships."
+  octoplusActiveCharityPartnership: CharityPartnershipDisplayData
+  "The donations a user has previously made to charity partnerships"
+  octoplusCharityDonations("The order the charities should be returned in" orderBy: CharityDonationOrderBy! "Filters to donations made from a certain account (if passed)." accountNumber: String! "Filters to donations made towards a particular partnership (if passed)." partnershipExternalReference: UUID before: String after: String first: Int last: Int): CharityDonationConnection!
+  "Get mobile screen details to render."
+  backendScreen("The ID of the screen to return." screenId: ID! "List of key-value pairs (strings) to pass as parameters to the screen." params: [BackendScreenParamInputType] "The maximum version of backend screens supported by the client.                 This can be used to fall back to older versions of screens or features." maxVersionSupported: Int = 1): GenericBackendScreen
+  "Get a dashboard screen to render."
+  dashboardScreen("The ID of the dashboard type screen to return." dashboardId: ID! "The account number of the user." accountNumber: String! "The maximum version of dashboard type screens supported by the client." maxVersionSupported: Int! = 1 "The ledger id associated to the account." ledgerId: String "The ledger number associated to the account." ledgerNumber: String "The property id associated to the account." propertyId: String "List of key-value pairs (strings) to pass as parameters to the screen." params: [BackendScreenParamInputType]): Dashboard
+  "Get all registered backend screen IDs."
+  backendScreenIds: [String]
+  "Get all registered backend screen event IDs."
+  backendScreenEventIds: [String]
+  "The heat pump quote which was given to the customer."
+  heatPumpQuote("The heat pump quote code." code: UUID!): HeatPumpQuote
+  "The heat pump finance offer which was selected by the customer for the given quote."
+  heatPumpQuoteFinanceOffer("The heat pump quote code." code: UUID!): HeatPumpQuoteFinanceOffer
+  "Retrieve the heat pump controller device status."
+  heatPumpControllerStatus("The account number associated with the heat pump." accountNumber: String! "The EUID of the heat pump controller." euid: ID!): ControllerStatus
+  "The heat pump controllers attached to an account at a given location."
+  heatPumpControllersAtLocation(accountNumber: String! propertyId: ID!): [ControllerAtLocation]
+  "The configuration of the heat pump controller and its zones."
+  heatPumpControllerConfiguration("The account number associated with the heat pump controller." accountNumber: String! "The EUID of the heat pump controller." euid: ID!): ControllerAndZoneConfiguration
+  "Heat pump performance data between two specific dates."
+  heatPumpTimeRangedPerformance("The account number associated with the heat pump." accountNumber: String! "The EUID of the heat pump controller." euid: ID! startAt: DateTime! endAt: DateTime!): HeatPumpTimeRangedPerformance
+  "Heat pump performance time series data."
+  heatPumpTimeSeriesPerformance("The account number associated with the heat pump controller." accountNumber: String! "The EUID of the heat pump controller." euid: ID! "Start datetime for the time series." startAt: DateTime! "End datetime for the time series." endAt: DateTime! "Grouping interval for the time series." performanceGrouping: PerformanceGrouping!): [HeatPumpPerformanceGroupingNode]
+  "Heat pump lifetime performance data."
+  heatPumpLifetimePerformance("The account number associated with the heat pump controller." accountNumber: String! "The EUID of the heat pump controller." euid: ID!): LifetimeTelemetry
+  "Latest telemetry values from the heat pump."
+  heatPumpLivePerformance("The account number associated with the heat pump controller." accountNumber: String! "The EUID of the heat pump controller." euid: ID!): LiveTelemetry
+  "Get aggregate summary of customer payouts (total balance and count)."
+  customerPayoutsSummary("The Kraken account number." accountNumber: String!): CustomerPayoutsSummaryType
+  "Retrieve all customer payouts for a given account number."
+  customerPayouts("The Kraken account number." accountNumber: String!): [CustomerPayoutType]
+  "Checks whether the specified potential customer should be allowed to sign up with us."
+  signupEligibility(input: SignupEligibilityInput!): SignupEligibility
+  "The available Kraken Field appointment slots for a given search ID. If Kraken Field has not returned results yet, this endpoint returns an empty list."
+  availableFieldAppointmentSlots("The search ID." searchId: UUID! "The appointment booking token." bookingToken: UUID): [AppointmentSlotType]
+  "Get the field appointment for a booking token."
+  fieldAppointment("The appointment booking token." bookingToken: UUID!): FieldAppointment
+  "Charging streak data for the requested account."
+  chargingStreaks("Kraken Customer account number." accountNumber: String!): ChargingStreaksType
+  account(accountNumber: String!): AccountType
+  "Get a list of pending account health tasks for this account."
+  accountHealthChecklist("The Kraken account number." accountNumber: String!): AccountHealthChecklist
+  version: String
+}
+
+type CosyCharacterisation {
+  "The readings directly from the heatpumps themselves."
+  averageExternalTemperature: Int!
+  "The level of efficiency at that temperature."
+  medianCop: Float!
+}
+
+type CosyEfficiency {
+  "The average coefficient of performance over the last 30 days. (used for measuring how efficient the device is for transferring energy to heat)."
+  averageCop30Day: Float!
+  "The average coefficient of performance over the last 90 days. (used for measuring how efficient the device is for transferring energy to heat)."
+  averageCop90Day: Float!
+  "The average coefficient of performance over the devices whole lifespan (to show how efficient its been overall)"
+  averageSpf: Float!
+}
+
+type CosyDistribution {
+  "The seasonal performance factor for a device."
+  deviceSpf: Float!
+  "The percentage of the total fleet with this SPF."
+  devicePercentage: Float!
+}
+
+type CosyRegional {
+  "The low carbon technology (LCT) region identifier."
+  lctRegion: String!
+  "The median seasonal performance factor (SPF) for this region."
+  medianSpf: Float!
+  "The average annual savings for customers in this region."
+  averageAnnualSavings: Float
+}
+
+type CosySavings {
+  "The tariff type."
+  tariffType: String!
+  "The average annual savings for this tariff type."
+  averageAnnualSavings: Float!
+}
+
+"The Quote's regional pricing."
+type QuoteRegionalPricing {
+  "The quote code."
+  quoteCode: UUID!
+  "The region_id for the adjustment."
+  regionId: String!
+  "The multiplier adjustment (e.g., 0.5 for half-price)."
+  multiplierAdjustment: Decimal
+  "The flat adjustment in pence (e.g., -2000 for 20 pound discount, 3000 for 30 pound increase)."
+  flatAdjustment: Int
+}
+
+"Leverages the internal Python implementation of UUID (uuid.UUID) to provide native UUID objects\nin fields, resolvers and input."
+scalar UUID
+
+"The `Decimal` scalar type represents a python Decimal."
+scalar Decimal
+
+"An address."
+type GBRSolarAddress {
+  "A single-line address representation combining available address components."
+  addressLine: String!
+  "Address postcode."
+  postcode: GBRPostCode!
+  "The Unique Property Reference Number (UPRN) for the address."
+  uprn: String!
+  "The type of property."
+  propertyType: SolarAddressPropertyType
+  "The geographic coordinates (latitude and longitude) of the address."
+  coordinates: CoordinatesOutput
+}
+
+"A postcode in GBR format."
+scalar GBRPostCode
+
+"An enumeration."
+enum SolarAddressPropertyType {
+  HOUSE
+  FLAT
+  OTHER
+}
+
+"A geographic location on Earth's surface."
+type CoordinatesOutput {
+  latitude: Float!
+  longitude: Float!
+}
+
+type GeoJsonFeature {
+  "Human-readable ID for what the feature represents."
+  id: String!
+  "The feature type (always 'Feature')."
+  type: String!
+  "The geometry of the feature."
+  geometry: GeoJsonGeometry!
+  "Additional properties of the feature."
+  properties: JSONString
+}
+
+type GeoJsonGeometry {
+  "The geometry type (e.g., Polygon, MultiPolygon)."
+  type: String!
+  "The coordinates defining the geometry. Format varies by type: Polygon uses [[[lon, lat], ...]] and MultiPolygon uses [[[[lon, lat], ...]], ...]"
+  coordinates: JSONString!
+}
+
+"Allows use of a JSON String for input \/ output from the GraphQL schema.\n\nUse of this type is *not recommended* as you lose the benefits of having a defined, static\nschema (one of the key benefits of GraphQL)."
+scalar JSONString
+
+type RecommendedSystems {
+  "Is the property suitable for solar?"
+  suitable: Boolean!
+  "Reason for suitability or lack thereof."
+  suitabilityReason: String!
+  "List of recommended solar systems."
+  systems: [SolarSystem]!
+}
+
+type SolarSystem {
+  "Unique system identifier."
+  systemId: String!
+  "System description."
+  description: String!
+  "Number of panels in the system."
+  numberOfPanels: Int!
+  "Confidence score for recommendation."
+  confidence: Float!
+  "Battery details for the system."
+  battery: Battery
+  "Estimated annual savings."
+  annualSavings: Float!
+  "Estimated payback period in years."
+  paybackYears: Float!
+  "Comparable interest rate."
+  comparableInterestRate: Float!
+  "Self-consumption metrics."
+  selfConsumption: SelfConsumption!
+  "Estimated export income."
+  exportIncome: Float!
+  "Total installation cost."
+  installCostTotal: Float!
+  "Breakdown of installation costs."
+  installCostBreakdown: CostBreakdown
+  "List of solar arrays."
+  solarArrays: [SolarArrayGeoJsonFeatureCollection]!
+}
+
+type Battery {
+  "Battery size in kWh."
+  sizeKwh: Float!
+  "Human-readable battery size."
+  sizeString: String!
+  "Battery manufacturer."
+  manufacturer: BatteryManufacturer!
+}
+
+"Battery manufacturers supported."
+enum BatteryManufacturer {
+  FOX
+  DURACELL
+  TESLA
+  ENPHASE
+}
+
+"Self-consumption metrics.\n\nWhen a household uses the energy it generates rather than exporting it to the grid.\n- savings: Annual savings in GBP from using self-consumed energy instead of grid energy.\n- percentage: Percentage of generated energy that is self-consumed."
+type SelfConsumption {
+  "Annual savings from using self-consumed energy in GBP."
+  savingsGbp: Float!
+  "Percentage of solar energy self-consumed."
+  percentage: Float!
+}
+
+type CostBreakdown {
+  "Materials cost."
+  materials: Float!
+  "Labour cost."
+  labour: Float!
+  "Scaffolding cost."
+  scaffolding: Float!
+  "Other costs."
+  other: Float!
+}
+
+type SolarArrayGeoJsonFeatureCollection {
+  "The type of GeoJSON object (always 'FeatureCollection')."
+  type: String!
+  "List of GeoJSON features."
+  features: [PanelGeoJsonFeature]!
+  "Properties for the solar array."
+  arrayData: SolarArrayData
+}
+
+type PanelGeoJsonFeature {
+  "Human-readable ID for what the feature represents."
+  id: String!
+  "The feature type (always 'Feature')."
+  type: String!
+  "The geometry of the feature."
+  geometry: GeoJsonGeometry!
+  "Additional properties of the feature."
+  properties: PanelFeatureProperties
+}
+
+type PanelFeatureProperties {
+  "Indicates if the panel is active."
+  active: Boolean
+  "The orientation of the solar panel."
+  orientation: PanelOrientation
+  "The shading factor affecting the panel."
+  shadingFactor: Float
+  "The annual energy output in kWh."
+  annualOutputKwh: Float
+  "The scaffoldability level for installation."
+  scaffoldability: Scaffoldability
+  "The shading point coordinates."
+  shadingPoint: [Float]
+}
+
+"An enumeration."
+enum PanelOrientation {
+  PORTRAIT
+  LANDSCAPE
+}
+
+"Level of difficulty for scaffolding installation."
+enum Scaffoldability {
+  EASY
+  HARD
+  IMPOSSIBLE
+}
+
+type SolarArrayData {
+  "Index of the solar array."
+  arrayIndex: Int
+  "Number of panels in the solar array."
+  panelCount: Int
+}
+
+"All parameters required to get recommended solar panel systems for a property."
+input RecommendedSystemsInput {
+  "The Unique Property Reference Number (UPRN)."
+  uprn: NonEmptyString!
+  "The postcode of the property."
+  postcode: GBRPostCode!
+  "The Property's annual electricity usage in kWh."
+  annualUsageKwh: Float
+  "The occupancy archetype of the property."
+  occupancyArchetype: OccupancyArchetype
+}
+
+"Non-empty string."
+scalar NonEmptyString
+
+"An enumeration."
+enum OccupancyArchetype {
+  HOME_ALL_DAY
+  IN_HALF_THE_DAY
+  OUT_ALL_DAY
+}
+
+"Data for a device consumption cycle (for example a washing machine), i.e. a device which is drawing power."
+type DevicePredictedConsumptionCycle {
+  "Identifier for a washing machine cycle (I.e. device is drawing power)."
+  cycleId: Int
+  "When the cycle starts."
+  startAt: DateTime
+  "When the cycle end."
+  endAt: DateTime
+  "How long the cycle lasted in mins."
+  lengthMinutes: Int
+  "Predicted energy consumption over the cycle in kWh."
+  consumptionKwh: Float
+  "Max power in the cycle in kW."
+  maxPowerKw: Float
+  "If the prediction was correct or not, returns NULL if not yet confirmed."
+  successfulPrediction: Boolean
+}
+
+"The `DateTime` scalar type represents a DateTime\nvalue as specified by\n[iso8601](https:\/\/en.wikipedia.org\/wiki\/ISO_8601)."
+scalar DateTime
+
+type DeviceMeasuredConsumption {
+  "Half hourly measured consumption data for home load and washing machine."
+  halfHourly: [DeviceHalfHourlyMeasuredConsumption!]!
+  "Daily measured consumption data for home load and washing machine."
+  daily: [DeviceDailyMeasuredConsumption!]!
+}
+
+"Half hourly measured Data for a device measured consumption."
+type DeviceHalfHourlyMeasuredConsumption {
+  "When the measurement starts."
+  startAt: DateTime
+  "When the week of the measurement began."
+  weekStart: DateTime
+  "Energy consumption over the cycle in kWh."
+  homeLoadKwh: Float
+  "The consumet in kW"
+  washingMachineKwh: Float
+}
+
+"Half hourly measured Data for a device measured consumption."
+type DeviceDailyMeasuredConsumption {
+  "When the measurement starts."
+  startAt: DateTime
+  "When the week of the measurement began."
+  weekStart: DateTime
+  "Energy consumption over the period in kWh."
+  homeLoadKwh: Float
+  "The consumption in kW"
+  washingMachineKwh: Float
+}
+
+type InstalmentMonthlyTerm {
+  "Instalment type."
+  type: String
+  "Is instalment plan available."
+  isAvailable: Boolean
+  "Amount of months in the term."
+  monthsInTerm: Int
+  "Interest rate."
+  interestRate: Float
+  "Minimum amount to spend."
+  minimumSpend: Int
+  "Maximum amount to spend."
+  maximumSpend: Int
+  "Cost for the first instalment."
+  firstInstalmentCost: Float
+  "Cost for the regular instalment."
+  regularInstalmentCost: Float
+  "Cost for the final instalment."
+  finalInstalmentCost: Float
+  "Total amount loaned."
+  totalLoanValue: Float
+  "Total amount to pay."
+  totalToPay: Float
+  "Total interest to pay."
+  totalInterest: Float
+}
+
+type RepresentativeExample {
+  "Total amount to pay."
+  amount: Float
+  "Amount of months in the term."
+  monthsInTerm: Int
+  "Interest rate."
+  interestRate: Float
+  "HTML-type instalment breakdown."
+  description: String
+}
+
+type ProductEligibilityForGeneratedCandidates {
+  "Indicates if at least one candidate is eligible for the product."
+  isEligible: Boolean!
+  "The product line used to determine the eligibility of candidates (if any)."
+  productLine: String!
+  "The specific option within the selected product line, if available."
+  productLineOption: String
+  "All ineligibility reasons that apply to one or more candidates."
+  ineligibilityReasons: [ProductIneligibilityReasonDetails]
+  "The list of generated candidates."
+  candidates: [ProductEnrollmentCandidate]
+}
+
+type ProductIneligibilityReasonDetails {
+  "The code identifying the ineligibility reason."
+  code: String!
+  "A human-readable description of the ineligibility reason."
+  description: String!
+  "The type of the ineligibility reason."
+  type: IneligibilityReasonType!
+  "IDs of candidates affected by this ineligibility reason, if applicable."
+  candidateIds: [Int]
+}
+
+"\n    Which type ineligibility reason belongs to.\n    "
+enum IneligibilityReasonType {
+  ACCOUNT
+  CANDIDATE
+}
+
+type ProductEnrollmentCandidate {
+  "Unique identifier of the candidate, referenced in ineligibility reasons."
+  id: Int!
+  "The type of the candidate."
+  type: ProductEnrollmentCandidateType!
+  "Indicates whether the candidate is eligible for the product."
+  isEligible: Boolean!
+  "Import MPAN for electricity."
+  importMpan: String
+  "Export MPAN for electricity."
+  exportMpan: String
+  "MPRN for gas."
+  gasMprn: String
+}
+
+"\n    Which type product enrollment candidate belongs to.\n    "
+enum ProductEnrollmentCandidateType {
+  IMPORT_ELECTRICITY
+  EXPORT_ELECTRICITY
+  DUAL_DIRECTION_ELECTRICITY
+  GAS
+}
+
+type VehicleEligibilityForIOGo {
+  "Whether the vehicle is eligible."
+  isEligible: Boolean!
+}
+
+type SmartProductLineOption {
+  "The product line identifier."
+  line: String!
+  "The option within the product line."
+  option: String
+  "The latest Kraken product code for import electricity."
+  importProductCode: String
+  "The latest Kraken product code for export electricity."
+  exportProductCode: String
+  "The latest Kraken product code for gas."
+  gasProductCode: String
+}
+
+type MeterPoint {
+  "The supply status of this meter point."
+  supplyStatus: SupplyStatus!
+  "The date the previous tenant moved out and the account associated with the meter point became an occupier account, if the meter point has a supply status of OCCUPIER."
+  occupierFrom: Date
+}
+
+enum SupplyStatus {
+  SUPPLIED_BY_OE
+  WITH_OTHER_SUPPLIER
+  OCCUPIER
+  ON_HOLD
+  UNHANDLED
+}
+
+"The `Date` scalar type represents a Date\nvalue as specified by\n[iso8601](https:\/\/en.wikipedia.org\/wiki\/ISO_8601)."
+scalar Date
+
+enum FuelType {
+  ELECTRICITY
+  GAS
+}
+
+type InkConversation {
+  "The unique identifier for the conversation"
+  id: String
+  "The status of the conversation"
+  status: String
+  "The list of buckets"
+  buckets: [InkBucket]
+  "The events in the conversation"
+  events("The number of events to retrieve" last: Int): InkEventEdge
+}
+
+type InkBucket {
+  "The name of the bucket"
+  name: String
+  "The unique identifier for the bucket"
+  id: String
+  "The icon for the bucket"
+  icon: String
+}
+
+type InkEventEdge {
+  "The list of event edges"
+  edges: [InkEventNode]
+}
+
+type InkEventNode {
+  "The event node"
+  node: InkNewMessage
+}
+
+type InkNewMessage {
+  "The live chat message"
+  message: InkLiveChatMessage
+}
+
+type InkLiveChatMessage {
+  "The unique identifier for the message"
+  id: String
+  "The direction of the message (INBOUND\/OUTBOUND)"
+  direction: String
+  "The sender's handle"
+  fromHandle: String
+  "The recipient's handle"
+  toHandle: String
+  "The delivery status information"
+  delivery: InkDeliveryStatus
+  "The display content of the message"
+  displayContent: String
+  "The timestamp when the message occurred"
+  occurredAt: String
+}
+
+type InkDeliveryStatus {
+  "The delivery status of the message"
+  status: String
+}
+
+"Represents information about an account's greener night usage, indicating whether the account\ncharged their EV on a greener night or a non-greener night."
+type AccountEVChargeHistory {
+  "Account number."
+  accountNumber: String!
+  "Date in the past."
+  date: Date!
+  "Whether a date is considered greener night."
+  wasGreenerNight: Boolean!
+  "Whether account has charged an EV on this date."
+  didChargeEv: Boolean!
+}
+
+"Represents the statistics for an account's usage and performance during Greener Nights."
+type GreenerNightsAccountStats {
+  "Account number."
+  accountNumber: String!
+  "The amount of Octopoints the account has earned during Greenner Nights campaign."
+  totalOctopointsEarned: Int!
+  "Green KWH the account has used for EV charge during Greener Nights campaign."
+  totalGreenEvChargeKwh: Int!
+  "The amount of greener nights when the account has charged an EV."
+  totalGreenerNightsWhenEvCharged: Int!
+  "Proportion of days when EV was charged during Greener Night compared to total days when EV was charged last month."
+  lastMonthGreenerNightsEvChargeRatio: Float!
+  "Proportion of KWh charged during Greener Nights to the total KWh charged."
+  lastMonthGreenChargeKwhRatio: Float!
+}
+
+type GreenerNightsForecast {
+  "Date of the forecast."
+  date: Date!
+  "Whether a date is prognosed to be a greener night."
+  isGreenerNight: Boolean!
+  "Prognosed greenness score of particular date"
+  greennessScore: Int!
+  "Prognosed greenness index of particular date"
+  greennessIndex: GreennessIndex!
+}
+
+enum GreennessIndex {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+type SolarGenerationEstimateConnection {
+  "Pagination data for this connection."
+  pageInfo: PageInfo!
+  "Contains the nodes in this connection."
+  edges: [SolarGenerationEstimateEdge]!
+}
+
+"The Relay compliant `PageInfo` type, containing data necessary to paginate this connection."
+type PageInfo {
+  "When paginating forwards, are there more items?"
+  hasNextPage: Boolean!
+  "When paginating backwards, are there more items?"
+  hasPreviousPage: Boolean!
+  "When paginating backwards, the cursor to continue."
+  startCursor: String
+  "When paginating forwards, the cursor to continue."
+  endCursor: String
+}
+
+"A Relay edge containing a `SolarGenerationEstimate` and its cursor."
+type SolarGenerationEstimateEdge {
+  "The item at the end of the edge"
+  node: SolarGenerationEstimate
+  "A cursor for use in pagination"
+  cursor: String!
+}
+
+"Represents the solar generation estimate for a given postcode district and date, by the hour."
+type SolarGenerationEstimate {
+  "Date of the estimate."
+  date: Date!
+  "Hour of the estimate."
+  hour: Int!
+  "Estimated kWh of solar generation for the hour."
+  estimatedKwh: Float!
+}
+
+"Summary of an account's participation in Free Electricity events."
+type FreeElectricityAccountSummary {
+  "Total number of Free Electricity events."
+  totalEvents: Int!
+  "Number of events the account opted in to."
+  participatedEvents: Int!
+  "Number of events where the account had increased consumption."
+  successfulEvents: Int!
+  "Total consumption above baseline (in kWh) across all events."
+  totalConsumptionAboveBaseline: Float!
+  "Total payment (in GBP, including VAT) across all events."
+  totalPayment: Float!
+}
+
+type FreeElectricityAccountEventConnection {
+  "Pagination data for this connection."
+  pageInfo: PageInfo!
+  "Contains the nodes in this connection."
+  edges: [FreeElectricityAccountEventEdge]!
+}
+
+"A Relay edge containing a `FreeElectricityAccountEvent` and its cursor."
+type FreeElectricityAccountEventEdge {
+  "The item at the end of the edge"
+  node: FreeElectricityAccountEvent
+  "A cursor for use in pagination"
+  cursor: String!
+}
+
+"Information about a Free Electricity event that an account participated in."
+type FreeElectricityAccountEvent {
+  "The date of the event (in local time)."
+  eventDate: DateTime!
+  "Whether the account opted in to this event."
+  isOptedIn: Boolean!
+  "Whether the account has missing readings for this event."
+  hasMissingReadings: Boolean!
+  "The consumption above baseline (in kWh) during the event."
+  consumptionAboveBaseline: Float!
+  "The payment (in GBP, including VAT) during the event."
+  payment: Float!
+  "Whether the consumption above baseline is positive."
+  isIncrease: Boolean!
+}
+
+"Collective statistics for the Free Electricity campaign."
+type FreeElectricityCollectiveStats {
+  "Total consumption above baseline (in kWh) across the entire campaign."
+  totalConsumptionAboveBaseline: Float!
+  "Total payment (in GBP, including VAT) across the entire campaign."
+  totalPayment: Float!
+}
+
+type EvChargerPartnershipOffer {
+  "The name of the offer."
+  name: String!
+  "The code of the offer."
+  code: String!
+  "The discount type of the offer."
+  discountType: EvChargerPartnershipOfferDiscountType!
+  "The value of the discount for the offer."
+  value: Float!
+}
+
+"An enumeration."
+enum EvChargerPartnershipOfferDiscountType {
+  FIXED
+  PERCENTAGE
+}
+
+type AddressUprn {
+  "The Unique Property Reference Number assigned to the addressable location."
+  uprn: String!
+  "The human-legible address in a single string, excluding the postcode."
+  display: String!
+  "Primary Addressable Object description, normally the name or number of the property e.g. 'London House'."
+  primaryName: String
+  "Secondary Addressable Object description, e.g. 'Flat 2'. This is only relevant for a child property."
+  secondaryName: String
+  "The thoroughfare e.g. 'Witton Grove'."
+  street1: String
+  "Dependant thoroughfare e.g. 'Witton Grove East'."
+  street2: String
+  "Dependant locality e.g. 'Durham'."
+  locality1: String
+  "Double dependant locality e.g. 'Durham East'."
+  locality2: String
+  "The town or city e.g. 'London'."
+  town: String
+  "The postcode of the address."
+  postcode: String!
+}
+
+"Metadata associated with a supply point."
+type SupplyPointMetaData {
+  "A user defined label for the supply point."
+  label: String
+}
+
+type FlexibilitySchemeSessionConnection {
+  "Pagination data for this connection."
+  pageInfo: PageInfo!
+  "Contains the nodes in this connection."
+  edges: [FlexibilitySchemeSessionEdge]!
+}
+
+"A Relay edge containing a `FlexibilitySchemeSession` and its cursor."
+type FlexibilitySchemeSessionEdge {
+  "The item at the end of the edge"
+  node: FlexibilitySchemeSession
+  "A cursor for use in pagination"
+  cursor: String!
+}
+
+type FlexibilitySchemeSession {
+  "The unique code of the session"
+  code: String!
+  "The start time of the session"
+  startsAt: DateTime!
+  "The end time of the session"
+  endsAt: DateTime!
+}
+
+input FlexibilitySchemeMember {
+  "The account number of the member"
+  accountNumber: String!
+}
+
+type RenewableEnergyCommunityMember {
+  "Renewable Energy Community details"
+  community: RenewableEnergyCommunity!
+  "Account number of the member"
+  accountNumber: String!
+  "Total credit of the member in local currency cents"
+  totalCredit: Float!
+  "List of consumption records for the member in kWh"
+  consumptions(before: String after: String first: Int last: Int): CommunityMemberConsumptionConnection
+}
+
+type RenewableEnergyCommunity {
+  "Renewable energy community code"
+  code: String!
+  "Name of the renewable energy community"
+  name: String!
+  "Type of the renewable energy community"
+  type: RenewableEnergyCommunityType!
+  "Community statistics."
+  stats: RenewableEnergyCommunityStats
+}
+
+"An enumeration."
+enum RenewableEnergyCommunityType {
+  SOLAR
+}
+
+type RenewableEnergyCommunityStats {
+  "Total consumption."
+  totalConsumption: Float!
+  "Latest period end date."
+  latestPeriodEndDate: Date!
+  "Latest period total consumption."
+  latestPeriodTotalConsumption: Float!
+  "Latest period average consumption."
+  latestPeriodAverageConsumption: Float!
+  "Latest period max consumption."
+  latestPeriodMaxConsumption: Float!
+}
+
+type CommunityMemberConsumptionConnection {
+  "Pagination data for this connection."
+  pageInfo: PageInfo!
+  "Contains the nodes in this connection."
+  edges: [CommunityMemberConsumptionEdge]!
+}
+
+"A Relay edge containing a `CommunityMemberConsumption` and its cursor."
+type CommunityMemberConsumptionEdge {
+  "The item at the end of the edge"
+  node: CommunityMemberConsumption
+  "A cursor for use in pagination"
+  cursor: String!
+}
+
+type CommunityMemberConsumption {
+  "Start date of the considered period"
+  startDate: Date!
+  "End date of the considered period"
+  endDate: Date!
+  "Member consumption during the considered period in kWh"
+  consumption: Float!
+}
+
+type Scheme {
+  "The name of the scheme."
+  name: String!
+  "The unique identifier for the scheme."
+  slug: String!
+  "A brief description of the scheme."
+  description: String
+  "Whether the scheme is currently active."
+  isActive: Boolean!
+  "Whether the scheme is open to the public."
+  isPublic: Boolean!
+}
+
+type SchemeMembership {
+  "The status of the scheme membership at the time."
+  status: SchemeMembershipEventType!
+  "The timestamp when this status was updated."
+  updatedAt: DateTime!
+}
+
+"An enumeration."
+enum SchemeMembershipEventType {
+  ENROLLED
+  UNENROLLED
+  PENDING_ENROLLMENT
+  ENROLLMENT_FAILED
+}
+
+input SchemeMember {
+  "The account number associated with the scheme member."
+  accountNumber: String!
+}
+
+type Eligibility {
+  "Whether the member candidate is eligible for the scheme."
+  isEligible: Boolean!
+  "A list of reasons why the member candidate is ineligible for the scheme."
+  ineligibilityReasons: [String!]!
+}
+
+type CharityDonationAmountChoices {
+  "List of choices."
+  choices: [Int!]!
+  "Default choice."
+  default: Int
+}
+
+type CharityDonationHistory {
+  "Total amount donated to charity."
+  totalDonatedAmount: Int!
+  "Paginated list of individual donation records."
+  donations(before: String after: String first: Int last: Int): CharityDonationRecordConnection
+}
+
+type CharityDonationRecordConnection {
+  "Pagination data for this connection."
+  pageInfo: PageInfo!
+  "Contains the nodes in this connection."
+  edges: [CharityDonationRecordEdge]!
+}
+
+"A Relay edge containing a `CharityDonationRecord` and its cursor."
+type CharityDonationRecordEdge {
+  "The item at the end of the edge"
+  node: CharityDonationRecord
+  "A cursor for use in pagination"
+  cursor: String!
+}
+
+type CharityDonationRecord {
+  "Amount donated in this transaction."
+  donatedAmount: Int!
+  "When this donation was created."
+  createdAt: DateTime!
+}
+
+type CharityDonationSettings {
+  "Fixed amount to donate each month. Must be one of the allowed choices."
+  monthlyFixedAmount: Int
+  "Is opted in to donate to charity."
+  isOptedIn: Boolean!
+  "Timestamp of when the account most recently opted-in, if known."
+  effectiveFrom: DateTime
+  "Timestamp of when the account most recently opted-out, if known."
+  effectiveTo: DateTime
+}
+
+type ElectricChargerDeviceCredentials {
+  "The Access Point password of the charge point."
+  accessPointPassword: String!
+  "The Bluetooth Low Energy PIN of the charge point."
+  bluetoothLowEnergyPin: String!
+  "The serial number of the charger."
+  serialNumber: String!
+}
+
+type ChargePointSchedules {
+  "The list of schedules related to the charge point."
+  schedules: [ChargePointSchedule!]!
+}
+
+type ChargePointSchedule {
+  "The week day of the schedule."
+  day: WeekDay!
+  "The charge point schedule settings."
+  chargePointScheduleSettings: [ChargePointScheduleSetting!]!
+}
+
+"An enumeration."
+enum WeekDay {
+  SUNDAY
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+}
+
+type ChargePointScheduleSetting {
+  "The start time of the charge point schedule setting."
+  start: Time!
+  "The end time of the charge point schedule setting."
+  end: Time!
+  "The charging action of the charge point."
+  action: ChargingAction!
+}
+
+"The `Time` scalar type represents a Time value as\nspecified by\n[iso8601](https:\/\/en.wikipedia.org\/wiki\/ISO_8601)."
+scalar Time
+
+"An enumeration."
+enum ChargingAction {
+  OFF
+  ON
+}
+
+type ChargePointsAtLocation {
+  chargePoints: [OnboardedChargePoint]!
+}
+
+type OnboardedChargePoint {
+  deviceUUID: UUID!
+  model: String!
+  serialNumber: String!
+  bluetoothLowEnergyPin: String!
+  simcardIdentifier: String!
+  onboarding: ChargePointOnboarding
+  controlMode: ControlMode!
+  configuration: Configuration
+  chargingMethod: ChargePointChargingMethod
+  operationalState: ChargePointOperationalState
+  "The end time for the boost charge. Only present when operational_state is BOOST_CHARGING."
+  boostEndTime: DateTime
+  "The firmware version of the charger."
+  firmwareVersion: String!
+}
+
+type ChargePointOnboarding {
+  accountNumber: String!
+  propertyId: String!
+  onboardedAt: DateTime!
+  externalDeviceId: String!
+}
+
+"An enumeration."
+enum ControlMode {
+  SMART
+  MANUAL
+}
+
+type Configuration {
+  "Whether random delay is enabled for the charger."
+  isRandomDelayEnabled: Boolean!
+  "Whether the charger is connected to the OCPP server."
+  isConnected: Boolean!
+  "The led brightness percentage of the charger."
+  LEDBrightnessPercentage: Int!
+  "Whether the charge cable auto-lock is available."
+  isChargeCableAutoLockAvailable: Boolean!
+  "Whether the charge cable auto-lock is enabled."
+  isChargeCableAutoLockEnabled: Boolean!
+  "Whether the electric charger eco mode is enabled."
+  isEcoModeEnabled: Boolean!
+}
+
+"An enumeration."
+enum ChargePointChargingMethod {
+  SCHEDULED
+  ON_DEMAND
+}
+
+"An enumeration."
+enum ChargePointOperationalState {
+  AWAY
+  CHARGING
+  BOOST_CHARGING
+  NOT_CHARGING
+  UNPLUGGED
+  ONBOARDING
+}
+
+type ChargePointFirmwareVersionState {
+  "The firmware version state of the charge point."
+  firmwareVersionState: ChargePointFirmwareState!
+}
+
+"An enumeration."
+enum ChargePointFirmwareState {
+  UP_TO_DATE
+  REQUIRES_UPGRADE
+  UPGRADING
+  FAILED
+}
+
+type ElectricChargerChargingSessionConnection {
+  "Pagination data for this connection."
+  pageInfo: PageInfo!
+  "Contains the nodes in this connection."
+  edges: [ElectricChargerChargingSessionEdge]!
+}
+
+"A Relay edge containing a `ElectricChargerChargingSession` and its cursor."
+type ElectricChargerChargingSessionEdge {
+  "The item at the end of the edge"
+  node: ElectricChargerChargingSession
+  "A cursor for use in pagination"
+  cursor: String!
+}
+
+type ElectricChargerChargingSession {
+  "The start time of the charging session."
+  start: DateTime!
+  "The end time of the charging session."
+  end: DateTime
+  "The duration of the charging session in seconds."
+  duration: Float
+  "The control mode associated with the charging session."
+  controlMode: ControlMode!
+  "The energy delivered during the charging session, in kilowatt-hours."
+  energyDelivered: Decimal
+  "The estimated cost of the charging session."
+  estimatedCost: Money
+  "A list of problems that occurred during the charging session."
+  problems: [String!]!
+  "Whether the charging session was at the user's home, or a public charge point."
+  chargingSessionType: ChargingSessionType!
+}
+
+type Money {
+  "The quantity of currency."
+  amount: Decimal!
+  "The ISO 4217 code of the currency."
+  currency: String!
+}
+
+"An enumeration."
+enum ChargingSessionType {
+  HOME
+  PUBLIC
+}
+
+type WheelOfFortunePrize {
+  "Value of the prize"
+  value: Int
+  "Prize display string"
+  display: String
+}
+
+type WheelOfFortuneSpinsAllowed {
+  "Number of spins remaining"
+  spinsAllowed: Int
+  "Maximum number of spins allowed based on incentive type"
+  maxSpins: Int
+  "The current eligible count that the user has, null if not appropriate for the incentive type"
+  incentiveCount: Int
+}
+
+enum WheelOfFortunePrizeType {
+  ACCOUNT_CREDIT
+  LOYALTY_POINTS
+}
+
+type WheelOfFortuneSpinConnection {
+  "Pagination data for this connection."
+  pageInfo: PageInfo!
+  "Contains the nodes in this connection."
+  edges: [WheelOfFortuneSpinEdge]!
+}
+
+"A Relay edge containing a `WheelOfFortuneSpin` and its cursor."
+type WheelOfFortuneSpinEdge {
+  "The item at the end of the edge"
+  node: WheelOfFortuneSpin
+  "A cursor for use in pagination"
+  cursor: String!
+}
+
+type WheelOfFortuneSpin {
+  "Type of the prize"
+  prizeType: WheelOfFortunePrizeType
+  "Incentive for the spin"
+  incentiveType: WheelOfFortuneIncentiveType
+  "Reference of the spin"
+  reference: UUID
+  "Date of the spin"
+  spunAt: DateTime
+  "Prize won by the spin"
+  prize: WheelOfFortunePrize
+}
+
+enum WheelOfFortuneIncentiveType {
+  ELECTRICITY_READING
+  GAS_READING
+  ELECTRICITY_SMART_METER
+  GAS_SMART_METER
+}
+
+type SavingSessionsType {
+  "Account-specific saving sessions information."
+  account("Account number." accountNumber: String!): SavingSessionsAccountType
+  "Available saving sessions events."
+  events("Include development\/test events" includeDev: Boolean = false): [SavingSessionsEventType!]!
+  "The total number of events, with optional filtering for dev events."
+  eventCount("Include development\/test events" includeDev: Boolean = false): Int
+  "Regional results for saving sessions events."
+  regionalResults: [SavingSessionsRegionalResultType!]!
+}
+
+type SavingSessionsAccountType {
+  "Whether the account is eligible to join the campaign."
+  canJoinCampaign: Boolean
+  "Whether the account joined the campaign."
+  hasJoinedCampaign: Boolean
+  "Meterpoints eligible for signup to Saving Sessions."
+  eligibleMeterPoints: [EligibleMetersPointsType!]!
+  "The meter point signed up to Saving Sessions."
+  signedUpMeterPoint: EligibleMetersPointsType
+  "Whether the account is a business account."
+  isBusinessAccount: Boolean
+  "Whether the account is a tester account for the campaign."
+  isTesterAccount: Boolean
+  "The events that the account has joined."
+  joinedEvents: [SavingSessionsAccountJoinedEventsType!]!
+  "The event streak history of the account."
+  eventStreak: [SavingSessionsAccountEventStreakType!]!
+}
+
+type EligibleMetersPointsType {
+  "The valid Saving Sessions MPAN."
+  mpan: String
+  "The grid supply point."
+  gspGroupId: String
+}
+
+type SavingSessionsAccountJoinedEventsType {
+  "The event ID of the joined event."
+  eventId: Int
+  "The start datetime of the joined event."
+  startAt: DateTime
+  "The end datetime of the joined event."
+  endAt: DateTime
+  "The amount of OctoPoints the account has been awarded for their participation in the event."
+  rewardGivenInOctoPoints: Int
+  "The energy saved in kWh for the event."
+  energySavedInKwh: Float
+  "The status of the event."
+  eventStatus: SavingSessionsAccountEventStatus
+  "Updated results status."
+  resultsStatus: SavingSessionsAccountEventResultStatusChoices
+  "The saved amount of CO2 in grams for the event."
+  co2SavedInGrams: Float
+  "The total consumption reduction in percentage for the event."
+  percentageSaved: Float
+  "Percent rank amongst all customers that reduced consumption."
+  netReductionPctRank: Float
+  "The average payment amongst all customers per event."
+  avgCustomerRemunerationPounds: Float
+  "How much we thought the customer was going to use over the event period."
+  baselineConsumptionDeltaKwh: Float
+  "How much the customer actually used over the event period."
+  consumptionDeltaKwh: Float
+  "The datetime of when the results were set."
+  resultsSetAt: DateTime
+}
+
+"An enumeration."
+enum SavingSessionsAccountEventStatus {
+  UPCOMING
+  ONGOING
+  DONE
+}
+
+"An enumeration."
+enum SavingSessionsAccountEventResultStatusChoices {
+  CALCULATING
+  UPCOMING
+  SUCCESS
+  PARTIAL_SUCCESS
+  FAIL
+  MISSING_READINGS
+}
+
+type SavingSessionsAccountEventStreakType {
+  "The start datetime of the joined event."
+  eventStartDate: DateTime
+  "Did the account opt-in to the event."
+  isOptedIntoEvent: Boolean
+  "Dispatch notice time of event (day before, within 1 day, etc)."
+  dispatchNotice: DispatchNoticeTypeChoices
+  "The streak point the account had during the event."
+  streakPoints: Int
+}
+
+"\n    The different types of dispatch notices that can be issued for Saving Sessions events.\n    "
+enum DispatchNoticeTypeChoices {
+  DAY_AHEAD
+  WITHIN_DAY_1
+  WITHIN_DAY_2
+}
+
+type SavingSessionsEventType {
+  "The event ID."
+  id: Int
+  "The event code."
+  code: String
+  "The start of the event."
+  startAt: DateTime
+  "The end of the event."
+  endAt: DateTime
+  "Status of the event."
+  status: SavingSessionsAccountEventStatus
+  "The number of OctoPoints an account will earn per kWh of energy reduced, if successful."
+  rewardPerKwhInOctoPoints: Int
+  "List of the target gsp group id's for the event, if any."
+  targetGsp: [TargetGspType!]!
+  "The batch ID for the opt-in invitations."
+  optInInvitationBatchId: UUID
+  "Whether this this a test event."
+  devEvent: Boolean
+}
+
+type TargetGspType {
+  "Grid Supply Point group id, eg. '_A'."
+  groupId: String
+}
+
+type SavingSessionsRegionalResultType {
+  "The id of the region which the result belongs to."
+  regionId: String
+  "The name of the region which the result belongs to."
+  regionName: String
+  "The amount of events counted into the result."
+  eventCount: Int
+  "The baseline consumption of the region in mWh"
+  baselineConsumptionMwh: Float
+  "The actual metered consumption of the region in mWh."
+  meteredConsumptionMwh: Float
+  "The reduction of consumption of the region in mWh."
+  consumptionReductionMwh: Float
+  "The reduction of consumption in the region as a percentage."
+  consumptionReductionPercentage: Float
+}
+
+type OctoplusOfferGroupConnectionTypeConnection {
+  "Pagination data for this connection."
+  pageInfo: PageInfo!
+  "Contains the nodes in this connection."
+  edges: [OctoplusOfferGroupConnectionTypeEdge]!
+}
+
+"A Relay edge containing a `OctoplusOfferGroupConnectionType` and its cursor."
+type OctoplusOfferGroupConnectionTypeEdge {
+  "The item at the end of the edge"
+  node: OctoplusOfferGroupType
+  "A cursor for use in pagination"
+  cursor: String!
+}
+
+type OctoplusOfferGroupType {
+  "Unique identifier of the Offer Group."
+  id: Int!
+  "The name describing offer group."
+  name: String
+  "The type of offer group."
+  groupType: String
+  "The image urls for this offer."
+  imageUrls: OctoplusOfferGroupImageUrlsType
+  "The list of offers in this offer group."
+  octoplusOffers: [OctoplusOfferType!]!
+  "The offer group's category"
+  category: OctoplusOfferGroupCategory!
+}
+
+type OctoplusOfferGroupImageUrlsType {
+  "The mobile banner url."
+  bannerMobile: String
+}
+
+type OctoplusOfferType {
+  "The slug to be used as the offer identifier."
+  slug: String
+  "The name of the offer to be displayed to the user."
+  name: String
+  "The short description of the offer."
+  description: String
+  "The long description of the offer."
+  longDescription: String
+  "The name of the reward partner."
+  partnerName: String
+  "The price tag for this offer."
+  priceTag: String
+  "The points cost of claiming this offer."
+  pointsCost: Int
+  "The available sites url for this offer."
+  availableSitesUrl: String
+  "The partner site url for this offer."
+  partnerSiteUrl: String
+  "The image urls for this offer."
+  imageUrls: OctoplusOfferImageUrlsType
+  "The terms and conditions to display to the user."
+  termsAndConditions: String
+  "The instructions for the user as to how to use their claimed reward."
+  usageInstructions: String
+  "The category of the offer."
+  category: String
+  "Describes whether the user should be able to claim this offer, and the reason if not."
+  claimAbility: OctoplusRewardClaimAbilityType
+  "The datetime at which the user should no longer be able to claim this offer."
+  claimBy: DateTime
+}
+
+type OctoplusOfferImageUrlsType {
+  "The banner image url."
+  banner: String
+  "The mobile banner url."
+  bannerMobile: String
+  "The logo url."
+  logo: String
+}
+
+type OctoplusRewardClaimAbilityType {
+  "Describes whether the user should be able to claim this offer."
+  canClaimOffer: Boolean
+  "Describes why a user cannot claim this offer."
+  cannotClaimReason: CannotClaimReason
+}
+
+enum CannotClaimReason {
+  OUT_OF_STOCK
+  MAX_CLAIMS_PER_PERIOD_REACHED
+  INSUFFICIENT_POINTS
+}
+
+type OctoplusOfferGroupCategory {
+  "The category's name."
+  name: String
+}
+
+type OctoplusRewardType {
+  "The unique id of the reward."
+  id: Int
+  "The account number associated with this reward."
+  accountNumber: String
+  "The offer claimed as part of this reward."
+  offer: OctoplusOfferType
+  "The voucher associated with this reward."
+  vouchers: [VoucherType]
+  "The datetime at which the reward was initially claimed."
+  claimedAt: DateTime
+  "The current status of the reward."
+  status: OctoplusRewardStatus
+}
+
+union VoucherType = OctoplusVoucherType | ShoptopusVoucherType
+
+type OctoplusVoucherType {
+  "The voucher code."
+  code: String
+  "The type of voucher."
+  type: String
+  "The barcode value\/code."
+  barcode: String
+  "The value to be encoded in the rendered barcode."
+  barcodeValue: String
+  "The type of barcode to render."
+  barcodeFormat: String
+  "The datetime at which the voucher will no longer be useable."
+  expiresAt: DateTime
+}
+
+type ShoptopusVoucherType {
+  "The voucher code."
+  code: String
+}
+
+enum OctoplusRewardStatus {
+  PENDING
+  ISSUED
+  CANCELLED
+}
+
+type ShoptopusVoucherAvailabilityType {
+  "The voucher value."
+  value: Int
+  "Denotes whether or not this voucher value is currently available."
+  availability: Boolean
+}
+
+type CharityPartnershipDisplayData {
+  "The name of the charity that the partnership is run in conjunction with."
+  charityName: String!
+  "A unique identifier for the charity partnership."
+  externalReference: UUID!
+  "The title of the content describing the charity partnership."
+  displayTitle: String!
+  "The main body of the content describing the charity partnership."
+  displayText: String!
+  "The url of an image to be used in the content for the charity partnership."
+  displayImageUrl: String!
+  "Text to be shown in a \"more info\" button for the partnership."
+  moreInfoButtonText: String!
+  "A url for a \"more info\" button for the partnership."
+  moreInfoButtonUrl: String!
+}
+
+type CharityDonationConnection {
+  "Pagination data for this connection."
+  pageInfo: PageInfo!
+  "Contains the nodes in this connection."
+  edges: [CharityDonationEdge]!
+}
+
+"A Relay edge containing a `CharityDonation` and its cursor."
+type CharityDonationEdge {
+  "The item at the end of the edge"
+  node: CharityDonation
+  "A cursor for use in pagination"
+  cursor: String!
+}
+
+type CharityDonation {
+  "A unique identifier for the donation."
+  externalReference: UUID!
+  "The number of loyalty points donated."
+  amountDonated: Int!
+  "When the donation was made."
+  donatedAt: DateTime!
+  "The number of the account from which the donation was made."
+  accountNumber: String!
+  "The status of the donation."
+  status: CharityDonationStatus!
+}
+
+"An enumeration."
+enum CharityDonationStatus {
+  PENDING
+  MADE
+  CANCELLED
+}
+
+"An enumeration."
+enum CharityDonationOrderBy {
+  DONATED_AT_ASC
+  DONATED_AT_DESC
+}
+
+"A generic backend screen that can be used to define any type of screen."
+type GenericBackendScreen implements BackendScreenInterface {
+  "Unique identifier."
+  id: ID
+  "The name of the screen."
+  name: String
+  "The refresh \/ polling frequency, in milliseconds."
+  refreshFrequency: Int
+  "Serialised JSON representation of the screen."
+  screenData: String!
+}
+
+"A backend screen, the top-level container for Backend Screens in Mobile UI."
+interface BackendScreenInterface {
+  "Unique identifier."
+  id: ID
+  "The name of the screen."
+  name: String
+  "The refresh \/ polling frequency, in milliseconds."
+  refreshFrequency: Int
+  "Serialised JSON representation of the screen."
+  screenData: String!
+}
+
+"A key-value pair (both Strings) which is passed as a parameter to a screen."
+input BackendScreenParamInputType {
+  key: String!
+  value: String!
+}
+
+"A dynamic dashboard containing a list of items."
+type Dashboard implements DashboardInterface {
+  "Unique identifier of the object."
+  id: ID
+  "The serialised dashboard items."
+  serialisedDashboardItems: String!
+}
+
+"A dashboard screen."
+interface DashboardInterface {
+  "Unique identifier of the object."
+  id: ID
+  "The serialised dashboard items."
+  serialisedDashboardItems: String!
+}
+
+"The Heat Pump quote."
+type HeatPumpQuote {
+  "The quote code."
+  code: UUID!
+  "The total price quoted, in currency's minor unit."
+  price: Int @deprecated(reason: "Deprecated in favour of QuotedProduct price which supports multiple pricing options.")
+  "The address the quote is for."
+  address: Address!
+  "Whether this quote is eligible to proceed."
+  eligibility: QuoteEligibility
+  "The status of the quote."
+  status: HeatPumpQuoteStatus!
+  "The quoted products the customer can choose from."
+  quotedProducts: [QuotedProduct]
+  "A JSON object containing any client params stored on the quote."
+  clientParams: JSONString
+}
+
+"Address details."
+type Address {
+  "Address line 1 (e.g., street, PO Box, or company name)."
+  line1: NonEmptyString!
+  "Address line 2 (e.g., apartment, suite, unit, or building)."
+  line2: String
+  "ZIP or postal code."
+  postalCode: NonEmptyString!
+  "City, district, suburb, town, or village."
+  city: String
+  "State, county, province, or region."
+  state: String
+  "Country-specific unique identifier for an address, e.g. the UPRN in GB."
+  geographicalId: String
+  "Two-letter country code."
+  country: CountryCode
+}
+
+"An ISO 3166-1 alpha-2 two-letter country code, e.g. AU, GB."
+scalar CountryCode
+
+"Quote eligibility."
+type QuoteEligibility {
+  "Whether the quote is eligible or not."
+  isEligible: Boolean!
+  "The reason this quote is ineligible, if ineligible."
+  ineligibilityReason: HeatPumpQuoteIneligibilityReason
+}
+
+enum HeatPumpQuoteIneligibilityReason {
+  ADDRESS_OUT_OF_SERVICE_AREA
+  PROPERTY_HEAT_LOSS_TOO_HIGH
+  PROPERTY_UNDERGOING_RENOVATION
+  PROPERTY_TYPE_NOT_SUPPORTED
+  NO_SPACE_FOR_HEAT_PUMP
+  NO_SPACE_FOR_CYLINDER
+  HEAT_SOURCE_UNKNOWN
+  HEAT_SOURCE_NOT_SUPPORTED
+}
+
+enum HeatPumpQuoteStatus {
+  ACCEPTED
+  ISSUED
+  PURCHASED
+  SURVEYED
+  REISSUED
+}
+
+type QuotedProduct {
+  "The quoted product price, in the currency's minor unit."
+  price: Int
+  "The canonical product quoted."
+  product: Product
+  "Pricing method."
+  pricingMethod: HeatPumpPricingMethod
+  "The estimated running costs."
+  estimatedRunningCosts: [EstimatedRunningCost]
+  "The status of the quoted product."
+  status: QuotedProductStatus!
+}
+
+"The Heat Pump product."
+type Product {
+  "The unique product code."
+  code: String!
+}
+
+enum HeatPumpPricingMethod {
+  ARBITRARY
+  INDICATIVE
+  PREDICTIVE
+  SURVEY
+}
+
+type EstimatedRunningCost {
+  "The tariff name."
+  tariffName: String
+  "The estimated cost of running this product on this tariff."
+  cost: Int
+  "The time period this running cost is calculated for."
+  timePeriod: HeatPumpRunningCostTimePeriod
+}
+
+enum HeatPumpRunningCostTimePeriod {
+  YEAR
+}
+
+enum QuotedProductStatus {
+  ISSUED
+  SELECTED
+}
+
+"The Heat Pump quote finance offer."
+type HeatPumpQuoteFinanceOffer {
+  "The term selected by the customer in months."
+  term: PositiveInt
+  "The deposit percentage selected by the customer (e.g., 5%, 10%..)."
+  depositPercentage: Percentage
+  "The price of the cheapest quoted product in the currency's minor unit."
+  price: PositiveInt
+  "The interest rate for the finance offer loan (e.g., 5.50 for 5.5%)."
+  apr: Decimal
+  "List of available terms in months."
+  availableTerms: [Int]
+}
+
+"A positive integer."
+scalar PositiveInt
+
+"An Int representing a percentage, constrained between 0 and 100 inclusive."
+scalar Percentage
+
+"Status information for a heat pump controller."
+type ControllerStatus {
+  "The status and telemetry information of sensors."
+  sensors: [SensorStatus]
+  "The status and telemetry information of zones."
+  zones: [ZoneStatus]
+}
+
+"Status information for a heat pump sensor."
+type SensorStatus {
+  "The code name for a sensor."
+  code: String
+  "The connectivity\/online status of a sensor."
+  connectivity: SensorConnectivity
+  "The telemetry data of a sensor."
+  telemetry: SensorTelemetry
+}
+
+"Connectivity status of a sensor."
+type SensorConnectivity {
+  "Whether or not a sensor is currently online."
+  online: Boolean
+  "Time at which the status was retrieved."
+  retrievedAt: DateTime
+}
+
+"Telemetry data from a sensor."
+type SensorTelemetry {
+  "Temperature recorded by a sensor in celsius."
+  temperatureInCelsius: Float
+  "Percentage humidity recorded by the sensor."
+  humidityPercentage: Int
+  "Signal strength of a sensor measured in dBm (Received Signal Strength Indicator)."
+  rssi: Int
+  "Voltage recorded by a sensor."
+  voltage: Float
+  "Time at which the telemetry was retrieved."
+  retrievedAt: DateTime
+}
+
+"Status information for a heat pump zone."
+type ZoneStatus {
+  "The heat pump controller zone, i.e. WATER, ZONE_1, ZONE_2 or AUXILIARY."
+  zone: Zone
+  "The telemetry data of a zone."
+  telemetry: ZoneTelemetry
+}
+
+"A heat pump controller zone.\n\nNote, in Kraken Flex these use different values, e.g. 'Z1'."
+enum Zone {
+  WATER
+  ZONE_1
+  ZONE_2
+  AUXILIARY
+}
+
+"Telemetry data for a zone."
+type ZoneTelemetry {
+  "Target temperature for a zone, in celsius."
+  setpointInCelsius: Float
+  "Heating mode in zone."
+  mode: Mode
+  "Whether relay is currently switched on (True) or off (False)."
+  relaySwitchedOn: Boolean
+  "Whether there is demand for heat (True) or not (False)."
+  heatDemand: Boolean
+  "Time at which the telemetry was retrieved."
+  retrievedAt: DateTime
+}
+
+"Heating mode for a zone."
+enum Mode {
+  ON
+  OFF
+  AUTO
+  BOOST
+}
+
+type ControllerAtLocation {
+  "The controller attached to the account."
+  controller: Controller!
+  "The model of the heat pump."
+  heatPumpModel: String!
+  "The location at which the device exists."
+  location: Location!
+  "When the controller was provisioned (at this location for this account)."
+  provisionedAt: DateTime
+}
+
+type Controller {
+  "The EUID of the controller."
+  euid: String!
+}
+
+type Location {
+  "The property ID of the location."
+  propertyId: ID!
+}
+
+type ControllerAndZoneConfiguration {
+  "Controller configuration."
+  controller: ControllerConfiguration
+  "List of zones with their configuration and schedules."
+  zones: [ZoneInformation]
+  "Controller configuration."
+  heatPump: HeatPumpConfiguration
+}
+
+"Configuration details for the heat pump controller."
+type ControllerConfiguration {
+  "Controller firmware options for ESP and EFR chips."
+  firmwareConfiguration: FirmwareConfiguration
+  "Current state of the controller."
+  state: [State]
+  "8 character password used to access the access point mode webpage."
+  accessPointPassword: String
+  "Timezone the controller is in."
+  heatPumpTimezone: String
+  "Whether or not the controller is currently connected."
+  connected: Boolean
+  "When the controller was last reset."
+  lastReset: DateTime
+}
+
+"Firmware information for the heat pump controller."
+type FirmwareConfiguration {
+  "ESP32 firmware version (EFI System Partition)."
+  esp32: String
+  "EFR32 firmware version (Emergency Firmware Recovery)."
+  efr32: String
+  "The EUI of the controller being queried."
+  eui: String
+}
+
+enum State {
+  NORMAL_MODE
+  EMERGENCY_MODE
+  FAULT_MODE
+  BLE_MODE
+  AP_MODE
+  SETUP
+  FACTORY_RESTORE
+}
+
+type ZoneInformation {
+  "Configuration for a zone."
+  configuration: ZoneConfiguration
+  "The heating schedules being used by this zone."
+  schedules: [Schedule]
+}
+
+type ZoneConfiguration {
+  "Code name of the zone."
+  code: Zone
+  "What the zone is used for (heating, water etc)."
+  zoneType: ZoneType
+  "Enabled allows zone to heat when `callForHeat` is True."
+  enabled: Boolean
+  "User determined name for a zone."
+  displayName: String
+  "Primary sensor for the zone."
+  primarySensor: String
+  "Current operation."
+  currentOperation: ZoneCurrentOperation
+  "Previous operation."
+  previousOperation: ZonePreviousOperation
+  "Whether the zone is calling for heat."
+  callForHeat: Boolean
+  "Whether there is demand for heat (True) or not (False)."
+  heatDemand: Boolean
+  "Default mode, if the zone loses connection to the primary sensor."
+  emergency: Boolean
+  "All associated sensors and ADCs."
+  sensors: [SensorConfiguration]
+}
+
+"A heat pump controller zone type.\n\nNote, in Kraken Flex these use different values, e.g. 'AUX'."
+enum ZoneType {
+  HEAT
+  WATER
+  AUXILIARY
+  WIRED_THERMOSTAT
+  DIVERTER_VALVE
+}
+
+type ZoneCurrentOperation {
+  "Heating mode in zone."
+  mode: Mode
+  "Target temperature for a zone, in celsius."
+  setpointInCelsius: Float
+  "For zones which do not support setpoints, whether the operation was an ON or an OFF."
+  action: OperationAction
+  "End time for the current operation."
+  end: DateTime
+}
+
+"The 'action' of the current or previous operation on the controller, if this is defined.\n\nNormally we would just expect a current or previous operation to have a setpoint, and have no\nneed for an action field. But sometimes the zone does not support setpoints, but only ON\/OFF\nvalues, so we need to store these in a separate field, which this enum represents."
+enum OperationAction {
+  ON
+  OFF
+}
+
+type ZonePreviousOperation {
+  "Heating mode in zone."
+  mode: Mode
+  "Target temperature for a zone, in celsius."
+  setpointInCelsius: Float
+  "For zones which do not support setpoints, whether the operation was an ON or an OFF."
+  action: OperationAction
+}
+
+union SensorConfiguration = ADCSensorConfiguration | ZigbeeSensorConfiguration
+
+type ADCSensorConfiguration implements SensorConfigurationInterface {
+  "Code name of the sensor."
+  code: String
+  "User determined name for a sensor."
+  displayName: String
+  "Sensor type (NTC)."
+  type: SensorType
+  "Whether or not a sensor is enabled."
+  enabled: Boolean
+}
+
+interface SensorConfigurationInterface {
+  "Code name of the sensor."
+  code: String
+  "User determined name for a sensor."
+  displayName: String
+}
+
+"Type of sensor used in heat pump zones."
+enum SensorType {
+  NTC
+  ZIGBEE
+  TSTAT
+}
+
+type ZigbeeSensorConfiguration implements SensorConfigurationInterface {
+  "Code name of the sensor."
+  code: String
+  "User determined name for a sensor."
+  displayName: String
+  "Sensor type (Zigbee)."
+  type: SensorType
+  "Sensor ID."
+  id: ID
+  "Sensor firmware version."
+  firmwareVersion: String
+  "Whether or not boost is enabled for a sensor."
+  boostEnabled: Boolean
+}
+
+"A heating schedule for specific days of the week."
+type Schedule {
+  "A bitmask of the days this program is active for."
+  days: String
+  "A list of the Setting objects which make up this schedule."
+  settings: [Setting]
+}
+
+"A single schedule setting within a day."
+type Setting {
+  "The time this setting becomes active."
+  startTime: Time
+  "Whether the setting turns the zone on or off, or changes its temperature."
+  action: String
+  "Desired zone temperature (for zones which support setpoints)."
+  setpointInCelsius: Float
+  "Whether the setting leaves the zone \"ON\" or \"OFF\"."
+  zoneState: ZoneActivationState
+}
+
+"Whether the zone is on or off."
+enum ZoneActivationState {
+  ON
+  OFF
+}
+
+type HeatPumpConfiguration {
+  "The serial number of the heat pump."
+  serialNumber: String
+  "The heat pump model (eg. COSY)."
+  model: String
+  "The hardware version."
+  hardwareVersion: String
+  "Any fault codes present on the device."
+  faultCodes: [String]
+  "The current weather compensation settings."
+  weatherCompensation: WeatherCompensationConfiguration
+  "The flow temperature set for heating."
+  heatingFlowTemperature: FlowTemperatureConfiguration
+  "Whether the system has a manifold set up."
+  manifoldEnabled: Boolean
+  "Whether the system has a hot water cylinder (tank) which is compatible with heat pumps."
+  hasHeatPumpCompatibleCylinder: Boolean
+  "The maximum temperature which the hot water can be set to."
+  maxWaterSetpoint: Float
+  "The minimum temperature which the hot water can be set to."
+  minWaterSetpoint: Float
+  "The last time the heat pump metrics were reset to zero."
+  latestCounterReset: DateTime
+  "Whether quieter mode is enabled for this heat pump controller."
+  quieterModeEnabled: Boolean
+}
+
+type WeatherCompensationConfiguration {
+  "Whether weather compensation is enabled or not."
+  enabled: Boolean!
+  "The allowable range for the minimum value of flow temperature."
+  allowableMinimumTemperatureRange: TemperatureRange!
+  "The allowable range for the maximum value of flow temperature."
+  allowableMaximumTemperatureRange: TemperatureRange!
+  "The min and max flow temperatures currently selected by the user."
+  currentRange: TemperatureRange!
+}
+
+type TemperatureRange {
+  "The minimum allowable temperature in range."
+  minimum: Temperature
+  "The maximum allowable temperature in range."
+  maximum: Temperature
+}
+
+"Describes the temperature of something that is relevant to the heating system."
+type Temperature {
+  "The temperature measured."
+  value: Decimal
+  "The units in which the temperature is being measured."
+  unit: TemperatureUnit!
+}
+
+enum TemperatureUnit {
+  DEGREES_CELSIUS
+}
+
+type FlowTemperatureConfiguration {
+  "The minimum and maximum temperatures which may be selected, dictated by the device."
+  allowableRange: TemperatureRange!
+  "The flow temperature currently selected by the user."
+  currentTemperature: Temperature!
+}
+
+type HeatPumpTimeRangedPerformance {
+  "The coefficient of performance (COP) of the heat pump."
+  coefficientOfPerformance: Decimal
+  "The field to show energy input."
+  energyInput: Energy!
+  "The field to show energy output."
+  energyOutput: Energy!
+}
+
+"Describes the energy (not power) consumed (e.g. as electricity) or returned (e.g. as heat) by a\nsystem over a given span of time.\n\nDiffers from `Power` in that it describes the *total* amount of energy transferred during a\ngiven time frame (not a single point in time)."
+type Energy {
+  "The amount of energy (not power) transmitted."
+  value: Decimal
+  "The units in which the energy is being measured."
+  unit: EnergyUnit!
+}
+
+enum EnergyUnit {
+  KILOWATT_HOUR
+}
+
+type HeatPumpPerformanceGroupingNode {
+  "The start datetime of the node."
+  startAt: DateTime!
+  "The end datetime of the node."
+  endAt: DateTime!
+  "The field to show energy input."
+  energyInput: Energy
+  "The field to show energy output."
+  energyOutput: Energy
+  "The field to show outdoor temperature."
+  outdoorTemperature: Temperature
+}
+
+"The time interval that performance is reported for."
+enum PerformanceGrouping {
+  LIVE
+  DAY
+  WEEK
+  MONTH
+  YEAR
+}
+
+"A container for some basic metrics to show how the heating system has performed over its lifetime.\n\nNote that \"its lifetime\" may not be the actual life of the heat pump, but may have been reset\nwhen it was last provisioned."
+type LifetimeTelemetry {
+  "When these measurements were taken."
+  readAt: DateTime!
+  "The average lifetime coefficient of performance up to the time of measurement."
+  seasonalCoefficientOfPerformance: Decimal
+  "The electrical energy drawn by the heat pump over its lifetime."
+  energyInput: Energy!
+  "The heat energy emitted by the heat pump over its lifetime."
+  heatOutput: Energy!
+}
+
+"A container for some basic metrics relevant to the current state of the heating system."
+type LiveTelemetry {
+  "When these measurements were taken."
+  readAt: DateTime!
+  "The coefficient of performance at the time of measurement."
+  coefficientOfPerformance: Decimal
+  "The power being drawn by the heat pump at a given time."
+  powerInput: Power!
+  "The rate of heat flow from the heat pump at a given time."
+  heatOutput: Power!
+  "The temperature outdoors."
+  outdoorTemperature: Temperature!
+}
+
+"Describes the power (not energy) being consumed (as electricity) or returned (as heat) by\nthe system at a given point in time.\n\nDiffers from `Energy` in that it describes the *rate* at which energy is being transferred at\na given point in time."
+type Power {
+  "The amount of power (not energy) transmitted to or from the heat pump."
+  value: Decimal
+  "The units in which the power is being measured."
+  unit: PowerUnit!
+}
+
+enum PowerUnit {
+  KILOWATT
+}
+
+"Summary statistics for customer payouts."
+type CustomerPayoutsSummaryType {
+  "Total balance of all rewards in minor units (e.g., cents for USD)."
+  totalBalance: Int!
+  "ISO 4217 currency code. Null if account has no payouts."
+  currency: String
+  "Total count of rewards for the account."
+  count: Int!
+}
+
+"GraphQL type representing a customer payout."
+type CustomerPayoutType {
+  "The payout ID."
+  id: ID!
+  "UUID used as unique identifier at provider to prevent duplicate payments."
+  externalReference: String!
+  "Kraken account number."
+  accountNumber: String!
+  "Payment amount in minor units (e.g., cents for USD)."
+  amount: Int!
+  "ISO 4217 currency code."
+  currency: String!
+  "Title of the program associated with this payout."
+  programTitle: String
+  "Reason for the payout (e.g., 'Completed heat pump installation')."
+  reason: String!
+  "Current payout status."
+  status: PayoutStatusEnum!
+  "When this payment was submitted to provider."
+  submittedAt: DateTime
+  "When this payout was created."
+  createdAt: DateTime!
+  "Fulfilment attempts for this payout."
+  attempts: [PayoutFulfilmentAttemptType]!
+}
+
+"Customer-facing payout status"
+enum PayoutStatusEnum {
+  PENDING
+  SUBMITTED
+  SENT
+  CLAIMED
+  FAILED
+}
+
+"GraphQL type representing a payout fulfilment attempt."
+type PayoutFulfilmentAttemptType {
+  "The fulfilment attempt ID."
+  id: ID!
+  "Payment provider used for this fulfilment attempt (e.g., 'CHOICE_DIGITAL')."
+  provider: String!
+  "Status of this fulfilment attempt."
+  fulfilmentStatus: PayoutFulfilmentAttemptStatusEnum!
+  "Payment method used (e.g., 'Octopus Virtual Prepaid Mastercard®')."
+  payoutMethod: String
+  "Type of payout (e.g., 'Digital Prepaid Card', 'Physical Prepaid Card')."
+  payoutType: String
+  "Channel used for payout (e.g., 'digital', 'physical')."
+  payoutChannel: String
+  "Additional comments or notes."
+  comments: String
+  "When this attempt was submitted to provider."
+  submittedAt: DateTime
+  "When this attempt was fulfilled by provider."
+  fulfilledAt: DateTime
+  "When the payout was claimed by the customer."
+  claimedAt: DateTime
+  "When this attempt was created."
+  createdAt: DateTime!
+}
+
+"Status of the payout fulfilment attempt"
+enum PayoutFulfilmentAttemptStatusEnum {
+  PENDING
+  SENT
+  CANCELLED
+  CLAIMED
+  FAILED
+  VOID_REQUESTED
+  VOIDED
+}
+
+type SignupEligibility {
+  "Whether the customer is eligible to sign up."
+  isEligible: Boolean!
+  "A reason why the customer is not eligible to sign up."
+  ineligibilityReason: IneligibilityReason
+  "The payment methods that would allow the customer to sign up."
+  eligiblePaymentMethods: [NonEmptyString!]!
+}
+
+"An enumeration."
+enum IneligibilityReason {
+  SCORE_TOO_LOW
+  NO_SCORE_RETURNED
+  ERROR_RESPONSE
+  INVALID_RESPONSE
+}
+
+input SignupEligibilityInput {
+  "The sales channel through which the customer is trying to sign up."
+  salesChannel: NonEmptyString!
+  "The customer's payment method."
+  paymentMethod: NonEmptyString!
+  "The customer's personal details."
+  customer: CustomerInput!
+  "The customer's address."
+  address: AddressInput!
+}
+
+"Customer details."
+input CustomerInput {
+  "First name."
+  firstName: String!
+  "Last name."
+  lastName: String!
+  "Date of birth."
+  dateOfBirth: Date
+  "Email address."
+  email: EmailAddress!
+  "Phone number."
+  phone: String!
+}
+
+"Email address."
+scalar EmailAddress
+
+"Address details."
+input AddressInput {
+  "Address line 1 (e.g., street, PO Box, or company name)."
+  line1: NonEmptyString!
+  "Address line 2 (e.g., apartment, suite, unit, or building)."
+  line2: String
+  "ZIP or postal code."
+  postalCode: NonEmptyString!
+  "City, district, suburb, town, or village."
+  city: String
+  "State, county, province, or region."
+  state: String
+  "Country-specific unique identifier for an address, e.g. the UPRN in GB."
+  geographicalId: String
+  "Two-letter country code."
+  country: CountryCode
+}
+
+type AppointmentSlotType {
+  "The slot ID, required later in order to book it."
+  id: UUID
+  "The date of the appointment slot."
+  date: String
+  "The appointment time slot."
+  timeSlot: TimeSlot
+  "The duration of the appointment."
+  durationMinutes: Int
+}
+
+"An enumeration."
+enum TimeSlot {
+  MORNING
+  AFTERNOON
+  ALL_DAY
+  EVENING
+}
+
+"The Field appointment."
+type FieldAppointment {
+  "The appointment booking token."
+  bookingToken: UUID!
+  "The type of appointment."
+  appointmentType: WorkOrderType!
+  "The date abd time the appointment was booked at."
+  bookedAt: DateTime
+  "The date and time the appointment starts at."
+  startsAt: Date
+  "The date and time the appointment ends at."
+  endsAt: Date
+  "The recommended date for booking appointment."
+  recommendedSchedulingDate: Date
+}
+
+"An enumeration."
+enum WorkOrderType {
+  HEAT_PUMP_SURVEY
+  HEAT_PUMP_SURVEY_V2
+  HEAT_PUMP_ANNUAL_MAINTENANCE
+  HEAT_PUMP_ANNUAL_MAINTENANCE_WITH_COSY_BOARD_SWITCH
+  EV_STANDARD_CHARGER_INSTALL
+  EV_STANDARD_PLUS_CHARGER_INSTALL
+  EV_ENHANCED_CHARGER_INSTALL
+  EV_BESPOKE_CHARGER_INSTALL
+}
+
+type ChargingStreaksType {
+  "The number of consecutive charging days in the current streak."
+  currentChargingStreakCount: Int!
+  "The number of available freezes."
+  currentFreezeCount: Int!
+  "Day-by-day detail of the account's charging streak."
+  chargingStreakDetail: [ChargingStreakDetailType!]!
+}
+
+type ChargingStreakDetailType {
+  "The local day."
+  localDate: Date!
+  "The type of the day."
+  chargingStreakDayType: DayType!
+  "The milestone day number, if applicable."
+  milestoneDay: Int
+}
+
+"An enumeration."
+enum DayType {
+  FUTURE
+  STREAK
+  MISSED
+  FREEZE
+}
+
+"GraphQL type representing an account."
+type AccountType {
+  "The account number."
+  number: String!
+  canModifyPayments: CanModifyPayments
+}
+
+"GraphQL type representing whether an account can modify payments."
+type CanModifyPayments {
+  "Whether or not the account can amend payments."
+  canAmendPayments: Boolean
+  "Whether or not the account can cancel payments."
+  canCancelPayments: Boolean
+}
+
+type AccountHealthChecklist {
+  "A list of tasks that should be completed by the customer."
+  pendingTasks: [AccountHealthTask!]!
+}
+
+type AccountHealthTask {
+  "The slug of the account health task."
+  code: String!
+}
+
+type Mutation {
+  "Request heat pump deposit follow up\n\nThe possible errors that can be raised are:\n- OE-0301: Heat pump quote not found.\n- OE-0303: Heat pump quote ineligible.\n- OE-0306: Heat pump quote status invalid.\n- OE-GBR-0901: Unable to request deposit follow up for quote.\n"
+  requestHeatPumpDepositFollowUp(input: RequestHeatPumpDepositFollowUpInput!): RequestHeatPumpDepositFollowUp
+  "Set heat pump quote journey version\n\nThe possible errors that can be raised are:\n- OE-0301: Heat pump quote not found.\n- OE-GBR-0902: Heat pump quote journey version already exists.\n- OE-GBR-0903: Heat pump quote journey version is invalid.\n- OE-0306: Heat pump quote status invalid.\n- OE-GBR-0904: Heat pump quote journey version is ineligible.\n"
+  setHeatPumpQuoteJourneyVersion(input: SetHeatPumpQuoteJourneyVersionInput!): SetHeatPumpQuoteJourneyVersion
+  "Provide feedback on a prediction whether it was accurate or not.\n\nThe possible errors that can be raised are:\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-GBR-0801: Could not set prediction success.\n- OE-GBR-0802: Prediction success data already exists.\n"
+  setUserConfirmationForPrediction(input: SetUserConfirmationForPredictionInput!): SetUserConfirmationForPrediction
+  "Send a solar panel estimate to an email address."
+  sendSolarEstimateEmail("Input fields to send the estimate email." input: SendSolarEstimateEmailInput!): SendSolarEstimateEmail
+  "Submit a solar enquiry.\n\nThe possible errors that can be raised are:\n- OE-GBR-0601: Invalid product code.\n"
+  submitSolarEnquiry(input: SubmitSolarEnquiryInput!): SubmitSolarEnquiry
+  "Link Nissan product enrollment to the specific site.\n\nThe possible errors that can be raised are:\n- OE-GBR-0707: Product enrollment not found.\n- OE-GBR-0708: Please try again later.\n"
+  linkNissanProductEnrollmentToSite(input: LinkNissanProductEnrollmentToSiteInput!): LinkNissanProductEnrollmentToSite
+  "Move a customer in to the occupier property associated to the specified electricity meter point.\n\nThe possible errors that can be raised are:\n- OE-GBR-0201: Invalid property for move-in.\n- OE-GBR-0202: Invalid MPAN or MPRN.\n- OE-GBR-0203: Unable to perform move-in.\n- OE-GBR-0204: Move-in request timed out.\n"
+  moveIn(input: MoveInInput!): MoveIn
+  "Create a quote for a move into an occupied property.\n\nThe possible errors that can be raised are:\n- OE-GBR-0201: Invalid property for move-in.\n- OE-GBR-0202: Invalid MPAN or MPRN.\n"
+  createMoveInQuote(input: CreateMoveInQuoteInput!): CreateMoveInQuote
+  "Create a new Ink live chat message\n\nThe possible errors that can be raised are:\n- OE-0000: Internal server error.\n- OE-0103: Unauthorized.\n- OE-0001: Feature unavailable.\n- OE-1201: Unauthorized to reference attachment.\n- OE-GBR-1202: Attachment file not found.\n- OE-GBR-1203: Message processing error.\n- OE-GBR-1204: Live Chat message already processed.\n- OE-GBR-1205: Unauthorized to access Live Chat for this account.\n"
+  createInkLiveChatMessage(input: CreateInkLiveChatMessageInput!): CreateInkLiveChatMessageOutput
+  "Generate a presigned URL for Ink\n\nThe possible errors that can be raised are:\n- OE-0103: Unauthorized.\n- OE-0001: Feature unavailable.\n- OE-GBR-1203: Message processing error.\n- OE-GBR-1206: Live Chat channel not supported.\n- OE-GBR-1207: Error processing presigned URL.\n- OE-GBR-1209: Invalid attachment filename.\n"
+  generateInkPresignedUrl(input: GenerateInkPresignedUrlInput!): GenerateInkPresignedUrlOutput
+  "Sign up an account for Greener Nights.\n\nThe possible errors that can be raised are:\n- OE-GBR-0405: Unable to sign up account for Greener Nights.\n"
+  greenerNightsSignUp(input: GreenerNightsSignUpInput!): GreenerNightsSignUp
+  "Opt out an account from Greener Nights."
+  greenerNightsOptOut(input: GreenerNightsOptOutInput!): GreenerNightsOptOut
+  "Perform final actions after a successful payment of an EV Charger purchase.\n\nThe possible errors that can be raised are:\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n"
+  completeEvChargerPurchase(input: CompleteEVChargerPurchaseInput!): CompleteEVChargerPurchase
+  "Enroll an account onto Fan Club\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n"
+  enrollOntoFanClub("The account number to enroll" accountNumber: String!): EnrollOntoFanClub
+  "Enroll a member in a Flexibility Scheme\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-1401: Flexibility Scheme not found.\n- OE-1402: Member already enrolled.\n- OE-1403: Unable to process enrollment.\n- OE-1404: Ineligible for Flexibility Scheme.\n"
+  enrollInFlexibilityScheme(input: EnrollInFlexibilitySchemeInput!): EnrollInFlexibilityScheme
+  "Unenroll a member from a Flexibility Scheme\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-1401: Flexibility Scheme not found.\n- OE-1405: Member not enrolled in Flexibility Scheme.\n- OE-1409: Unable to process unenrollment.\n"
+  unenrollFromFlexibilityScheme(input: UnenrollFromFlexibilitySchemeInput!): UnenrollFromFlexibilityScheme
+  "Opt a member into a Flexibility Scheme session\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-1401: Flexibility Scheme not found.\n- OE-1406: Session not found.\n- OE-1405: Member not enrolled in Flexibility Scheme.\n- OE-1407: Member already opted in.\n- OE-1408: Unable to process opt-in.\n"
+  optInToFlexibilitySchemeSession(input: OptInToFlexibilitySchemeSessionInput!): OptInToFlexibilitySchemeSession
+  "Enroll a member in a scheme\n\nThe possible errors that can be raised are:\n- OE-1101: Unsupported scheme.\n- OE-1102: Member already enrolled.\n- OE-1103: Ineligible for scheme.\n"
+  enrollSchemeMember("The scheme member to enroll" member: SchemeMember! "The scheme slug" slug: String!): EnrollSchemeMember
+  "Unenroll a member from a scheme\n\nThe possible errors that can be raised are:\n- OE-1101: Unsupported scheme.\n"
+  unenrollSchemeMember("The scheme member to unenroll" member: SchemeMember! "The scheme slug" slug: String!): UnenrollSchemeMember
+  "Opt in to charity donations.\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-1001: Could not opt in to charity donation.\n- OE-1004: Invalid charity donation amount.\n"
+  optInToCharityDonation(input: CharityDonationInput!): OptInToCharityDonation
+  "Opt out of charity donations.\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-1002: No charity donation is currently configured for this account.\n"
+  optOutOfCharityDonation("Account number." accountNumber: String!): OptOutOfCharityDonation
+  "Update the amount of charity donation.\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-1003: No charity donation is currently configured for this account.\n- OE-1004: Invalid charity donation amount.\n"
+  updateCharityDonationAmount(input: CharityDonationInput!): UpdateCharityDonationAmount
+  "Update octo charger OCPP credentials.\n\nThe possible errors that can be raised are:\n- OE-0801: Invalid device UUID.\n- OE-0804: Unable to update credentials.\n- OE-0802: Invalid credentials data.\n- OE-0001: Feature unavailable.\n"
+  updateOctoChargerOCPPCredentials(deviceUUID: ID!): UpdateOctoChargerOCPPCredentials
+  "Onboard charger OCPP credentials.\n\nThe possible errors that can be raised are:\n- OE-0801: Invalid device UUID.\n- OE-0802: Invalid credentials data.\n- OE-0001: Feature unavailable.\n- OE-0806: Charger is already onboarded.\n- OE-0828: Unable to onboard charge point.\n- OE-0875: Unable to onboard electric charger due to problems fetching device credentials.\n"
+  onboardChargePoint("The required data to onboard a charge point." input: OnboardChargePointInput!): OnboardChargePoint
+  "Deauthenticate an electric charger.\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0808: Charger is not already onboarded.\n"
+  deauthenticateChargePoint("The required data to deauthenticate a charge point." input: DeauthenticateChargePointInput!): DeauthenticateChargePoint
+  "Set a schedule for a charge point\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0808: Charger is not already onboarded.\n- OE-0809: Unable to set charger schedules.\n- OE-0810: Invalid schedule data passed.\n- OE-0811: Missing weekday in schedule data.\n- OE-0812: Max number of weekly slots reached.\n- OE-0813: Gap or overlap observed between daily schedule time slots.\n- OE-0814: A timezone aware time passed as start or end of daily time slots.\n- OE-0815: Whole day not covered by time slots of a weekday.\n- OE-0816: Seconds or millisecond passed for daily schedule timeslots.\n- OE-0817: Schedule time slots end should be after start.\n- OE-0818: Too short daily charging schedule time slot is found.\n"
+  chargePointSetSchedule("The required data to set a charge point's schedule." input: ChargePointSetScheduleInput!): ChargePointSetSchedule
+  "Set a control mode for a charge point\n\nThe possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0825: Smart control is not allowed for the account.\n- OE-0001: Feature unavailable.\n- OE-0827: Unable to set charger control mode.\n- OE-0829: Unable to set charger control mode.\n"
+  chargePointSetControlMode("The input to set the charge point control mode." input: ChargePointSetModeInput!): ChargePointSetControlMode
+  "Set a random delay for a charge point\n\nThe possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0001: Feature unavailable.\n- OE-0831: Unable to set charger random delay.\n- OE-0832: Unable to set charger random delay.\n- OE-0833: Unable to set charger random delay.\n"
+  chargePointSetRandomDelay("The input to set the charge point random delay." input: ChargePointSetRandomDelayInput!): ChargePointSetRandomDelay
+  "Set the LED brightness percentage for a charge point\n\nThe possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0838: Unable to set charger LED brightness.\n- OE-0837: Unable to set charger LED brightness.\n- OE-0001: Feature unavailable.\n"
+  chargePointSetLEDBrightness("The input to set the charge point LED brightness percentage." input: ChargePointSetLEDBrightnessInput!): ChargePointSetLEDBrightness
+  "Set the away mode state for a charge point\n\nThe possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0839: Unable to set away mode state.\n- OE-0840: Unable to set away mode state.\n"
+  chargePointSetAwayModeState("The input to set the charge point away mode." input: ChargePointSetAwayModeStateInput!): ChargePointSetAwayModeState
+  "Set the charge cable auto lock state for a charge point\n\nThe possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0842: Charge cable auto lock not available.\n- OE-0841: Unable to set charge cable auto lock state.\n- OE-0843: Unable to set charge cable auto lock state.\n"
+  chargePointSetChargeCableAutoLockState("The input to set the charge point charge cable auto lock state." input: ChargePointSetChargeCableAutoLockInput!): ChargePointSetChargeCableAutoLockState
+  "Unlock the charge cable for a charge point\n\nThe possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0844: Unable to unlock charge cable.\n- OE-0845: Unable to unlock charge cable.\n"
+  chargePointUnlockChargeCable("The input to unlock the charge point's charge cable." input: ChargePointUnlockChargeCableInput!): ChargePointUnlockChargeCable
+  "Set the charging method for a charge point\n\nThe possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0846: Unable to set charging method.\n- OE-0847: Unable to set charging method when charger is under smart control.\n- OE-0848: Unable to set charging method due to a problem fetching the control mode.\n- OE-0849: Unable to set charging method.\n"
+  chargePointSetChargingMethod("The input to set the charge point charging method." input: ChargePointSetChargingMethodInput!): ChargePointSetChargingMethod
+  "Set the boost charging state for a charge point\n\nThe possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0858: Unable to set boost charging state due to missing charger status.\n- OE-0859: Unable to set boost charging state due to invalid charger status data.\n- OE-0860: Unable to set boost charging state due to device not being available.\n- OE-0861: Unable to set boost charging state due to OCPP connection missing.\n- OE-0862: Unable to stop boost charging as no boost charging is happening.\n- OE-0863: Unable to set boost charging state.\n"
+  chargePointSetBoostChargingState("The input to set the charge point boost charging state." input: ChargePointSetBoostChargingStateInput!): ChargePointSetBoostChargingState
+  "Start boost charging for a charge point\n\nThe possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0858: Unable to set boost charging state due to missing charger status.\n- OE-0859: Unable to set boost charging state due to invalid charger status data.\n- OE-0860: Unable to set boost charging state due to device not being available.\n- OE-0861: Unable to set boost charging state due to OCPP connection missing.\n- OE-0863: Unable to set boost charging state.\n"
+  chargePointStartBoostCharge("The input to start the charge point boost charging." input: ChargePointStartBoostChargeInput!): ChargePointStartBoostCharge
+  "Stop boost charging for a charge point\n\nThe possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0858: Unable to set boost charging state due to missing charger status.\n- OE-0859: Unable to set boost charging state due to invalid charger status data.\n- OE-0860: Unable to set boost charging state due to device not being available.\n- OE-0861: Unable to set boost charging state due to OCPP connection missing.\n- OE-0862: Unable to stop boost charging as no boost charging is happening.\n- OE-0863: Unable to set boost charging state.\n"
+  chargePointStopBoostCharge("The input to stop the charge point boost charging." input: ChargePointStopBoostChargeInput!): ChargePointStopBoostCharge
+  "Upgrade the charge point firmware for a charge point\n\nThe possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0867: Unable to upgrade electric charger's firmware due to OCPP connection missing.\n- OE-0868: Unable to upgrade electric charger's firmware as maximum number of retries is reached.\n- OE-0866: Device not found in remote service.\n- OE-0869: Unable to upgrade electric charger's firmware.\n- OE-0870: Unable to upgrade electric charger's firmware as invalid firmware data received.\n"
+  chargePointUpgradeFirmware("The input for upgrading the charge point's firmware." input: ChargePointUpgradeFirmwareInput!): ChargePointUpgradeFirmware
+  "Set the ECO mode state for a charge point\n\nThe possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0876: Unable to set ECO mode state due to OCPP connection missing.\n- OE-0877: Unable to set ECO mode state.\n"
+  chargePointSetECOModeState("The input for setting the ECO mode state." input: ChargePointSetECOModeStateInput!): ChargePointSetECOModeState
+  "Spin the wheel of fortune\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0104: 'Authorization' header has expired.\n- OE-0501: Spin limit reached.\n- OE-0502: No eligible incentives.\n- OE-0503: Another spin in progress.\n"
+  spinWheelOfFortune(input: WheelOfFortuneSpinInput!): SpinWheelMutation
+  "Calculate an estimate for the number and price of solar panels required for the provided inputs.\n\nThe possible errors that can be raised are:\n- OE-0201: Calculate solar estimate feature unavailable.\n- OE-0204: Unable to calculate solar estimate.\n"
+  calculateSolarEstimate("Input fields to calculate the estimate." input: CalculateSolarEstimateInput!): SolarEstimateResult
+  "Submit interest for solar panel installation.\n\nThe possible errors that can be raised are:\n- OE-0202: Submit solar interest feature unavailable.\n- OE-0203: Unable to submit solar interest.\n"
+  submitSolarInterest(input: SubmitSolarInterestInput!): SubmitSolarInterest
+  "Sign account up to Saving Sessions campaign.\n\nThe possible errors that can be raised are:\n- OE-1302: Meter point not found.\n- OE-1303: Error joining campaign.\n"
+  joinSavingSessionsCampaign("Input fields for joining the Saving Sessions campaign." input: JoinSavingSessionsCampaignInput!): JoinSavingSessionsCampaign
+  "Opt account in to a Saving Sessions event.\n\nThe possible errors that can be raised are:\n- OE-1305: Saving Sessions event not found.\n- OE-1307: Account is not part of a Saving Sessions campaign.\n- OE-1308: Account ineligible to join Saving Sessions event.\n- OE-1306: Error joining event.\n"
+  joinSavingSessionsEvent("Input fields for joining a Saving Sessions event." input: JoinSavingSessionsEventInput!): JoinSavingSessionsEvent
+  "Cancel an account's payment.\n\nThe possible errors that can be raised are:\n- OE-0901: The account cannot cancel payments.\n- OE-0902: Unauthorized.\n- OE-0903: Payment cancellation failed.\n- OE-0904: Payment cannot be cancelled.\n- OE-0905: Temporary error.\n"
+  cancelPayment(input: CancelPaymentInput!): CancelPayment
+  "Claim an Octoplus reward.\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-0705: Not enough Octopoints.\n- OE-0706: Reward of this type unavailable.\n- OE-0707: Max claims for reward reached.\n"
+  claimOctoplusReward("The account number for the Octoplus-enrolled account." accountNumber: String! "The unique string identifier for the offer to be claimed." offerSlug: String!): ClaimOctoplusReward
+  "Claim a Shoptopus Reward using Octopoints.\n\nThe possible errors that can be raised are:\n- OE-0103: Unauthorized.\n- OE-0001: Feature unavailable.\n- OE-0701: Account is not Octoplus-enrolled.\n- OE-0705: Not enough Octopoints.\n- OE-0706: Reward of this type unavailable.\n- OE-0708: Reward could not be processed.\n"
+  claimShoptopusReward("The account number for the Octoplus-enrolled account." accountNumber: String! "The number of Octopoints to exchange for a reward." points: Int!): ClaimShoptopusReward
+  "Get or create a contact us link.\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-0701: Account is not Octoplus-enrolled.\n- OE-0714: Reward not found.\n"
+  createOctoplusRewardContactUsLink("The account number for the Octoplus-enrolled number." accountNumber: String! "The id for the reward about which a customer needs support." rewardId: Int): CreateContactUsLink
+  "Make a donation to an active partnership.\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0701: Account is not Octoplus-enrolled.\n- OE-0705: Not enough Octopoints.\n- OE-0710: Invalid donation amount.\n- OE-0711: Donation could not be processed.\n- OE-0712: Partnership is not active.\n"
+  makeDonationToOctoplusPartnership(input: MakeDonationToOctoplusPartnershipInput!): MakeDonationToOctoplusPartnership
+  "Look up an event to perform and return the next action.\n\nThe possible errors that can be raised are:\n- OE-1201: Action not implemented.\n- OE-1202: Backend screen event execution failed.\n"
+  backendScreenEvent("Input payload for a mobile-ui event." input: BackendScreenEventInput!): BackendScreenEvent
+  "Create a Heat Pump quote.\n\nThe possible errors that can be raised are:\n- OE-0307: Unable to create heat pump quote.\n"
+  createHeatPumpQuote(input: CreateHeatPumpQuoteInput!): CreateHeatPumpQuote
+  "Request a callback from a human for a Heat Pump quote.\n\nThe possible errors that can be raised are:\n- OE-0301: Heat pump quote not found.\n- OE-0303: Heat pump quote ineligible.\n- OE-0306: Heat pump quote status invalid.\n"
+  requestHeatPumpQuoteCallback(input: RequestHeatPumpQuoteCallbackInput!): RequestHeatPumpQuoteCallback
+  "Register interest in a follow-up for an ineligible quote if it becomes eligible in future.\n\nThe possible errors that can be raised are:\n- OE-0301: Heat pump quote not found.\n- OE-0305: Heat pump quote expired.\n"
+  requestIneligibleHeatPumpQuoteFollowUp(input: RequestIneligibleHeatPumpQuoteFollowUpInput!): RequestIneligibleHeatPumpQuoteFollowUp
+  "Email a Heat Pump quote.\n\nThe possible errors that can be raised are:\n- OE-0301: Heat pump quote not found.\n- OE-0303: Heat pump quote ineligible.\n- OE-0305: Heat pump quote expired.\n"
+  emailHeatPumpQuote(input: EmailHeatPumpQuoteInput!): EmailHeatPumpQuote
+  "Update Heat Pump quote details.\n\nThe possible errors that can be raised are:\n- OE-0301: Heat pump quote not found.\n- OE-0303: Heat pump quote ineligible.\n- OE-0306: Heat pump quote status invalid.\n"
+  updateHeatPumpQuote(input: UpdateHeatPumpQuoteInput!): UpdateHeatPumpQuote
+  "Accept Heat Pump quote.\n\nThe possible errors that can be raised are:\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0104: 'Authorization' header has expired.\n- OE-0301: Heat pump quote not found.\n- OE-0302: Viewer not authorized to accept quote.\n- OE-0306: Heat pump quote status invalid.\n"
+  acceptHeatPumpQuote(input: AcceptHeatPumpQuoteInput!): AcceptHeatPumpQuote
+  "Make a payment against a Heat Pump quote.\n\nThe possible errors that can be raised are:\n- OE-0101: 'Authorization' header not provided.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-0301: Heat pump quote not found.\n- OE-0304: Heat pump quote has no price.\n- OE-0305: Heat pump quote expired.\n- OE-0303: Heat pump quote ineligible.\n- OE-0306: Heat pump quote status invalid.\n"
+  initiateHeatPumpDepositPayment(input: InitiateHeatPumpDepositPaymentInput!): InitiateHeatPumpDepositPayment
+  "Confirm a payment against a Heat Pump quote\n\nThe possible errors that can be raised are:\n- OE-0301: Heat pump quote not found.\n- OE-0306: Heat pump quote status invalid.\n"
+  confirmHeatPumpQuoteDepositPayment(input: ConfirmHeatPumpQuoteDepositPaymentInput!): ConfirmHeatPumpQuoteDepositPayment
+  "Select a Heat Pump quoted product.\n\nThe possible errors that can be raised are:\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-0301: Heat pump quote not found.\n- OE-0306: Heat pump quote status invalid.\n- OE-0308: Heat pump quote product not found.\n- OE-0309: Heat pump quote product already selected.\n"
+  selectHeatPumpQuoteProduct(input: SelectHeatPumpQuoteProductInput!): SelectHeatPumpQuoteProduct
+  "Update a Heat Pump quote finance offer terms.\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0301: Heat pump quote not found.\n- OE-0305: Heat pump quote expired.\n- OE-0306: Heat pump quote status invalid.\n- OE-0310: Heat pump finance offer term invalid.\n- OE-0311: Heat pump finance offer loan amount below minimum allowed.\n- OE-0312: Heat pump finance offer deposit percentage invalid.\n- OE-0313: Heat pump finance offer loan amount above maximum allowed.\n"
+  updateHeatPumpQuoteFinanceOfferTerms(input: UpdateHeatPumpQuoteFinanceOfferTermsInput!): UpdateHeatPumpQuoteFinanceOfferTerms
+  "Request a certificate to provision a heating controller.\n\nThe possible errors that can be raised are:\n- OE-0315: Invalid data submitted for heat pump operation.\n"
+  heatPumpRequestProvisioningClaimCertificate(accountNumber: String! "The identifier of a property you would like to associate with this controller." propertyId: ID "Parameters requested by the app from the controller, required for Kraken Flex to authenticate the device." requestParameters: ProvisioningClaimRequestParameters!): RequestProvisioningClaimCertificate
+  "Set the heat pump hush mode (quieter mode)."
+  heatPumpSetHushMode("The account number associated with the heat pump controller." accountNumber: String! "The EUID of the heat pump controller." euid: ID! "Whether hush mode should be enabled for this heat pump controller." hushModeEnabled: Boolean!): SetHushMode
+  "Set the primary sensor for a heat pump zone."
+  heatPumpSetZonePrimarySensor("The account number." accountNumber: String! "The EUID of the heat pump controller." euid: ID! "The parameters required to set a new primary sensor for a zone." operationParameters: SetZonePrimarySensorParameters!): SetZonePrimarySensor
+  "Update the display names for a set of sensors in bulk.\n\nThe possible errors that can be raised are:\n- OE-0315: Invalid data submitted for heat pump operation.\n"
+  heatPumpBulkUpdateSensorDisplayName("The account number." accountNumber: String! "The EUID of the heat pump controller." euid: ID! "A list of sensor codes and display names to set." updates: [SensorDisplayNameUpdate]!): BulkUpdateSensorDisplayName
+  "Update the flow temperature configuration for the heat pump.\n\nThe possible errors that can be raised are:\n- OE-0315: Invalid data submitted for heat pump operation.\n"
+  heatPumpUpdateFlowTemperatureConfiguration("The account number." accountNumber: String! "The EUID of the heat pump controller." euid: ID! "Flow temperature configuration parameters." flowTemperatureInput: FlowTemperatureInput!): UpdateFlowTemperatureConfiguration
+  "Add schedules for a heating controller zone.\n\nThe possible errors that can be raised are:\n- OE-0315: Invalid data submitted for heat pump operation.\n"
+  heatPumpSetZoneSchedules("The account number." accountNumber: String! "The EUID of the heat pump controller." euid: ID! "The parameters required to add schedule(s) for a specific zone." zoneScheduleParameters: SetZoneSchedulesParameters!): SetZoneSchedules
+  "Turn a specific heating controller zone ON\/OFF, set it to AUTO mode or give it a BOOST.\n\nThe possible errors that can be raised are:\n- OE-0315: Invalid data submitted for heat pump operation.\n"
+  heatPumpSetZoneMode("The account number." accountNumber: String! "The EUID of the heat pump controller." euid: ID! "The parameters required to instruct a specific zone operation." operationParameters: SetZoneModeParameters!): SetZoneMode
+  "Update the display names for a set of zones in bulk.\n\nThe possible errors that can be raised are:\n- OE-0321: Error trying to update heat pump zone names.\n"
+  heatPumpBulkUpdateZoneDisplayNames("The account number." accountNumber: String! "The EUID of the heat pump controller." euid: ID! "A list of zone codes mapped to each zone's new display name." updates: [SetZoneDisplayNameParameters]!): BulkUpdateZoneDisplayNames
+  "Set up smart control for a heat pump.\n\nThe possible errors that can be raised are:\n- OE-0315: Invalid data submitted for heat pump operation.\n- OE-0317: That heat pump model is currently unsupported.\n"
+  heatPumpSetupSmartControl(input: HeatPumpSetupSmartControlInput!): HeatPumpSetupSmartControl
+  "Mark a heat pump as deprovisioned.\n\nThe possible errors that can be raised are:\n- OE-0315: Invalid data submitted for heat pump operation.\n"
+  heatPumpMarkAsDeprovisioned("The account number." accountNumber: String! "The EUID of the heat pump controller." euid: ID!): HeatPumpMarkAsDeprovisioned
+  "Start a search request for appointments.\n\nThe possible errors that can be raised are:\n- OE-0402: Invalid booking token.\n- OE-0401: This field appointment has already been booked.\n"
+  createFieldAppointmentSearch(input: CreateFieldAppointmentSearchInput!): CreateFieldAppointmentSearch
+  "Book an Appointment in Kraken Field.\n\nThe possible errors that can be raised are:\n- OE-0401: This field appointment has already been booked.\n- OE-0402: Invalid booking token.\n- OE-0403: This appointment slot is no longer available.\n"
+  bookFieldAppointment(input: BookFieldAppointmentInput!): BookFieldAppointment
+}
+
+"The possible errors that can be raised are:\n- OE-0301: Heat pump quote not found.\n- OE-0303: Heat pump quote ineligible.\n- OE-0306: Heat pump quote status invalid.\n- OE-GBR-0901: Unable to request deposit follow up for quote.\n"
+type RequestHeatPumpDepositFollowUp {
+  "Whether the follow up was successfully requested."
+  requested: Boolean!
+}
+
+"Details required to request a deposit follow up."
+input RequestHeatPumpDepositFollowUpInput {
+  "Heat pump quote code."
+  code: UUID!
+}
+
+"The possible errors that can be raised are:\n- OE-0301: Heat pump quote not found.\n- OE-GBR-0902: Heat pump quote journey version already exists.\n- OE-GBR-0903: Heat pump quote journey version is invalid.\n- OE-0306: Heat pump quote status invalid.\n- OE-GBR-0904: Heat pump quote journey version is ineligible.\n"
+type SetHeatPumpQuoteJourneyVersion {
+  "Whether the journey version was successfully set."
+  versionSet: Boolean!
+}
+
+"Details required to set the heat pump journey version."
+input SetHeatPumpQuoteJourneyVersionInput {
+  "Heat pump quote code."
+  code: UUID!
+  "The journey version to set for the heat pump quote."
+  version: String!
+}
+
+"The possible errors that can be raised are:\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-GBR-0801: Could not set prediction success.\n- OE-GBR-0802: Prediction success data already exists.\n"
+type SetUserConfirmationForPrediction {
+  "The device predicted consumption cycle."
+  devicePredictedConsumptionCycle: DevicePredictedConsumptionCycle!
+}
+
+"Data for a device consumption cycle (for example a washing machine), i.e. a device which is drawing power."
+input SetUserConfirmationForPredictionInput {
+  "Account number owning the smart meter device."
+  accountNumber: NonEmptyString!
+  "The smart meter device id."
+  deviceId: String!
+  "The prediction cycle id for which the confirmation is to be given for."
+  cycleId: Int!
+  "Was the prediction correct or not?"
+  successfulPrediction: Boolean
+}
+
+type SendSolarEstimateEmail {
+  "Whether the estimate email was sent."
+  sent: Boolean!
+}
+
+input SendSolarEstimateEmailInput {
+  "Customer's email."
+  email: EmailAddress!
+  "Customer's address."
+  address: GBRAddress!
+  "The solar estimate."
+  estimate: SolarEstimate!
+  utmParams: UTMParams!
+  affiliate: Affiliate
+  "Additional design information associated with the estimate."
+  design: SolarDesign
+  "The version of the online journey the customer completed."
+  journeyVersion: JourneyVersion
+}
+
+input GBRAddress {
+  "Address line 1."
+  line1: String!
+  "Address line 2."
+  line2: String = ""
+  "Address line 3."
+  line3: String = ""
+  "Address line 4."
+  line4: String = ""
+  "Address line 5."
+  line5: String = ""
+  "Address postcode."
+  postcode: GBRPostCode!
+  "Address UPRN."
+  uprn: String
+}
+
+input SolarEstimate {
+  "The number of solar panels."
+  numSolarPanels: Int!
+  "The battery selected."
+  battery: BatteryDeprecated @deprecated(reason: "Use `batteryLineItems` field instead.")
+  "The batteries included in this estimate."
+  batteryLineItems: [BatteryLineItem]
+  "The EV charger selected."
+  evCharger: String
+  "Estimated annual electricity consumption in kWh."
+  estimatedAnnualElectricityConsumption: Int
+  "Minimum cost in pence."
+  minCost: Int!
+  "Maximum cost in pence."
+  maxCost: Int!
+  "Whether there are existing solar panels installed."
+  existingSolarPanelsInstalled: Boolean = false
+}
+
+"An enumeration."
+enum BatteryDeprecated {
+  _5KWH
+  _10KWH
+  _13_5KWH
+}
+
+input BatteryLineItem {
+  "The battery product code."
+  productCode: String!
+  "The quantity of this battery."
+  quantity: PositiveInt!
+}
+
+"The UTM parameters."
+input UTMParams {
+  "The source of the traffic."
+  utmSource: String
+  "The medium used to get the traffic."
+  utmMedium: String
+  "The marketing promotion or campaign."
+  utmCampaign: String
+  "Search term(s) used to find the site."
+  utmTerm: String
+  "The call-to-action content that was clicked."
+  utmContent: String
+}
+
+"The affiliate information."
+input Affiliate {
+  "The unique code given to this affiliate. Usually set as affiliate=example in query params."
+  code: String!
+}
+
+input SolarDesign {
+  "Confidence of the solar analysis of the design."
+  analysisConfidence: Percentage!
+  "Selected design configuration option."
+  selectedDesign: DesignConfigurationOption!
+  "URL of the design image."
+  designImageUrl: String!
+  "Estimated payback period in years."
+  estimatedPaybackInYears: Float!
+  "Occupancy pattern of the household."
+  occupancyPattern: OccupancyPattern!
+}
+
+"An enumeration."
+enum DesignConfigurationOption {
+  RECOMMENDED_WITH_BATTERY
+  RECOMMENDED_WITHOUT_BATTERY
+  MAX_PANELS
+  CUSTOM
+}
+
+"An enumeration."
+enum OccupancyPattern {
+  HOME_MOST_DAYS
+  HOME_HALF_THE_TIME
+  OUT_MOST_DAYS
+}
+
+"An enumeration."
+enum JourneyVersion {
+  EXPLORER
+  DESIGNER
+}
+
+"The possible errors that can be raised are:\n- OE-GBR-0601: Invalid product code.\n"
+type SubmitSolarEnquiry {
+  "Whether the enquiry was submitted."
+  submitted: Boolean!
+}
+
+input SubmitSolarEnquiryInput {
+  "Customer's address."
+  address: GBRAddress!
+  "Customer's details."
+  customer: CustomerInput!
+  "The solar estimate."
+  estimate: SolarEstimate!
+  "The location of the roof."
+  roofLocation: Coordinates
+  "The type of roof at the address."
+  roofType: RoofType
+  "The type of roof material at the address."
+  roofMaterial: RoofMaterial
+  utmParams: UTMParams!
+  affiliate: Affiliate
+  "The home ownership status of the customer."
+  homeOwnershipStatus: HomeOwnershipStatus
+  "Any additional information we may need."
+  additionalInformation: String
+  "Whether the customer has opted in to receiving marketing communication."
+  hasOptedInToMarketing: Boolean = false
+  "Additional design information associated with the estimate."
+  design: SolarDesign
+  "The version of the online journey the customer completed."
+  journeyVersion: JourneyVersion
+}
+
+"A geographic location on Earth's surface."
+input Coordinates {
+  latitude: Float!
+  longitude: Float!
+}
+
+"An enumeration."
+enum RoofType {
+  PITCHED
+  FLAT
+}
+
+"An enumeration."
+enum RoofMaterial {
+  CLAY
+  CONCRETE
+  COMPOSITE
+  SLATE
+  THATCHED
+  UNKNOWN
+  OTHER
+}
+
+"An enumeration."
+enum HomeOwnershipStatus {
+  RENT
+  OWN
+}
+
+"The possible errors that can be raised are:\n- OE-GBR-0707: Product enrollment not found.\n- OE-GBR-0708: Please try again later.\n"
+type LinkNissanProductEnrollmentToSite {
+  "Whether the product enrollment has been linked to the site."
+  isLinked: Boolean!
+}
+
+input LinkNissanProductEnrollmentToSiteInput {
+  "Account number product enrollment is associated with."
+  accountNumber: NonEmptyString!
+  "Product enrollment to associate site with."
+  enrollmentId: NonEmptyString!
+  "Encrypted Site ID to associate product enrollment with."
+  encryptedSiteId: NonEmptyString!
+}
+
+"The possible errors that can be raised are:\n- OE-GBR-0201: Invalid property for move-in.\n- OE-GBR-0202: Invalid MPAN or MPRN.\n- OE-GBR-0203: Unable to perform move-in.\n- OE-GBR-0204: Move-in request timed out.\n"
+type MoveIn {
+  "The number of the account that was successfully moved in."
+  accountNumber: String!
+}
+
+input MoveInInput {
+  "Information about the meter point associated with the property being moved in to."
+  meterPoint: MeterPointInput!
+  "The code of the quote created for this move in."
+  quoteCode: UUID!
+  "The code of the product to enrol the property's meter points onto."
+  productCode: String!
+  "Details of the customer moving in."
+  customer: CustomerInput!
+  "Direct debit details of the customer."
+  directDebitInstruction: DirectDebitInstructionInput
+  "The date of move in."
+  moveInDate: Date
+}
+
+input MeterPointInput {
+  "The MPAN or MPRN (if gas-only) of the meter point associated with the property being moved in to."
+  mpxn: String!
+  "The fuel type of the meter point."
+  fuelType: FuelType!
+}
+
+input DirectDebitInstructionInput {
+  "The name of the bank account holder."
+  accountHolder: String!
+  "The bank account number."
+  accountNumber: String!
+  "The bank account sort code."
+  sortCode: String!
+}
+
+"The possible errors that can be raised are:\n- OE-GBR-0201: Invalid property for move-in.\n- OE-GBR-0202: Invalid MPAN or MPRN.\n"
+type CreateMoveInQuote {
+  quote: GBRQuote!
+}
+
+type GBRQuote {
+  "The quote code."
+  code: String!
+  "The payment method for the quote."
+  paymentMethod: PaymentMethod!
+  "A list of quoted products."
+  quotedProducts: [GBRQuotedProduct!]!
+}
+
+enum PaymentMethod {
+  DIRECT_DEBIT
+  CREDIT_CARD
+  ON_RECEIPT
+  PREPAYMENT
+}
+
+type GBRQuotedProduct {
+  "The ID of the product."
+  id: ID!
+  "The tariff product."
+  product: GBRProduct
+  "Estimated cost in pence of the product over a year based on the quoted usage."
+  annualAmount: Int
+  "Estimated cost in pence of the product per month based on the quoted usage."
+  monthlyAmount: Int
+  "The amount of co2 saved per year when this product is chosen."
+  co2SavingInKg: Int
+  "The number of trees it would take to offset the amount of co2 that is saved per year when this product is chosen."
+  treesSaving: Int
+  "Electricity tariff information label (TIL) provides standardised information between suppliers about a tariff."
+  electricityTariffInformationLabel: TariffInformationLabelType
+  "Gas tariff information label (TIL) provides standardised information between suppliers about a tariff."
+  gasTariffInformationLabel: TariffInformationLabelStandard
+  "Whether the product includes carbon offsetting."
+  includesCarbonOffsetting: Boolean
+}
+
+type GBRProduct {
+  "Name shown to customers during sign-up."
+  name: String!
+  "This will be shown to customers during sign-up."
+  description: String!
+  "Tags associated with the product."
+  tags: [String]
+  "Whether the product is a fixed tariff."
+  isFixed: Boolean!
+  "Whether the product is a variable tariff."
+  isVariable: Boolean!
+}
+
+union TariffInformationLabelType = TariffInformationLabelStandard | TariffInformationLabelEco7
+
+type TariffInformationLabelStandard {
+  "Exit fee in pence"
+  exitFees: Int
+  "Standing charge in pence"
+  standingCharge: Float
+  "Unit rate in pence."
+  unitRate: Float
+  "Estimated annual consumption of fuel type in kWh."
+  assumedAnnualConsumption: Int
+}
+
+type TariffInformationLabelEco7 {
+  "Exit fee in pence"
+  exitFees: Int
+  "Standing charge in pence"
+  standingCharge: Float
+  "Day unit rate in pence."
+  unitRateDay: Float
+  "Night unit rate in pence."
+  unitRateNight: Float
+  "Estimated annual day consumption of fuel type in kWh."
+  assumedAnnualConsumptionDay: Int
+  "Estimated annual night consumption of fuel type in kWh."
+  assumedAnnualConsumptionNight: Int
+}
+
+input CreateMoveInQuoteInput {
+  "Information about the meter point associated with the property being moved in to."
+  meterPoint: MeterPointInput!
+  "The date of move in."
+  moveInDate: Date!
+}
+
+type CreateInkLiveChatMessageOutput {
+  "The live chat conversation session information"
+  liveChatConversation: LiveChatConversationType
+  "The ID of the new message that was created in Kraken"
+  messageRelayId: String
+}
+
+type LiveChatConversationType {
+  "The ID of the live chat conversation session that the message was sent into. Retain this for use with the Close Live Chat mutation"
+  relayId: String
+}
+
+input CreateInkLiveChatMessageInput {
+  "The account number of the user sending the message"
+  accountNumber: String!
+  "The new message to be sent"
+  newMessage: NewMessageInput!
+  "A client-generated unique identifier for the message"
+  messageId: String!
+  "An optional vendor value to denote which system the message originated from"
+  vendor: String
+}
+
+input NewMessageInput {
+  "The live chat message details"
+  liveChat: LiveChatInput!
+}
+
+input LiveChatInput {
+  "The identity the message was sent from. Format: mailto:<user email>"
+  fromHandle: String!
+  "The message content in plain text"
+  plainTextContent: String!
+  "Optional list of attachments to include with the message"
+  attachments: [AttachmentInput]
+}
+
+input AttachmentInput {
+  "The key for the attachment"
+  key: String!
+}
+
+type GenerateInkPresignedUrlOutput {
+  "A presigned URL for the user to upload to"
+  uploadUrl: String!
+  "The key for the attachment"
+  key: String!
+  "Presigned post fields required to upload the file"
+  fields: JSONString!
+}
+
+input GenerateInkPresignedUrlInput {
+  "The account number associated with the request"
+  accountNumber: String!
+  "The channel of the contact"
+  channel: InkCommunicationChannel!
+  "The name of the file"
+  inkAttachmentFilename: String!
+}
+
+"Communication channel types for Ink."
+enum InkCommunicationChannel {
+  EMAIL
+  GENERIC_API
+  LIVE_CHAT
+}
+
+"The possible errors that can be raised are:\n- OE-GBR-0405: Unable to sign up account for Greener Nights.\n"
+type GreenerNightsSignUp {
+  "Whether the account has been signed up for Greener Nights"
+  isSignedUp: Boolean!
+}
+
+input GreenerNightsSignUpInput {
+  "Account number which should be signed up for Greener Nights."
+  accountNumber: NonEmptyString!
+}
+
+type GreenerNightsOptOut {
+  "Whether the account has been opted out from Greener Nights"
+  isOptedOut: Boolean!
+}
+
+input GreenerNightsOptOutInput {
+  "Account number which should be opted out from Greener Nights."
+  accountNumber: NonEmptyString!
+}
+
+"The possible errors that can be raised are:\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n"
+type CompleteEVChargerPurchase {
+  "Whether completion was successful"
+  bookingToken: UUID!
+}
+
+input CompleteEVChargerPurchaseInput {
+  "Account number."
+  krakenAccountNumber: String!
+  "Kraken purchase code."
+  krakenPurchaseCode: String!
+}
+
+"The possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n"
+type EnrollOntoFanClub {
+  "The current Fan Club enrollment state for the account"
+  enrollment: FanClubEnrollment!
+}
+
+type FanClubEnrollment {
+  "The current Fan Club membership status for the account."
+  status: FanClubMembershipStatus!
+}
+
+"The current Fan Club membership status for the account."
+enum FanClubMembershipStatus {
+  NEW
+  PENDING_ENROLLMENT
+  ENROLLED
+  ENROLLMENT_FAILED
+  REMOVED
+}
+
+"The possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-1401: Flexibility Scheme not found.\n- OE-1402: Member already enrolled.\n- OE-1403: Unable to process enrollment.\n- OE-1404: Ineligible for Flexibility Scheme.\n"
+type EnrollInFlexibilityScheme {
+  "Whether the enrollment was successful"
+  success: Boolean!
+}
+
+input EnrollInFlexibilitySchemeInput {
+  "The Flexibility Scheme slug"
+  slug: NonEmptyString!
+  "The member to enroll"
+  member: FlexibilitySchemeMember!
+  "The supply point identifier"
+  supplyPointIdentifier: NonEmptyString!
+}
+
+"Unenroll a member from a Flexibility Scheme.\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-1401: Flexibility Scheme not found.\n- OE-1405: Member not enrolled in Flexibility Scheme.\n- OE-1409: Unable to process unenrollment.\n"
+type UnenrollFromFlexibilityScheme {
+  "The datetime when the member was unenrolled"
+  unenrolledAt: DateTime!
+}
+
+input UnenrollFromFlexibilitySchemeInput {
+  "The Flexibility Scheme slug"
+  schemeSlug: NonEmptyString!
+  "The member to unenroll"
+  schemeMember: FlexibilitySchemeMember!
+  "The supply point identifier"
+  supplyPointIdentifier: NonEmptyString!
+}
+
+"Opt a member into a Flexibility Scheme session.\n\nThe possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-1401: Flexibility Scheme not found.\n- OE-1406: Session not found.\n- OE-1405: Member not enrolled in Flexibility Scheme.\n- OE-1407: Member already opted in.\n- OE-1408: Unable to process opt-in.\n"
+type OptInToFlexibilitySchemeSession {
+  "The datetime when the member opted into the session"
+  optedInAt: DateTime!
+}
+
+input OptInToFlexibilitySchemeSessionInput {
+  "The unique code of the session to opt into"
+  sessionCode: NonEmptyString!
+  "The member opting into the session"
+  member: FlexibilitySchemeMember!
+}
+
+"The possible errors that can be raised are:\n- OE-1101: Unsupported scheme.\n- OE-1102: Member already enrolled.\n- OE-1103: Ineligible for scheme.\n"
+type EnrollSchemeMember {
+  "Whether the enrollment was successful"
+  success: Boolean!
+}
+
+"The possible errors that can be raised are:\n- OE-1101: Unsupported scheme.\n"
+type UnenrollSchemeMember {
+  "Whether the unenrollment was successful"
+  success: Boolean!
+}
+
+"The possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-1001: Could not opt in to charity donation.\n- OE-1004: Invalid charity donation amount.\n"
+type OptInToCharityDonation {
+  "Monthly fixed amount that will be donated each month."
+  monthlyFixedAmount: Int!
+}
+
+input CharityDonationInput {
+  "Account number."
+  accountNumber: String!
+  "Monthly fixed amount to donate."
+  monthlyFixedAmount: Int!
+}
+
+"The possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-1002: No charity donation is currently configured for this account.\n"
+type OptOutOfCharityDonation {
+  "Has the account opted out of donating to charity."
+  isOptedOut: Boolean!
+}
+
+"The possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-1003: No charity donation is currently configured for this account.\n- OE-1004: Invalid charity donation amount.\n"
+type UpdateCharityDonationAmount {
+  "Monthly fixed amount that will be donated each month."
+  monthlyFixedAmount: Int!
+}
+
+"The possible errors that can be raised are:\n- OE-0801: Invalid device UUID.\n- OE-0804: Unable to update credentials.\n- OE-0802: Invalid credentials data.\n- OE-0001: Feature unavailable.\n"
+type UpdateOctoChargerOCPPCredentials {
+  "The authorization key needed to connect to the central system."
+  authorizationKey: String!
+  "A 20 character UUID representing the device id to be used for the device username."
+  chargePointId: String!
+  "The URL needed for connecting to the central system."
+  centralSystemUrl: String!
+}
+
+"The possible errors that can be raised are:\n- OE-0801: Invalid device UUID.\n- OE-0802: Invalid credentials data.\n- OE-0001: Feature unavailable.\n- OE-0806: Charger is already onboarded.\n- OE-0828: Unable to onboard charge point.\n- OE-0875: Unable to onboard electric charger due to problems fetching device credentials.\n"
+type OnboardChargePoint {
+  chargePoint: OnboardedChargePoint
+}
+
+input OnboardChargePointInput {
+  accountNumber: String!
+  deviceUUID: UUID!
+  propertyId: String!
+  externalDeviceId: String!
+}
+
+"The possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0808: Charger is not already onboarded.\n"
+type DeauthenticateChargePoint {
+  deauthenticatedChargePoint: DeauthenticatedChargePoint
+}
+
+type DeauthenticatedChargePoint {
+  deviceUUID: UUID!
+  onboardedAt: DateTime!
+  deauthenticatedAt: DateTime!
+}
+
+input DeauthenticateChargePointInput {
+  accountNumber: String!
+  deviceUUID: UUID!
+}
+
+"The possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0808: Charger is not already onboarded.\n- OE-0809: Unable to set charger schedules.\n- OE-0810: Invalid schedule data passed.\n- OE-0811: Missing weekday in schedule data.\n- OE-0812: Max number of weekly slots reached.\n- OE-0813: Gap or overlap observed between daily schedule time slots.\n- OE-0814: A timezone aware time passed as start or end of daily time slots.\n- OE-0815: Whole day not covered by time slots of a weekday.\n- OE-0816: Seconds or millisecond passed for daily schedule timeslots.\n- OE-0817: Schedule time slots end should be after start.\n- OE-0818: Too short daily charging schedule time slot is found.\n"
+type ChargePointSetSchedule {
+  "The boolean showing if setting schedule was successful."
+  success: Boolean!
+}
+
+input ChargePointSetScheduleInput {
+  deviceUUID: UUID!
+  accountNumber: String!
+  schedules: [ChargePointWeeklyScheduleInput!]!
+}
+
+input ChargePointWeeklyScheduleInput {
+  "The week day of the schedule."
+  day: WeekDay!
+  settings: [ChargePointScheduleSettingInput!]
+}
+
+input ChargePointScheduleSettingInput {
+  "The start time of the charge point schedule time slot."
+  start: Time!
+  "The end time of the charge point schedule time slot."
+  end: Time!
+  "The charging action of the charge point."
+  action: ChargingAction!
+}
+
+"The possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0825: Smart control is not allowed for the account.\n- OE-0001: Feature unavailable.\n- OE-0827: Unable to set charger control mode.\n- OE-0829: Unable to set charger control mode.\n"
+type ChargePointSetControlMode {
+  "The control mode requested to set the charge point on it."
+  requestedControlMode: ControlMode!
+}
+
+input ChargePointSetModeInput {
+  accountNumber: String!
+  deviceUUID: UUID!
+  controlMode: ControlMode!
+}
+
+"The possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0001: Feature unavailable.\n- OE-0831: Unable to set charger random delay.\n- OE-0832: Unable to set charger random delay.\n- OE-0833: Unable to set charger random delay.\n"
+type ChargePointSetRandomDelay {
+  "Shows if the random delay is enabled."
+  isRandomDelayEnabled: Boolean!
+}
+
+input ChargePointSetRandomDelayInput {
+  accountNumber: String!
+  deviceUUID: UUID!
+  enableRandomDelay: Boolean!
+}
+
+"The possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0838: Unable to set charger LED brightness.\n- OE-0837: Unable to set charger LED brightness.\n- OE-0001: Feature unavailable.\n"
+type ChargePointSetLEDBrightness {
+  LEDBrightnessPercentage: Int!
+}
+
+input ChargePointSetLEDBrightnessInput {
+  accountNumber: String!
+  deviceUUID: UUID!
+  brightnessPercentage: Percentage!
+}
+
+"The possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0839: Unable to set away mode state.\n- OE-0840: Unable to set away mode state.\n"
+type ChargePointSetAwayModeState {
+  isAwayModeEnabled: Boolean!
+}
+
+input ChargePointSetAwayModeStateInput {
+  accountNumber: NonEmptyString!
+  deviceUUID: UUID!
+  enableAwayMode: Boolean!
+}
+
+"The possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0842: Charge cable auto lock not available.\n- OE-0841: Unable to set charge cable auto lock state.\n- OE-0843: Unable to set charge cable auto lock state.\n"
+type ChargePointSetChargeCableAutoLockState {
+  isChargeCableAutoLockEnabled: Boolean!
+}
+
+input ChargePointSetChargeCableAutoLockInput {
+  "The account number of the charge point."
+  accountNumber: NonEmptyString!
+  "The UUID identifier of the charge point."
+  deviceUUID: UUID!
+  "A boolean indicating if the charge cable auto lock should be enabled or not."
+  enableChargeCableAutoLock: Boolean!
+}
+
+"The possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0844: Unable to unlock charge cable.\n- OE-0845: Unable to unlock charge cable.\n"
+type ChargePointUnlockChargeCable {
+  isChargeCableUnlocked: Boolean!
+}
+
+input ChargePointUnlockChargeCableInput {
+  "The account number of the charge point."
+  accountNumber: NonEmptyString!
+  "The UUID identifier of the charge point."
+  deviceUUID: UUID!
+}
+
+"The possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0846: Unable to set charging method.\n- OE-0847: Unable to set charging method when charger is under smart control.\n- OE-0848: Unable to set charging method due to a problem fetching the control mode.\n- OE-0849: Unable to set charging method.\n"
+type ChargePointSetChargingMethod {
+  "The charging method of the charge point."
+  chargingMethod: ChargePointChargingMethod!
+}
+
+input ChargePointSetChargingMethodInput {
+  "The account number of the charge point."
+  accountNumber: NonEmptyString!
+  "The UUID identifier of the charge point."
+  deviceUUID: UUID!
+  "The charging method of the charge point."
+  chargingMethod: ChargePointChargingMethod!
+}
+
+"The possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0858: Unable to set boost charging state due to missing charger status.\n- OE-0859: Unable to set boost charging state due to invalid charger status data.\n- OE-0860: Unable to set boost charging state due to device not being available.\n- OE-0861: Unable to set boost charging state due to OCPP connection missing.\n- OE-0862: Unable to stop boost charging as no boost charging is happening.\n- OE-0863: Unable to set boost charging state.\n"
+type ChargePointSetBoostChargingState {
+  "Whether the boost charging is enabled for a charge point."
+  isBoostChargingEnabled: Boolean!
+}
+
+input ChargePointSetBoostChargingStateInput {
+  "The account number of the charge point."
+  accountNumber: NonEmptyString!
+  "The UUID identifier of the charge point."
+  deviceUUID: UUID!
+  "A boolean indicating if boost charging should be enabled or disabled."
+  enableBoostCharging: Boolean!
+}
+
+"The possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0858: Unable to set boost charging state due to missing charger status.\n- OE-0859: Unable to set boost charging state due to invalid charger status data.\n- OE-0860: Unable to set boost charging state due to device not being available.\n- OE-0861: Unable to set boost charging state due to OCPP connection missing.\n- OE-0863: Unable to set boost charging state.\n"
+type ChargePointStartBoostCharge {
+  "Whether the boost charge was successfully started."
+  success: Boolean!
+}
+
+input ChargePointStartBoostChargeInput {
+  "The account number of the charge point."
+  accountNumber: NonEmptyString!
+  "The UUID identifier of the charge point."
+  deviceUUID: UUID!
+  "A datetime indicating when boost charging should end."
+  endTime: DateTime!
+}
+
+"The possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0858: Unable to set boost charging state due to missing charger status.\n- OE-0859: Unable to set boost charging state due to invalid charger status data.\n- OE-0860: Unable to set boost charging state due to device not being available.\n- OE-0861: Unable to set boost charging state due to OCPP connection missing.\n- OE-0862: Unable to stop boost charging as no boost charging is happening.\n- OE-0863: Unable to set boost charging state.\n"
+type ChargePointStopBoostCharge {
+  "Whether the boost charge was successfully stopped."
+  success: Boolean!
+}
+
+input ChargePointStopBoostChargeInput {
+  "The account number of the charge point."
+  accountNumber: NonEmptyString!
+  "The UUID identifier of the charge point."
+  deviceUUID: UUID!
+}
+
+"The possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0867: Unable to upgrade electric charger's firmware due to OCPP connection missing.\n- OE-0868: Unable to upgrade electric charger's firmware as maximum number of retries is reached.\n- OE-0866: Device not found in remote service.\n- OE-0869: Unable to upgrade electric charger's firmware.\n- OE-0870: Unable to upgrade electric charger's firmware as invalid firmware data received.\n"
+type ChargePointUpgradeFirmware {
+  "The firmware version state of the charge point."
+  firmwareVersionState: ChargePointFirmwareState!
+}
+
+input ChargePointUpgradeFirmwareInput {
+  "The account number of the charge point."
+  accountNumber: NonEmptyString!
+  "The UUID identifier of the charge point."
+  deviceUUID: UUID!
+}
+
+"The possible errors that can be raised are:\n- OE-0808: Charger is not already onboarded.\n- OE-0876: Unable to set ECO mode state due to OCPP connection missing.\n- OE-0877: Unable to set ECO mode state.\n"
+type ChargePointSetECOModeState {
+  isECOModeEnabled: Boolean!
+}
+
+input ChargePointSetECOModeStateInput {
+  "The account number of the charge point."
+  accountNumber: NonEmptyString!
+  "The UUID identifier of the charge point."
+  deviceUUID: UUID!
+  "A boolean indicating if the ECO mode should be enabled or not."
+  enableECOMode: Boolean!
+}
+
+"The possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0104: 'Authorization' header has expired.\n- OE-0501: Spin limit reached.\n- OE-0502: No eligible incentives.\n- OE-0503: Another spin in progress.\n"
+type SpinWheelMutation {
+  spinReference: UUID
+  prize: WheelOfFortunePrize
+}
+
+input WheelOfFortuneSpinInput {
+  "Account number"
+  accountNumber: String
+  "Meter's fuel type to be used for the spin"
+  fuelType: FuelType
+}
+
+type SolarEstimateResult {
+  "Estimated number of panels required."
+  numberOfPanels: Int!
+  "Required power of each panel."
+  panelPower: Float!
+  "The unit of power for each panel."
+  panelPowerUnit: String!
+  "Total power produced by the panels in the estimate."
+  totalPower: Float!
+  "Unit of the total power produced by the panels in the estimate."
+  totalPowerUnit: String!
+  "Estimated total price of panels if paid upfront."
+  totalPanelPrice: Float!
+  "Price of battery in addition to panels."
+  batteryPrice: Float
+  "Price of EV charger in addition to panels."
+  evChargerPrice: Float
+  "Unit of estimated prices."
+  priceUnit: String!
+  "Multiplier for government subsidies."
+  multiplierGovernmentSubsidies: Float
+  "Estimated CO2 emissions saved by the estimate."
+  co2SavingsEquivalents: CO2SavingsEquivalents
+  "Estimated monthly savings multipliers."
+  monthlySavingsMultipliers: MonthlySavingsMultipliers
+  "Estimated savings over 25 years per panel."
+  twentyFiveYearSavingsMultipliers: TwentyFiveYearSavingsMultipliers
+}
+
+type CO2SavingsEquivalents {
+  "Estimated equivalent of the CO2 saved by installing these panels in kilometres travelled by car."
+  carKmsSaved: Int
+  "Estimated equivalent of the CO2 saved by installing these panels in number of trees planted."
+  treesPlanted: Int
+  "Estimated equivalent of the CO2 saved by installing these panels in number of flights avoided."
+  flightsAvoided: Int
+  "Estimated equivalent of the CO2 saved by installing these panels in washing machine runs."
+  washingMachineRuns: Int
+}
+
+type MonthlySavingsMultipliers {
+  "Multiplier for estimated monthly spending after basic installation."
+  basicInstallation: Float
+  "Multiplier for estimated monthly spending after installation with battery."
+  withBattery: Float
+  "Multiplier for estimated monthly spending after installation with solar wallet."
+  withSolarWallet: Float
+  "Multiplier for estimated monthly spending after installation with battery and solar wallet."
+  withBatteryAndSolarWallet: Float
+}
+
+type TwentyFiveYearSavingsMultipliers {
+  "Multiplier for estimated savings over 25 years."
+  basicInstallation: Int
+  "Multiplier for estimated savings over 25 years with battery installation."
+  withBattery: Int
+  "Multiplier for estimated savings over 25 years with solar wallet installation."
+  withSolarWallet: Int
+  "Multiplier for estimated savings over 25 years with battery and solar wallet installation."
+  withBatteryAndSolarWallet: Int
+}
+
+input CalculateSolarEstimateInput {
+  "Estimated maximum monthly consumption cost in currency."
+  consumption: Int!
+  "Roof size in square meters."
+  roofSize: Float!
+}
+
+"The possible errors that can be raised are:\n- OE-0202: Submit solar interest feature unavailable.\n- OE-0203: Unable to submit solar interest.\n"
+type SubmitSolarInterest {
+  "Whether the data was submitted."
+  submitted: Boolean!
+}
+
+input SubmitSolarInterestInput {
+  "Customer's contact details."
+  customer: CustomerInput!
+  "The installation address."
+  address: AddressInput!
+  "The solar estimate."
+  estimate: SolarInterestEstimateInput!
+  "The location of the roof."
+  roofLocation: Coordinates
+}
+
+input SolarInterestEstimateInput {
+  "Estimated number of panels needed."
+  numberOfPanels: Int!
+  "The estimated total price (including extras such as a battery) in currency."
+  totalPrice: Float!
+  "Estimated maximum monthly consumption cost in currency."
+  consumption: Int!
+  "Roof size in square meters."
+  roofSize: Float!
+  "Whether a battery is required."
+  requiresBattery: Boolean!
+  "Whether an electric vehicle charger is required."
+  requiresEvCharger: Boolean
+  "The kind of house."
+  houseType: HouseType!
+}
+
+"An enumeration."
+enum HouseType {
+  HOUSE
+  APARTMENT
+}
+
+"The possible errors that can be raised are:\n- OE-1302: Meter point not found.\n- OE-1303: Error joining campaign.\n"
+type JoinSavingSessionsCampaign {
+  "The account that joined the campaign."
+  account: JoinSavingSessionsCampaignAccount
+}
+
+type JoinSavingSessionsCampaignAccount {
+  "The account number."
+  number: String
+}
+
+input JoinSavingSessionsCampaignInput {
+  "The account number."
+  accountNumber: String!
+  "The MPAN to be signed up."
+  mpan: String!
+}
+
+"The possible errors that can be raised are:\n- OE-1305: Saving Sessions event not found.\n- OE-1307: Account is not part of a Saving Sessions campaign.\n- OE-1308: Account ineligible to join Saving Sessions event.\n- OE-1306: Error joining event.\n"
+type JoinSavingSessionsEvent {
+  "The event codes of all of the events that the account has joined."
+  joinedEventCodes: [String!]!
+  "The event that the account joined."
+  joinedEvent: SavingSessionsAccountJoinedEventsType
+}
+
+input JoinSavingSessionsEventInput {
+  "The account number."
+  accountNumber: String!
+  "The code of the event to join."
+  eventCode: String!
+}
+
+"The possible errors that can be raised are:\n- OE-0901: The account cannot cancel payments.\n- OE-0902: Unauthorized.\n- OE-0903: Payment cancellation failed.\n- OE-0904: Payment cannot be cancelled.\n- OE-0905: Temporary error.\n"
+type CancelPayment {
+  "The canceled payment's details."
+  cancelledPayment: AccountPayment
+}
+
+type AccountPayment {
+  "The ID of the payment."
+  id: Int!
+  "The amount of the payment."
+  amount: Int!
+  "The date the payment is scheduled for\/was made."
+  paymentDate: Date!
+}
+
+"Input for canceling a payment."
+input CancelPaymentInput {
+  "The account number of the account the payment is associated with."
+  accountNumber: String!
+  "The ID of the payment to be canceled."
+  paymentId: Int!
+  "The reason for canceling the payment."
+  reason: String!
+}
+
+"The possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-0705: Not enough Octopoints.\n- OE-0706: Reward of this type unavailable.\n- OE-0707: Max claims for reward reached.\n"
+type ClaimOctoplusReward {
+  "The ID of the claimed reward."
+  rewardId: String
+}
+
+"The possible errors that can be raised are:\n- OE-0103: Unauthorized.\n- OE-0001: Feature unavailable.\n- OE-0701: Account is not Octoplus-enrolled.\n- OE-0705: Not enough Octopoints.\n- OE-0706: Reward of this type unavailable.\n- OE-0708: Reward could not be processed.\n"
+type ClaimShoptopusReward {
+  "The reward created."
+  reward: OctoplusRewardType
+}
+
+"The possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-0701: Account is not Octoplus-enrolled.\n- OE-0714: Reward not found.\n"
+type CreateContactUsLink {
+  "Contact us URL"
+  url: String
+}
+
+"The possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0701: Account is not Octoplus-enrolled.\n- OE-0705: Not enough Octopoints.\n- OE-0710: Invalid donation amount.\n- OE-0711: Donation could not be processed.\n- OE-0712: Partnership is not active.\n"
+type MakeDonationToOctoplusPartnership {
+  "The newly created charity donation."
+  charityDonation: CharityDonation!
+}
+
+input MakeDonationToOctoplusPartnershipInput {
+  "The external reference for the partnership to which the donation is to be made."
+  partnershipExternalReference: UUID!
+  "The number of loyalty points to be donated."
+  donationAmount: Int!
+  "The number of the account from which the donation was made."
+  accountNumber: String!
+}
+
+"Look up an *event* (button tap, etc.) that the mobile client wants to\nperform in the backend, and return the next Action for the mobile client.\n\nThe possible errors that can be raised are:\n- OE-1201: Action not implemented.\n- OE-1202: Backend screen event execution failed.\n"
+type BackendScreenEvent {
+  "The next action the client should perform."
+  action: ActionType
+}
+
+"Any Action that can be produced by `backendScreenEvent`."
+union ActionType = ScreenActionType | LinkActionType | DeeplinkActionType | BackendScreenEventActionType | CloseActionType | GenericAction
+
+"Tells the client to replace the current view with another back-end\nscreen.\nThis should cause a subsequent query to `backendScreen` with the\nscreen_id and specified parameters."
+type ScreenActionType implements ActionInterface {
+  "Unqiue identifier of the action."
+  id: ID
+  "The name of the action object's type."
+  typeName: String
+  "The ID of the screen the client should load next."
+  screenId: ID!
+  "Optional parameters that must be forwarded when the client subsequently queries `backendScreen`."
+  params: [BackendScreenParamType!]
+  "If False, the client must not allow a user-initiated navigation back to the previous screen."
+  allowBack: Boolean
+}
+
+"Actions are events created by buttons and other interaction."
+interface ActionInterface {
+  "Unqiue identifier of the action."
+  id: ID
+  "The name of the action object's type."
+  typeName: String
+}
+
+"A key\/value pair that is returned to the client as part of an Action."
+type BackendScreenParamType {
+  key: String!
+  value: String!
+}
+
+"An action which tells the mobile client to navigate to any URL."
+type LinkActionType implements ActionInterface {
+  "Unqiue identifier of the action."
+  id: ID
+  "The name of the action object's type."
+  typeName: String
+  "The URL to navigate to."
+  url: String!
+}
+
+"An action which tells the mobile client to navigate to another screen.\n(Not necessarily a backend screen.)"
+type DeeplinkActionType implements ActionInterface {
+  "Unqiue identifier of the action."
+  id: ID
+  "The name of the action object's type."
+  typeName: String
+  "The URL to navigate to."
+  url: String!
+}
+
+"An action which triggers another event in the OE backend.\nThis is the primary way by which a mobile client can interact with,\nand make changes in, the backend."
+type BackendScreenEventActionType implements ActionInterface {
+  "Unqiue identifier of the action."
+  id: ID
+  "The name of the action object's type."
+  typeName: String
+  "The ID of the event to trigger."
+  eventId: ID!
+  "List of key-value pairs to pass as parameters to the event."
+  params: [BackendScreenParamType!]
+}
+
+"Closes the screen."
+type CloseActionType implements ActionInterface {
+  "Unqiue identifier of the action."
+  id: ID
+  "The name of the action object's type."
+  typeName: String
+}
+
+type GenericAction implements ActionInterface {
+  "Unqiue identifier of the action."
+  id: ID
+  "The name of the action object's type."
+  typeName: String
+}
+
+"Input for a backend screen event."
+input BackendScreenEventInput {
+  "The ID of the event to perform."
+  eventId: ID!
+  "List of key-value pairs (strings) to pass as parameters to the mutation."
+  params: [BackendScreenParamInputType]
+}
+
+"The possible errors that can be raised are:\n- OE-0307: Unable to create heat pump quote.\n"
+type CreateHeatPumpQuote {
+  quote: HeatPumpQuote
+}
+
+"Heat Pump quote request details."
+input CreateHeatPumpQuoteInput {
+  "The address to be quoted."
+  address: HeatPumpAddressInput!
+  utmParams: UTMParams
+  "A JSON object containing any extra params to store on the quote."
+  clientParams: JSONString
+}
+
+input HeatPumpAddressInput {
+  "Address line 1 (e.g., street, PO Box, or company name)."
+  line1: NonEmptyString!
+  "Address line 2 (e.g., apartment, suite, unit, or building)."
+  line2: String
+  "Postcode."
+  postalCode: GBRPostCode!
+  "City, district, suburb, town, or village."
+  city: String
+  "State, county, province, or region."
+  state: String
+  "The Unique Property Reference Number (UPRN)."
+  geographicalId: NonEmptyString!
+  "Two-letter country code."
+  country: CountryCode
+}
+
+"The possible errors that can be raised are:\n- OE-0301: Heat pump quote not found.\n- OE-0303: Heat pump quote ineligible.\n- OE-0306: Heat pump quote status invalid.\n"
+type RequestHeatPumpQuoteCallback {
+  "Whether the callback was successfully requested."
+  requested: Boolean!
+  "Whether the customer is eligible for a callback."
+  eligibility: QuoteEligibility!
+}
+
+"Details required to request a callback."
+input RequestHeatPumpQuoteCallbackInput {
+  "Heat pump quote code."
+  code: UUID!
+  "The customer requesting the callback."
+  customer: CustomerInput!
+  "The property details provided by the customer."
+  property: PropertyInput
+  "The account number of the logged in user."
+  accountNumber: String
+}
+
+"Details about the property."
+input PropertyInput {
+  "Property type."
+  propertyType: PropertyType!
+  "Heat type."
+  heatType: HeatType!
+  "Whether the property has outdoor space for a heat pump."
+  hasOutdoorSpaceForHeatPump: Boolean
+  "Whether the property has indoor space for a cylinder."
+  hasIndoorSpaceForCylinder: Boolean
+  "Whether the property is undergoing a home renovation."
+  isUndergoingHomeRenovation: Boolean
+  "The type of heat emitter the property has."
+  heatEmitterType: String
+  "The type of existing hot water storage the property has."
+  hotWaterStorageType: String
+  "The type of heating system the property has."
+  heatingSystemType: String
+}
+
+enum PropertyType {
+  TERRACE
+  END_OF_TERRACE
+  DETACHED
+  SEMI_DETACHED
+  FLAT
+  FLAT_GROUND_FLOOR
+  OTHER
+}
+
+enum HeatType {
+  MAINS_GAS_BOILER
+  LPG_BOILER
+  ELECTRIC_BOILER
+  ELECTRIC_RADIATOR
+  OIL_BOILER
+  ELECTRIC_STORAGE_HEATER
+  OTHER
+}
+
+"The possible errors that can be raised are:\n- OE-0301: Heat pump quote not found.\n- OE-0305: Heat pump quote expired.\n"
+type RequestIneligibleHeatPumpQuoteFollowUp {
+  "Whether the follow-up was successfully requested."
+  requested: Boolean!
+}
+
+"Details required to request an ineligible quote follow-up."
+input RequestIneligibleHeatPumpQuoteFollowUpInput {
+  "Heat pump quote code."
+  code: UUID!
+  "The email address to follow up with."
+  email: EmailAddress!
+  "The account number of the logged in user."
+  accountNumber: String
+  "The date in the future at which the customer would be eligible."
+  eligibleDate: Date
+  "A JSON object containing any extra params to store on the quote."
+  clientParams: JSONString
+}
+
+"The possible errors that can be raised are:\n- OE-0301: Heat pump quote not found.\n- OE-0303: Heat pump quote ineligible.\n- OE-0305: Heat pump quote expired.\n"
+type EmailHeatPumpQuote {
+  "Whether the email was sent."
+  sent: Boolean!
+}
+
+"Details required to send a heat pump quote via email."
+input EmailHeatPumpQuoteInput {
+  "Heat pump quote code."
+  code: UUID!
+  "The email address to send the quote to."
+  email: EmailAddress!
+  "The account number of the logged in user."
+  accountNumber: String
+  "Phone number."
+  phone: String
+}
+
+"The possible errors that can be raised are:\n- OE-0301: Heat pump quote not found.\n- OE-0303: Heat pump quote ineligible.\n- OE-0306: Heat pump quote status invalid.\n"
+type UpdateHeatPumpQuote {
+  quote: HeatPumpQuote
+}
+
+"Heat pump quote details to update."
+input UpdateHeatPumpQuoteInput {
+  "Heat pump quote code."
+  code: UUID!
+  "The property details provided by the customer."
+  property: PropertyInput!
+  "Details about the property install options provided by the customer."
+  installationOptions: PropertyInstallationOptionsInput
+  "Details about the financing options selected by the customer."
+  financingOptions: FinancingOptionsInput
+  "A JSON object containing any extra params to store on the quote."
+  clientParams: JSONString
+}
+
+"Details about property installation options."
+input PropertyInstallationOptionsInput {
+  "Whether the property has an existing cylinder the customer wants to retain."
+  retainExistingCylinder: Boolean
+}
+
+"Details about heatpump financing options."
+input FinancingOptionsInput {
+  "Whether the customer is interested in monthly installment payments."
+  interestedInMonthlyFinancing: Boolean
+}
+
+"The possible errors that can be raised are:\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0104: 'Authorization' header has expired.\n- OE-0301: Heat pump quote not found.\n- OE-0302: Viewer not authorized to accept quote.\n- OE-0306: Heat pump quote status invalid.\n"
+type AcceptHeatPumpQuote {
+  "Whether the quote was successfully accepted."
+  accepted: Boolean!
+}
+
+"Details required to accept Heat pump quote for an account."
+input AcceptHeatPumpQuoteInput {
+  "Heat pump quote code."
+  code: UUID!
+  "Account number of the account accepting the quote."
+  accountNumber: NonEmptyString!
+  "The customer accepting the quote."
+  customer: CustomerInput!
+}
+
+"The possible errors that can be raised are:\n- OE-0101: 'Authorization' header not provided.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-0301: Heat pump quote not found.\n- OE-0304: Heat pump quote has no price.\n- OE-0305: Heat pump quote expired.\n- OE-0303: Heat pump quote ineligible.\n- OE-0306: Heat pump quote status invalid.\n"
+type InitiateHeatPumpDepositPayment {
+  payment: InitiateStandalonePaymentOutput
+}
+
+"Tokens required to collect and retrieve a standalone payment."
+type InitiateStandalonePaymentOutput {
+  "The retrieval token for this standalone payment."
+  retrievalToken: String!
+  "The secret used to collect the payment."
+  secretToken: String!
+}
+
+"Quote code to make a payment against."
+input InitiateHeatPumpDepositPaymentInput {
+  "Heat pump quote code."
+  code: UUID!
+  "Account number of the account for which this payment is being made."
+  accountNumber: NonEmptyString!
+}
+
+"The possible errors that can be raised are:\n- OE-0301: Heat pump quote not found.\n- OE-0306: Heat pump quote status invalid.\n"
+type ConfirmHeatPumpQuoteDepositPayment {
+  "Whether the quote deposit payment was successfully confirmed."
+  confirmed: Boolean!
+  surveyAppointment: FieldAppointment
+}
+
+"Quote code to confirm a payment against."
+input ConfirmHeatPumpQuoteDepositPaymentInput {
+  "Heat pump quote code."
+  code: UUID!
+}
+
+"The possible errors that can be raised are:\n- OE-0101: 'Authorization' header not provided.\n- OE-0102: 'Authorization' header is invalid.\n- OE-0103: Unauthorized.\n- OE-0104: 'Authorization' header has expired.\n- OE-0301: Heat pump quote not found.\n- OE-0306: Heat pump quote status invalid.\n- OE-0308: Heat pump quote product not found.\n- OE-0309: Heat pump quote product already selected.\n"
+type SelectHeatPumpQuoteProduct {
+  "Whether the quoted product was successfully selected."
+  selected: Boolean!
+}
+
+"Quote code and product code to set as selected."
+input SelectHeatPumpQuoteProductInput {
+  "Heat pump quote code."
+  code: UUID!
+  "The product code of the quoted product to select."
+  productCode: NonEmptyString!
+}
+
+"The possible errors that can be raised are:\n- OE-0001: Feature unavailable.\n- OE-0301: Heat pump quote not found.\n- OE-0305: Heat pump quote expired.\n- OE-0306: Heat pump quote status invalid.\n- OE-0310: Heat pump finance offer term invalid.\n- OE-0311: Heat pump finance offer loan amount below minimum allowed.\n- OE-0312: Heat pump finance offer deposit percentage invalid.\n- OE-0313: Heat pump finance offer loan amount above maximum allowed.\n"
+type UpdateHeatPumpQuoteFinanceOfferTerms {
+  "The selected finance offer terms."
+  offer: HeatPumpQuoteFinanceOffer
+}
+
+"Quote financing offer terms selected by the customer"
+input UpdateHeatPumpQuoteFinanceOfferTermsInput {
+  "Heat pump quote code."
+  code: UUID!
+  "Selected finance loan term in months."
+  term: PositiveInt!
+  "Selected quote deposit percentage."
+  depositPercentage: Percentage!
+}
+
+"The possible errors that can be raised are:\n- OE-0315: Invalid data submitted for heat pump operation.\n"
+type RequestProvisioningClaimCertificate {
+  "The certificate and private key required to create a provisioning claim."
+  provisioningClaimBundle: ProvisioningClaimBundle
+}
+
+type ProvisioningClaimBundle {
+  "The certificate which the controller will present to AWS IoT in order to validate its provisioning claim. It will contain the public key of the controller, and be signed by Kraken Flex."
+  certificate: String
+  "The private key which will be used by the controller to make the provisioning claim, encrypted with the public key of the controller."
+  encryptedPrivateKey: String
+  "The AWS IoT endpoint hostname to connect to AWS APIs & services."
+  awsIotHostname: String
+}
+
+input ProvisioningClaimRequestParameters {
+  "The EUID of the device we are trying to provision."
+  euid: String!
+  "The SHA256 hash of the EUID and timestamp."
+  nonce: String!
+  "The signature of the nonce generated by the device's private key."
+  signature: String!
+  "A string representing the integer number of milliseconds since the epoch."
+  timestamp: String!
+}
+
+type SetHushMode {
+  "Unique ID associated with this operation."
+  transactionId: ID
+}
+
+"Set the primary sensor for a zone.\n\nThe primary sensor is the one which controls the heating for that zone. Other sensors merely\nprovide data, at least currently."
+type SetZonePrimarySensor {
+  "The unique ID associated with this operation."
+  transactionId: ID
+}
+
+input SetZonePrimarySensorParameters {
+  "The heat pump controller zone."
+  zone: Zone!
+  "The code for the sensor we want to make primary, such as 'SENSOR01'."
+  sensorCode: String!
+}
+
+"The possible errors that can be raised are:\n- OE-0315: Invalid data submitted for heat pump operation.\n"
+type BulkUpdateSensorDisplayName {
+  "A mapping of transaction ids for each sensor."
+  transactionIds: [SensorUpdateTransactionId]
+}
+
+"A mapping of sensor codes to transaction ids as returned from a successful KF request."
+type SensorUpdateTransactionId {
+  "The code of the sensor which was updated."
+  sensorCode: String!
+  "A UUID representing the update operation for this sensor."
+  transactionId: String!
+}
+
+"A mapping of sensor codes to the display names we would like those sensors to have."
+input SensorDisplayNameUpdate {
+  "The code of the sensor you want to update."
+  sensorCode: String!
+  "The new display name to set for this sensor."
+  newDisplayName: String!
+}
+
+"The possible errors that can be raised are:\n- OE-0315: Invalid data submitted for heat pump operation.\n"
+type UpdateFlowTemperatureConfiguration {
+  "A mapping of transaction ids for each attribute update."
+  transactionIds: [AttributeUpdateTransactionId]!
+}
+
+type AttributeUpdateTransactionId {
+  "The name of the attribute that was updated."
+  attributeName: String!
+  "A UUID representing the update operation for this attribute."
+  transactionId: String!
+}
+
+input FlowTemperatureInput {
+  "Whether weather compensation should be enabled or not."
+  useWeatherCompensation: Boolean!
+  "The min and max temperatures for when weather compensation is enabled."
+  weatherCompensationValues: TemperatureRangeInput
+  "Flow temperature if weather compensation is off."
+  flowTemperature: TemperatureInput
+}
+
+"An input type to represent a finite temperature range."
+input TemperatureRangeInput {
+  "The minimum allowable temperature in range."
+  minimum: TemperatureInput!
+  "The maximum allowable temperature in range."
+  maximum: TemperatureInput!
+}
+
+"Describes the temperature of something that is relevant to the heating system."
+input TemperatureInput {
+  "The temperature measured."
+  value: Decimal!
+  "The units in which the temperature is being measured."
+  unit: TemperatureUnit!
+}
+
+"The possible errors that can be raised are:\n- OE-0315: Invalid data submitted for heat pump operation.\n"
+type SetZoneSchedules {
+  transactionId: String
+}
+
+input SetZoneSchedulesParameters {
+  "The heat pump controller zone, i.e. WATER, ZONE_1, ZONE_2 or AUXILIARY."
+  zone: Zone!
+  "The schedule(s) to be set for a specific zone."
+  schedules: [ZoneSchedule]!
+}
+
+input ZoneSchedule {
+  "Days of the week a schedule should be active, Sunday through Saturday, in bitmask format, e.g. Sun, Tue, Wed => 1011000."
+  days: String!
+  "A list of `ScheduleSettings` for the selected days."
+  settings: [ScheduleSettings]!
+}
+
+input ScheduleSettings {
+  "When this setting should be active, in `HH:MM` (24h) format."
+  time: Time!
+  "Whether this setting turns the zone on or off, or changes its temperature."
+  action: String!
+  "Desired zone temperature (for zones which support setpoints)."
+  setpointInCelsius: Decimal
+}
+
+"Turn a heating controller zone ON\/OFF, set it to AUTO or BOOST it.\n\nThe possible errors that can be raised are:\n- OE-0315: Invalid data submitted for heat pump operation.\n"
+type SetZoneMode {
+  "Unique ID associated with a zone's mode operation."
+  transactionId: ID
+}
+
+input SetZoneModeParameters {
+  "The heat pump controller zone, i.e. WATER, ZONE_1, ZONE_2 or AUXILIARY."
+  zone: Zone!
+  "The zone mode, i.e. ON, OFF, AUTO or BOOST."
+  mode: Mode!
+  "Target temperature for a zone in celsius."
+  setpointInCelsius: Float
+  "Allows overriding just the currently active schedule action with a different one,whilst remaining in AUTO mode."
+  scheduleOverrideAction: ScheduleOverrideAction
+  "Time at which boost should end."
+  endAt: DateTime
+}
+
+"An option to override an action in a schedule whilst remaining in AUTO mode.\n\nNote, Kraken Flex uses different codes."
+enum ScheduleOverrideAction {
+  TURN_ON
+  TURN_OFF
+  SET_TEMPERATURE
+}
+
+"The possible errors that can be raised are:\n- OE-0321: Error trying to update heat pump zone names.\n"
+type BulkUpdateZoneDisplayNames {
+  "The transaction ID for each zone based on the zone code."
+  transactionIds: [ZoneDisplayNameUpdates]!
+}
+
+type ZoneDisplayNameUpdates {
+  "The code of the heat pump controller zone."
+  zoneCode: Zone!
+  "The transaction ID issued for the zone's name update."
+  transactionId: String!
+}
+
+input SetZoneDisplayNameParameters {
+  "The code of the heat pump controller zone."
+  zoneCode: Zone!
+  "The new display name of the zone."
+  newDisplayName: String!
+}
+
+"Set up smart control for a heat pump.\n\nThe possible errors that can be raised are:\n- OE-0315: Invalid data submitted for heat pump operation.\n- OE-0317: That heat pump model is currently unsupported.\n"
+type HeatPumpSetupSmartControl {
+  "Whether the setup was successful."
+  success: Boolean!
+}
+
+"Details for setting up smart control on a heat pump."
+input HeatPumpSetupSmartControlInput {
+  "The account number."
+  accountNumber: String!
+  "The property id of the location."
+  propertyId: ID!
+  "The EUID of the heat pump controller."
+  euid: ID!
+}
+
+"Mark a heat pump as deprovisioned.\n\nThe possible errors that can be raised are:\n- OE-0315: Invalid data submitted for heat pump operation.\n"
+type HeatPumpMarkAsDeprovisioned {
+  success: Boolean!
+}
+
+"Call the Kraken Field CalculateAvailableCapacity mutation to begin an\nasynchronous search for available appointment slots. Return the Kraken Field\ncapacityCalculation ID as a `search_id` in our terminology.\n\nThe possible errors that can be raised are:\n- OE-0402: Invalid booking token.\n- OE-0401: This field appointment has already been booked.\n"
+type CreateFieldAppointmentSearch {
+  "The search ID to use when polling query.availableFieldAppointmentSlots."
+  searchId: UUID!
+}
+
+input CreateFieldAppointmentSearchInput {
+  "The Appointment booking token."
+  bookingToken: UUID!
+  "The CRM ticket ID."
+  crmTicketId: String @deprecated(reason: "Please store the CRM ticket ID in the Appointment rather than providing it here.")
+}
+
+"Book the Appointment in Kraken Field by calling the BookProspectiveAppointment\nmutation, and set the `booked_at` field of the Appointment with this `booking_token`\nto the current timestamp.\n\nThe possible errors that can be raised are:\n- OE-0401: This field appointment has already been booked.\n- OE-0402: Invalid booking token.\n- OE-0403: This appointment slot is no longer available.\n"
+type BookFieldAppointment {
+  "Whether the booking was successful."
+  success: Boolean!
+}
+
+input BookFieldAppointmentInput {
+  "The Appointment booking token."
+  bookingToken: UUID!
+  "The CreateFieldAppointmentSearch ID of the original search."
+  searchId: UUID!
+  "The AvailableFieldAppointmentSlots ID selected by the customer."
+  slotId: UUID!
+}
+
+"Indicates an Input Object is a OneOf Input Object."
+directive @oneOf on INPUT_OBJECT

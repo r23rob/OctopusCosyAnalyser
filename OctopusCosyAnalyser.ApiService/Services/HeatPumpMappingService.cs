@@ -1,256 +1,219 @@
-using System.Text.Json;
 using OctopusCosyAnalyser.ApiService.Models;
-using static OctopusCosyAnalyser.ApiService.Helpers.JsonHelpers;
+using OctopusCosyAnalyser.ApiService.Services.GraphQL.Responses;
 
 namespace OctopusCosyAnalyser.ApiService.Services;
 
 public static class HeatPumpMappingService
 {
-    public static HeatPumpSummary MapHeatPumpSummary(JsonElement data)
+    public static HeatPumpSummary MapHeatPumpSummary(HeatPumpStatusAndConfigResponse response)
     {
         return new HeatPumpSummary
         {
-            ControllerStatus = MapControllerStatus(data),
-            ControllerConfiguration = MapControllerConfiguration(data),
-            LivePerformance = MapLivePerformance(data),
-            LifetimePerformance = MapLifetimePerformance(data)
+            ControllerStatus = MapControllerStatus(response.ControllerStatus),
+            ControllerConfiguration = MapControllerConfiguration(response.ControllerConfig),
+            LivePerformance = MapLivePerformance(response.TimeSeries),
+            LifetimePerformance = MapLifetimePerformance(response.Lifetime)
         };
     }
 
-    public static HeatPumpControllerStatus? MapControllerStatus(JsonElement data)
+    private static HeatPumpControllerStatus? MapControllerStatus(ControllerStatusResponse? status)
     {
-        if (!data.TryGetProperty("heatPumpControllerStatus", out var status))
-            return null;
-
-        var sensors = status.TryGetProperty("sensors", out var sensorsEl)
-            ? sensorsEl.EnumerateArray().Select(MapSensor).ToList()
-            : new List<HeatPumpSensor>();
-
-        var zones = status.TryGetProperty("zones", out var zonesEl)
-            ? zonesEl.EnumerateArray().Select(MapZoneStatus).ToList()
-            : new List<HeatPumpZoneStatus>();
+        if (status is null) return null;
 
         return new HeatPumpControllerStatus
         {
-            Sensors = sensors,
-            Zones = zones
+            Sensors = status.Sensors?
+                .Where(s => s is not null)
+                .Select(s => MapSensor(s!))
+                .ToList() ?? [],
+            Zones = status.Zones?
+                .Where(z => z is not null)
+                .Select(z => MapZoneStatus(z!))
+                .ToList() ?? []
         };
     }
 
-    public static HeatPumpSensor MapSensor(JsonElement element)
+    private static HeatPumpSensor MapSensor(SensorStatusResponse sensor)
     {
         return new HeatPumpSensor
         {
-            Code = GetString(element, "code"),
-            Connectivity = element.TryGetProperty("connectivity", out var connectivity)
+            Code = sensor.Code,
+            Connectivity = sensor.Connectivity is { } conn
                 ? new HeatPumpConnectivity
                 {
-                    Online = GetBool(connectivity, "online"),
-                    RetrievedAt = GetString(connectivity, "retrievedAt")
+                    Online = conn.Online,
+                    RetrievedAt = conn.RetrievedAt?.ToString("o")
                 }
                 : null,
-            Telemetry = element.TryGetProperty("telemetry", out var telemetry)
+            Telemetry = sensor.Telemetry is { } tel
                 ? new HeatPumpTelemetry
                 {
-                    TemperatureInCelsius = GetDecimal(telemetry, "temperatureInCelsius"),
-                    HumidityPercentage = GetDecimal(telemetry, "humidityPercentage"),
-                    RetrievedAt = GetString(telemetry, "retrievedAt")
+                    TemperatureInCelsius = tel.TemperatureInCelsius is { } t ? (decimal)t : null,
+                    HumidityPercentage = tel.HumidityPercentage is { } h ? h : null,
+                    RetrievedAt = tel.RetrievedAt?.ToString("o")
                 }
                 : null
         };
     }
 
-    public static HeatPumpZoneStatus MapZoneStatus(JsonElement element)
+    private static HeatPumpZoneStatus MapZoneStatus(ZoneStatusResponse zone)
     {
         return new HeatPumpZoneStatus
         {
-            Zone = GetString(element, "zone"),
-            Telemetry = element.TryGetProperty("telemetry", out var telemetry)
+            Zone = zone.Zone?.ToString(),
+            Telemetry = zone.Telemetry is { } tel
                 ? new HeatPumpZoneTelemetry
                 {
-                    SetpointInCelsius = GetDecimal(telemetry, "setpointInCelsius"),
-                    Mode = GetString(telemetry, "mode"),
-                    RelaySwitchedOn = GetBool(telemetry, "relaySwitchedOn"),
-                    HeatDemand = GetBool(telemetry, "heatDemand"),
-                    RetrievedAt = GetString(telemetry, "retrievedAt")
+                    SetpointInCelsius = tel.SetpointInCelsius is { } sp ? (decimal)sp : null,
+                    Mode = tel.Mode?.ToString(),
+                    RelaySwitchedOn = tel.RelaySwitchedOn,
+                    HeatDemand = tel.HeatDemand,
+                    RetrievedAt = tel.RetrievedAt?.ToString("o")
                 }
                 : null
         };
     }
 
-    public static HeatPumpControllerConfiguration? MapControllerConfiguration(JsonElement data)
+    private static HeatPumpControllerConfiguration? MapControllerConfiguration(ControllerConfigResponse? config)
     {
-        if (!data.TryGetProperty("heatPumpControllerConfiguration", out var configuration))
-            return null;
-
-        var controller = configuration.TryGetProperty("controller", out var controllerEl)
-            ? new HeatPumpController
-            {
-                State = GetStringList(controllerEl, "state"),
-                HeatPumpTimezone = GetString(controllerEl, "heatPumpTimezone"),
-                Connected = GetBool(controllerEl, "connected")
-            }
-            : null;
-
-        var heatPump = configuration.TryGetProperty("heatPump", out var heatPumpEl)
-            ? MapHeatPumpDetails(heatPumpEl)
-            : null;
-
-        var zones = configuration.TryGetProperty("zones", out var zonesEl)
-            ? zonesEl.EnumerateArray().Select(MapZoneConfiguration).ToList()
-            : new List<HeatPumpZoneConfiguration>();
+        if (config is null) return null;
 
         return new HeatPumpControllerConfiguration
         {
-            Controller = controller,
-            HeatPump = heatPump,
-            Zones = zones
+            Controller = config.Controller is { } ctrl
+                ? new HeatPumpController
+                {
+                    State = ctrl.State?
+                        .Where(s => s.HasValue)
+                        .Select(s => s!.Value.ToString())
+                        .ToList() ?? [],
+                    HeatPumpTimezone = ctrl.HeatPumpTimezone,
+                    Connected = ctrl.Connected
+                }
+                : null,
+            HeatPump = config.HeatPump is { } hp ? MapHeatPumpDetails(hp) : null,
+            Zones = config.Zones?
+                .Where(z => z is not null)
+                .Select(z => MapZoneConfiguration(z!))
+                .ToList() ?? []
         };
     }
 
-    public static HeatPumpDetails MapHeatPumpDetails(JsonElement element)
+    private static HeatPumpDetails MapHeatPumpDetails(HeatPumpConfigResponse hp)
     {
         return new HeatPumpDetails
         {
-            SerialNumber = GetString(element, "serialNumber"),
-            Model = GetString(element, "model"),
-            HardwareVersion = GetString(element, "hardwareVersion"),
-            MaxWaterSetpoint = GetInt(element, "maxWaterSetpoint"),
-            MinWaterSetpoint = GetInt(element, "minWaterSetpoint"),
-            HeatingFlowTemperature = element.TryGetProperty("heatingFlowTemperature", out var flow)
+            SerialNumber = hp.SerialNumber,
+            Model = hp.Model,
+            HardwareVersion = hp.HardwareVersion,
+            MaxWaterSetpoint = hp.MaxWaterSetpoint is { } max ? (int)max : null,
+            MinWaterSetpoint = hp.MinWaterSetpoint is { } min ? (int)min : null,
+            HeatingFlowTemperature = hp.HeatingFlowTemperature is { } flow
                 ? new HeatPumpHeatingFlowTemperature
                 {
-                    CurrentTemperature = MapValueAndUnit(flow, "currentTemperature"),
-                    AllowableRange = MapAllowableRange(flow, "allowableRange")
+                    CurrentTemperature = MapMeasurement(flow.CurrentTemperature),
+                    AllowableRange = MapRange(flow.AllowableRange)
                 }
                 : null,
-            WeatherCompensation = element.TryGetProperty("weatherCompensation", out var weather)
+            WeatherCompensation = hp.WeatherCompensation is { } wc
                 ? new HeatPumpWeatherCompensation
                 {
-                    Enabled = GetBool(weather, "enabled"),
-                    CurrentRange = MapAllowableRange(weather, "currentRange")
+                    Enabled = wc.Enabled,
+                    CurrentRange = MapRange(wc.CurrentRange)
                 }
                 : null
         };
     }
 
-    public static HeatPumpZoneConfiguration MapZoneConfiguration(JsonElement element)
+    private static HeatPumpZoneConfiguration MapZoneConfiguration(ZoneInfoResponse zone)
     {
         return new HeatPumpZoneConfiguration
         {
-            Configuration = element.TryGetProperty("configuration", out var config)
-                ? MapZoneConfig(config)
+            Configuration = zone.Configuration is { } cfg
+                ? new HeatPumpZoneConfig
+                {
+                    Code = cfg.Code?.ToString(),
+                    ZoneType = cfg.ZoneType?.ToString(),
+                    Enabled = cfg.Enabled,
+                    DisplayName = cfg.DisplayName,
+                    PrimarySensor = cfg.PrimarySensor,
+                    CurrentOperation = cfg.CurrentOperation is { } op
+                        ? new HeatPumpCurrentOperation
+                        {
+                            Mode = op.Mode?.ToString(),
+                            SetpointInCelsius = op.SetpointInCelsius is { } sp ? (decimal)sp : null,
+                            Action = op.Action?.ToString(),
+                            End = op.End?.ToString("o")
+                        }
+                        : null,
+                    CallForHeat = cfg.CallForHeat,
+                    HeatDemand = cfg.HeatDemand,
+                    Emergency = cfg.Emergency,
+                    // Sensor configuration is not fetched via ZeroQL (union type limitation)
+                    Sensors = []
+                }
                 : null
         };
     }
 
-    public static HeatPumpZoneConfig MapZoneConfig(JsonElement config)
+    private static HeatPumpLivePerformance? MapLivePerformance(TimeSeriesEntry?[]? timeSeries)
     {
-        var sensors = config.TryGetProperty("sensors", out var sensorsEl)
-            ? sensorsEl.EnumerateArray().Select(MapSensorConfiguration).ToList()
-            : new List<HeatPumpSensorConfiguration>();
-
-        return new HeatPumpZoneConfig
-        {
-            Code = GetString(config, "code"),
-            ZoneType = GetString(config, "zoneType"),
-            Enabled = GetBool(config, "enabled"),
-            DisplayName = GetString(config, "displayName"),
-            PrimarySensor = GetString(config, "primarySensor"),
-            CurrentOperation = config.TryGetProperty("currentOperation", out var operation)
-                ? new HeatPumpCurrentOperation
-                {
-                    Mode = GetString(operation, "mode"),
-                    SetpointInCelsius = GetDecimal(operation, "setpointInCelsius"),
-                    Action = GetString(operation, "action"),
-                    End = GetString(operation, "end")
-                }
-                : null,
-            CallForHeat = GetBool(config, "callForHeat"),
-            HeatDemand = GetBool(config, "heatDemand"),
-            Emergency = GetBool(config, "emergency"),
-            Sensors = sensors
-        };
-    }
-
-    public static HeatPumpSensorConfiguration MapSensorConfiguration(JsonElement sensor)
-    {
-        return new HeatPumpSensorConfiguration
-        {
-            Code = GetString(sensor, "code"),
-            DisplayName = GetString(sensor, "displayName"),
-            Type = GetString(sensor, "type"),
-            Enabled = GetBool(sensor, "enabled"),
-            FirmwareVersion = GetString(sensor, "firmwareVersion"),
-            BoostEnabled = GetBool(sensor, "boostEnabled")
-        };
-    }
-
-    public static HeatPumpLivePerformance? MapLivePerformance(JsonElement data)
-    {
-        if (!data.TryGetProperty("heatPumpTimeSeriesPerformance", out var liveArray)
-            || liveArray.ValueKind != JsonValueKind.Array
-            || liveArray.GetArrayLength() == 0)
+        if (timeSeries is not { Length: > 0 })
             return null;
 
-        // Take the most recent bucket (last element in the LIVE time series)
-        var live = liveArray.EnumerateArray().Last();
+        var live = timeSeries[^1];
+        if (live is null)
+            return null;
 
-        // COP is not returned by the new API -- compute client-side from energyOutput / energyInput
+        // COP is not returned by the API — compute client-side
         string? cop = null;
-        if (live.TryGetProperty("energyInput", out var eiEl) && live.TryGetProperty("energyOutput", out var eoEl))
-        {
-            var eIn = GetDecimal(eiEl, "value");
-            var eOut = GetDecimal(eoEl, "value");
-            if (eIn is > 0 && eOut.HasValue)
-                cop = (eOut.Value / eIn.Value).ToString("F2");
-        }
+        var eIn = live.EnergyInput?.Value;
+        var eOut = live.EnergyOutput?.Value;
+        if (eIn is > 0 && eOut.HasValue)
+            cop = (eOut.Value / eIn.Value).ToString("F2");
 
         return new HeatPumpLivePerformance
         {
             CoefficientOfPerformance = cop,
-            OutdoorTemperature = MapValueAndUnit(live, "outdoorTemperature"),
-            HeatOutput = MapValueAndUnit(live, "energyOutput"),
-            PowerInput = MapValueAndUnit(live, "energyInput"),
-            ReadAt = GetString(live, "startAt")
+            OutdoorTemperature = MapMeasurement(live.OutdoorTemperature),
+            HeatOutput = MapMeasurement(live.EnergyOutput),
+            PowerInput = MapMeasurement(live.EnergyInput),
+            ReadAt = live.StartAt.ToString("o")
         };
     }
 
-    public static HeatPumpLifetimePerformance? MapLifetimePerformance(JsonElement data)
+    private static HeatPumpLifetimePerformance? MapLifetimePerformance(LifetimePerformanceResponse? lifetime)
     {
-        if (!data.TryGetProperty("heatPumpLifetimePerformance", out var lifetime))
-            return null;
+        if (lifetime is null) return null;
 
         return new HeatPumpLifetimePerformance
         {
-            SeasonalCoefficientOfPerformance = GetString(lifetime, "seasonalCoefficientOfPerformance"),
-            HeatOutput = MapValueAndUnit(lifetime, "heatOutput"),
-            EnergyInput = MapValueAndUnit(lifetime, "energyInput"),
-            ReadAt = GetString(lifetime, "readAt")
+            SeasonalCoefficientOfPerformance = lifetime.SeasonalCoefficientOfPerformance?.ToString(),
+            HeatOutput = MapMeasurement(lifetime.HeatOutput),
+            EnergyInput = MapMeasurement(lifetime.EnergyInput),
+            ReadAt = lifetime.ReadAt.ToString("o")
         };
     }
 
-    public static HeatPumpValueAndUnit? MapValueAndUnit(JsonElement element, string propertyName)
+    private static HeatPumpValueAndUnit? MapMeasurement(MeasurementResponse? measurement)
     {
-        if (!element.TryGetProperty(propertyName, out var valueAndUnit))
-            return null;
+        if (measurement is null) return null;
 
         return new HeatPumpValueAndUnit
         {
-            Value = GetString(valueAndUnit, "value"),
-            Unit = GetString(valueAndUnit, "unit")
+            Value = measurement.Value?.ToString(),
+            Unit = null // Unit is implicit in ZeroQL responses (kWh for energy, °C for temp)
         };
     }
 
-    public static HeatPumpAllowableRange? MapAllowableRange(JsonElement element, string propertyName)
+    private static HeatPumpAllowableRange? MapRange(TemperatureRangeResponse? range)
     {
-        if (!element.TryGetProperty(propertyName, out var range))
-            return null;
+        if (range is null) return null;
 
         return new HeatPumpAllowableRange
         {
-            Minimum = MapValueAndUnit(range, "minimum"),
-            Maximum = MapValueAndUnit(range, "maximum")
+            Minimum = MapMeasurement(range.Minimum),
+            Maximum = MapMeasurement(range.Maximum)
         };
     }
 }

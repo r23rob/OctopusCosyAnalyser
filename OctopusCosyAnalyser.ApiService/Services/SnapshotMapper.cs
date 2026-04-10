@@ -1,4 +1,6 @@
+using OctopusCosyAnalyser.ApiService.GraphQL;
 using OctopusCosyAnalyser.ApiService.Models;
+using OctopusCosyAnalyser.ApiService.Services.GraphQL.Responses;
 using OctopusCosyAnalyser.Shared.Models;
 using System.Text.Json;
 
@@ -7,14 +9,11 @@ namespace OctopusCosyAnalyser.ApiService.Services;
 public static class SnapshotMapper
 {
     /// <summary>
-    /// Maps the JSON response from GetHeatPumpStatusAndConfigAsync into a HeatPumpSnapshot.
-    /// Returns null if the JSON lacks a "data" root property.
+    /// Maps the typed ZeroQL response from GetHeatPumpStatusAndConfigAsync into a HeatPumpSnapshot.
     /// </summary>
-    public static HeatPumpSnapshot? MapFromStatusAndConfig(JsonDocument doc, string deviceId, string accountNumber)
+    public static HeatPumpSnapshot? MapFromStatusAndConfig(
+        HeatPumpStatusAndConfigResponse response, string deviceId, string accountNumber)
     {
-        if (!doc.RootElement.TryGetProperty("data", out var root))
-            return null;
-
         var snapshot = new HeatPumpSnapshot
         {
             DeviceId = deviceId,
@@ -23,56 +22,58 @@ public static class SnapshotMapper
             CreatedAt = DateTime.UtcNow
         };
 
-        ExtractLivePerformance(root, snapshot);
-        ExtractLifetimePerformance(root, snapshot);
-        ExtractControllerStatus(root, snapshot);
-        ExtractControllerConfiguration(root, snapshot);
-        ExtractSensorReadingsJson(root, snapshot);
+        ExtractLivePerformance(response.TimeSeries, snapshot);
+        ExtractLifetimePerformance(response.Lifetime, snapshot);
+        ExtractControllerStatus(response.ControllerStatus, snapshot);
+        ExtractControllerConfiguration(response.ControllerConfig, response.ControllerStatus, snapshot);
+        ExtractSensorReadingsJson(response.ControllerStatus, snapshot);
 
         return snapshot;
     }
 
-    private static void ExtractLivePerformance(JsonElement root, HeatPumpSnapshot snapshot)
+    private static void ExtractLivePerformance(TimeSeriesEntry?[]? timeSeries, HeatPumpSnapshot snapshot)
     {
-        if (!root.TryGetProperty("heatPumpTimeSeriesPerformance", out var liveArray)
-            || liveArray.ValueKind != JsonValueKind.Array
-            || liveArray.GetArrayLength() == 0)
+        if (timeSeries is not { Length: > 0 })
             return;
 
-        var live = liveArray.EnumerateArray().Last();
+        var live = timeSeries[^1];
+        if (live is null)
+            return;
 
-        if (TryGetDecimalValue(live, "energyInput", out var energyIn)
-            && TryGetDecimalValue(live, "energyOutput", out var energyOut))
+        var energyIn = live.EnergyInput?.Value;
+        var energyOut = live.EnergyOutput?.Value;
+
+        if (energyIn.HasValue && energyOut.HasValue)
         {
-            if (energyIn > 0)
-                snapshot.CoefficientOfPerformance = energyOut / energyIn;
+            if (energyIn.Value > 0)
+                snapshot.CoefficientOfPerformance = energyOut.Value / energyIn.Value;
 
-            snapshot.HeatOutputKilowatt = energyOut;
-            snapshot.PowerInputKilowatt = energyIn;
+            snapshot.HeatOutputKilowatt = energyOut.Value;
+            snapshot.PowerInputKilowatt = energyIn.Value;
         }
 
-        if (TryGetDecimalValue(live, "outdoorTemperature", out var outdoorTemp))
+        if (live.OutdoorTemperature?.Value is { } outdoorTemp)
             snapshot.OutdoorTemperatureCelsius = outdoorTemp;
     }
 
-    private static void ExtractLifetimePerformance(JsonElement root, HeatPumpSnapshot snapshot)
+    private static void ExtractLifetimePerformance(LifetimePerformanceResponse? lifetime, HeatPumpSnapshot snapshot)
     {
-        if (!root.TryGetProperty("heatPumpLifetimePerformance", out var lifetime))
+        if (lifetime is null)
             return;
 
-        if (decimal.TryParse(lifetime.GetProperty("seasonalCoefficientOfPerformance").GetString() ?? "", out var scop))
-            snapshot.SeasonalCoefficientOfPerformance = scop;
+        if (lifetime.SeasonalCoefficientOfPerformance.HasValue)
+            snapshot.SeasonalCoefficientOfPerformance = lifetime.SeasonalCoefficientOfPerformance.Value;
 
-        if (TryGetDecimalValue(lifetime, "heatOutput", out var lifetimeHeat))
+        if (lifetime.HeatOutput?.Value is { } lifetimeHeat)
             snapshot.LifetimeHeatOutputKwh = lifetimeHeat;
 
-        if (TryGetDecimalValue(lifetime, "energyInput", out var lifetimeEnergy))
+        if (lifetime.EnergyInput?.Value is { } lifetimeEnergy)
             snapshot.LifetimeEnergyInputKwh = lifetimeEnergy;
     }
 
-    private static void ExtractControllerStatus(JsonElement root, HeatPumpSnapshot snapshot)
+    private static void ExtractControllerStatus(ControllerStatusResponse? status, HeatPumpSnapshot snapshot)
     {
-        if (!root.TryGetProperty("heatPumpControllerStatus", out var status))
+        if (status is null)
             return;
 
         ExtractPrimaryZone(status, snapshot);
@@ -80,125 +81,91 @@ public static class SnapshotMapper
         ExtractRoomSensorFromCosyPod(status, snapshot);
     }
 
-    private static void ExtractPrimaryZone(JsonElement status, HeatPumpSnapshot snapshot)
+    private static void ExtractPrimaryZone(ControllerStatusResponse status, HeatPumpSnapshot snapshot)
     {
-        if (!status.TryGetProperty("zones", out var zones) || zones.GetArrayLength() == 0)
+        var zone = status.Zones?.FirstOrDefault(z => z is not null);
+        var telemetry = zone?.Telemetry;
+        if (telemetry is null)
             return;
 
-        var zone = zones[0];
-        if (!zone.TryGetProperty("telemetry", out var telemetry))
-            return;
+        if (telemetry.SetpointInCelsius.HasValue)
+            snapshot.PrimaryZoneSetpointCelsius = (decimal)telemetry.SetpointInCelsius.Value;
 
-        if (telemetry.TryGetProperty("setpointInCelsius", out var setpoint)
-            && setpoint.ValueKind == JsonValueKind.Number
-            && setpoint.TryGetDecimal(out var setpointDec))
-            snapshot.PrimaryZoneSetpointCelsius = setpointDec;
+        if (telemetry.Mode.HasValue)
+            snapshot.PrimaryZoneMode = telemetry.Mode.Value.ToString();
 
-        if (telemetry.TryGetProperty("mode", out var mode))
-            snapshot.PrimaryZoneMode = mode.GetString();
-
-        if (telemetry.TryGetProperty("heatDemand", out var heatDemand))
-            snapshot.PrimaryZoneHeatDemand = heatDemand.ValueKind == JsonValueKind.True;
+        if (telemetry.HeatDemand.HasValue)
+            snapshot.PrimaryZoneHeatDemand = telemetry.HeatDemand.Value;
     }
 
-    private static void ExtractPrimarySensor(JsonElement status, HeatPumpSnapshot snapshot)
+    private static void ExtractPrimarySensor(ControllerStatusResponse status, HeatPumpSnapshot snapshot)
     {
-        if (!status.TryGetProperty("sensors", out var sensors) || sensors.GetArrayLength() == 0)
-            return;
-
-        var sensor = sensors[0];
-        if (sensor.TryGetProperty("telemetry", out var telemetry)
-            && telemetry.TryGetProperty("temperatureInCelsius", out var temp)
-            && temp.ValueKind == JsonValueKind.Number
-            && temp.TryGetDecimal(out var tempDec))
-            snapshot.PrimarySensorTemperatureCelsius = tempDec;
+        var sensor = status.Sensors?.FirstOrDefault(s => s is not null);
+        if (sensor?.Telemetry?.TemperatureInCelsius is { } temp)
+            snapshot.PrimarySensorTemperatureCelsius = (decimal)temp;
     }
 
-    private static void ExtractRoomSensorFromCosyPod(JsonElement status, HeatPumpSnapshot snapshot)
+    private static void ExtractRoomSensorFromCosyPod(ControllerStatusResponse status, HeatPumpSnapshot snapshot)
     {
-        if (!status.TryGetProperty("sensors", out var allSensors))
+        if (status.Sensors is null)
             return;
 
-        foreach (var s in allSensors.EnumerateArray())
+        foreach (var sensor in status.Sensors)
         {
-            if (s.TryGetProperty("telemetry", out var telemetry)
-                && telemetry.TryGetProperty("humidityPercentage", out var humidity)
-                && humidity.ValueKind == JsonValueKind.Number
-                && humidity.TryGetDecimal(out var humidityDec))
+            if (sensor?.Telemetry?.HumidityPercentage is { } humidity)
             {
-                snapshot.RoomHumidityPercentage = humidityDec;
-                if (telemetry.TryGetProperty("temperatureInCelsius", out var roomTemp)
-                    && roomTemp.ValueKind == JsonValueKind.Number
-                    && roomTemp.TryGetDecimal(out var roomTempDec))
-                    snapshot.RoomTemperatureCelsius = roomTempDec;
-                if (s.TryGetProperty("code", out var sCode))
-                    snapshot.RoomSensorCode = sCode.GetString();
+                snapshot.RoomHumidityPercentage = humidity;
+                if (sensor.Telemetry.TemperatureInCelsius is { } roomTemp)
+                    snapshot.RoomTemperatureCelsius = (decimal)roomTemp;
+                snapshot.RoomSensorCode = sensor.Code;
                 break;
             }
         }
     }
 
-    private static void ExtractControllerConfiguration(JsonElement root, HeatPumpSnapshot snapshot)
+    private static void ExtractControllerConfiguration(
+        ControllerConfigResponse? config, ControllerStatusResponse? status, HeatPumpSnapshot snapshot)
     {
-        if (!root.TryGetProperty("heatPumpControllerConfiguration", out var config))
+        if (config is null)
             return;
 
-        if (config.TryGetProperty("controller", out var controller))
+        if (config.Controller is { } controller)
         {
-            if (controller.TryGetProperty("connected", out var connected))
-                snapshot.ControllerConnected = connected.ValueKind == JsonValueKind.True;
+            snapshot.ControllerConnected = controller.Connected;
 
-            if (controller.TryGetProperty("state", out var stateArray)
-                && stateArray.ValueKind == JsonValueKind.Array)
+            if (controller.State is { Length: > 0 } states)
             {
-                var states = new List<string>();
-                foreach (var s in stateArray.EnumerateArray())
-                {
-                    var str = s.GetString();
-                    if (!string.IsNullOrWhiteSpace(str))
-                        states.Add(str);
-                }
-                if (states.Count > 0)
-                    snapshot.ControllerState = string.Join(",", states);
+                var stateStrings = states
+                    .Where(s => s.HasValue)
+                    .Select(s => s!.Value.ToString())
+                    .ToList();
+                if (stateStrings.Count > 0)
+                    snapshot.ControllerState = string.Join(",", stateStrings);
             }
         }
 
-        if (config.TryGetProperty("heatPump", out var heatPump))
+        if (config.HeatPump is { } heatPump)
         {
             ExtractWeatherCompensation(heatPump, snapshot);
             ExtractFlowTemperature(heatPump, snapshot);
         }
 
-        ExtractZones(root, config, snapshot);
+        ExtractZones(config, status, snapshot);
     }
 
-    private static void ExtractWeatherCompensation(JsonElement heatPump, HeatPumpSnapshot snapshot)
+    private static void ExtractWeatherCompensation(HeatPumpConfigResponse heatPump, HeatPumpSnapshot snapshot)
     {
-        if (!heatPump.TryGetProperty("weatherCompensation", out var weatherComp))
+        if (heatPump.WeatherCompensation is not { } wc)
             return;
 
-        bool? wcEnabled = null;
-        if (weatherComp.TryGetProperty("enabled", out var wcEnabledEl))
-        {
-            if (wcEnabledEl.ValueKind == JsonValueKind.True)
-                wcEnabled = true;
-            else if (wcEnabledEl.ValueKind == JsonValueKind.False)
-                wcEnabled = false;
-        }
-
-        if (wcEnabled == true)
+        if (wc.Enabled)
         {
             snapshot.FlowTempMode = FlowTempMode.WeatherCompensation;
-            if (weatherComp.TryGetProperty("currentRange", out var wcRange))
-            {
-                if (TryGetDecimalValue(wcRange, "minimum", out var wcMin))
-                    snapshot.WeatherCompensationMinCelsius = wcMin;
-                if (TryGetDecimalValue(wcRange, "maximum", out var wcMax))
-                    snapshot.WeatherCompensationMaxCelsius = wcMax;
-            }
+            snapshot.WeatherCompensationMinCelsius = wc.CurrentRange?.Minimum?.Value;
+            snapshot.WeatherCompensationMaxCelsius = wc.CurrentRange?.Maximum?.Value;
             snapshot.HeatingFlowTemperatureCelsius = null;
         }
-        else if (wcEnabled == false)
+        else
         {
             snapshot.FlowTempMode = FlowTempMode.FixedFlow;
             snapshot.WeatherCompensationMinCelsius = null;
@@ -206,80 +173,64 @@ public static class SnapshotMapper
         }
     }
 
-    private static void ExtractFlowTemperature(JsonElement heatPump, HeatPumpSnapshot snapshot)
+    private static void ExtractFlowTemperature(HeatPumpConfigResponse heatPump, HeatPumpSnapshot snapshot)
     {
-        if (!heatPump.TryGetProperty("heatingFlowTemperature", out var flowTemp))
+        if (heatPump.HeatingFlowTemperature is not { } flowTemp)
             return;
 
-        if (flowTemp.TryGetProperty("allowableRange", out var flowRange))
-        {
-            if (TryGetDecimalValue(flowRange, "minimum", out var flowMin))
-                snapshot.HeatingFlowTempAllowableMinCelsius = flowMin;
-            if (TryGetDecimalValue(flowRange, "maximum", out var flowMax))
-                snapshot.HeatingFlowTempAllowableMaxCelsius = flowMax;
-        }
+        snapshot.HeatingFlowTempAllowableMinCelsius = flowTemp.AllowableRange?.Minimum?.Value;
+        snapshot.HeatingFlowTempAllowableMaxCelsius = flowTemp.AllowableRange?.Maximum?.Value;
 
         if (snapshot.FlowTempMode == FlowTempMode.FixedFlow)
-        {
-            if (TryGetDecimalValue(flowTemp, "currentTemperature", out var flowDec))
-                snapshot.HeatingFlowTemperatureCelsius = flowDec;
-        }
+            snapshot.HeatingFlowTemperatureCelsius = flowTemp.CurrentTemperature?.Value;
     }
 
-    private static void ExtractZones(JsonElement root, JsonElement config, HeatPumpSnapshot snapshot)
+    private static void ExtractZones(
+        ControllerConfigResponse config, ControllerStatusResponse? status, HeatPumpSnapshot snapshot)
     {
-        if (!root.TryGetProperty("heatPumpControllerStatus", out var statusForZone)
-            || !config.TryGetProperty("zones", out var configZones)
-            || !statusForZone.TryGetProperty("zones", out var statusZones)
-            || configZones.ValueKind != JsonValueKind.Array
-            || statusZones.ValueKind != JsonValueKind.Array)
+        if (config.Zones is null || status?.Zones is null)
             return;
 
-        string? heatingZoneCode = null;
-        string? hotWaterZoneCode = null;
+        // Find heating and hot water zone codes from configuration
+        Zone? heatingZoneCode = null;
+        Zone? hotWaterZoneCode = null;
 
-        foreach (var cz in configZones.EnumerateArray())
+        foreach (var zi in config.Zones)
         {
-            if (cz.TryGetProperty("configuration", out var czConfig)
-                && czConfig.TryGetProperty("zoneType", out var zt)
-                && czConfig.TryGetProperty("code", out var czCode))
-            {
-                var zoneType = zt.GetString();
-                if (string.Equals(zoneType, "HEAT", StringComparison.OrdinalIgnoreCase) && heatingZoneCode is null)
-                    heatingZoneCode = czCode.GetString();
-                else if (string.Equals(zoneType, "HOT_WATER", StringComparison.OrdinalIgnoreCase) && hotWaterZoneCode is null)
-                    hotWaterZoneCode = czCode.GetString();
-            }
-        }
-
-        foreach (var sz in statusZones.EnumerateArray())
-        {
-            if (!sz.TryGetProperty("zone", out var szZone) || !sz.TryGetProperty("telemetry", out var szTelemetry))
+            if (zi?.Configuration is not { } zc)
                 continue;
 
-            var zoneCode = szZone.GetString();
+            if (zc.ZoneType == ZoneType.Heat && heatingZoneCode is null)
+                heatingZoneCode = zc.Code;
+            else if (zc.ZoneType == ZoneType.Water && hotWaterZoneCode is null)
+                hotWaterZoneCode = zc.Code;
+        }
 
-            if (string.Equals(zoneCode, heatingZoneCode, StringComparison.OrdinalIgnoreCase))
+        // Match status zones to configured zones
+        foreach (var sz in status.Zones)
+        {
+            if (sz?.Zone is null || sz.Telemetry is null)
+                continue;
+
+            var telemetry = sz.Telemetry;
+
+            if (sz.Zone == heatingZoneCode)
             {
-                if (szTelemetry.TryGetProperty("setpointInCelsius", out var hzSetpoint)
-                    && hzSetpoint.ValueKind == JsonValueKind.Number
-                    && hzSetpoint.TryGetDecimal(out var hzSetpointDec))
-                    snapshot.HeatingZoneSetpointCelsius = hzSetpointDec;
-                if (szTelemetry.TryGetProperty("mode", out var hzMode))
-                    snapshot.HeatingZoneMode = hzMode.GetString();
-                if (szTelemetry.TryGetProperty("heatDemand", out var hzHeatDemand))
-                    snapshot.HeatingZoneHeatDemand = hzHeatDemand.ValueKind == JsonValueKind.True;
+                if (telemetry.SetpointInCelsius.HasValue)
+                    snapshot.HeatingZoneSetpointCelsius = (decimal)telemetry.SetpointInCelsius.Value;
+                if (telemetry.Mode.HasValue)
+                    snapshot.HeatingZoneMode = telemetry.Mode.Value.ToString();
+                if (telemetry.HeatDemand.HasValue)
+                    snapshot.HeatingZoneHeatDemand = telemetry.HeatDemand.Value;
             }
-            else if (string.Equals(zoneCode, hotWaterZoneCode, StringComparison.OrdinalIgnoreCase))
+            else if (sz.Zone == hotWaterZoneCode)
             {
-                if (szTelemetry.TryGetProperty("setpointInCelsius", out var hwSetpoint)
-                    && hwSetpoint.ValueKind == JsonValueKind.Number
-                    && hwSetpoint.TryGetDecimal(out var hwSetpointDec))
-                    snapshot.HotWaterZoneSetpointCelsius = hwSetpointDec;
-                if (szTelemetry.TryGetProperty("mode", out var hwMode))
-                    snapshot.HotWaterZoneMode = hwMode.GetString();
-                if (szTelemetry.TryGetProperty("heatDemand", out var hwHeatDemand))
-                    snapshot.HotWaterZoneHeatDemand = hwHeatDemand.ValueKind == JsonValueKind.True;
+                if (telemetry.SetpointInCelsius.HasValue)
+                    snapshot.HotWaterZoneSetpointCelsius = (decimal)telemetry.SetpointInCelsius.Value;
+                if (telemetry.Mode.HasValue)
+                    snapshot.HotWaterZoneMode = telemetry.Mode.Value.ToString();
+                if (telemetry.HeatDemand.HasValue)
+                    snapshot.HotWaterZoneHeatDemand = telemetry.HeatDemand.Value;
             }
         }
 
@@ -287,74 +238,52 @@ public static class SnapshotMapper
         // try extracting directly from config zone data
         if (hotWaterZoneCode is not null && !snapshot.HotWaterZoneHeatDemand.HasValue)
         {
-            foreach (var cz in configZones.EnumerateArray())
+            foreach (var zi in config.Zones)
             {
-                if (cz.TryGetProperty("configuration", out var czConfig)
-                    && czConfig.TryGetProperty("zoneType", out var zt)
-                    && string.Equals(zt.GetString(), "HOT_WATER", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (czConfig.TryGetProperty("heatDemand", out var cfgHeatDemand))
-                        snapshot.HotWaterZoneHeatDemand = cfgHeatDemand.ValueKind == JsonValueKind.True;
-                    if (czConfig.TryGetProperty("callForHeat", out var cfgCallForHeat) && !snapshot.HotWaterZoneHeatDemand.HasValue)
-                        snapshot.HotWaterZoneHeatDemand = cfgCallForHeat.ValueKind == JsonValueKind.True;
-                    if (czConfig.TryGetProperty("currentOperation", out var curOp)
-                        && curOp.TryGetProperty("setpointInCelsius", out var opSetpoint)
-                        && opSetpoint.ValueKind == JsonValueKind.Number
-                        && opSetpoint.TryGetDecimal(out var opSetpointDec)
-                        && !snapshot.HotWaterZoneSetpointCelsius.HasValue)
-                        snapshot.HotWaterZoneSetpointCelsius = opSetpointDec;
-                    if (czConfig.TryGetProperty("currentOperation", out var curOp2)
-                        && curOp2.TryGetProperty("mode", out var opMode)
-                        && string.IsNullOrEmpty(snapshot.HotWaterZoneMode))
-                        snapshot.HotWaterZoneMode = opMode.GetString();
-                    break;
-                }
+                if (zi?.Configuration is not { } zc || zc.ZoneType != ZoneType.Water)
+                    continue;
+
+                snapshot.HotWaterZoneHeatDemand = zc.HeatDemand ?? zc.CallForHeat;
+
+                if (!snapshot.HotWaterZoneSetpointCelsius.HasValue && zc.CurrentOperation?.SetpointInCelsius is { } opSetpoint)
+                    snapshot.HotWaterZoneSetpointCelsius = (decimal)opSetpoint;
+
+                if (string.IsNullOrEmpty(snapshot.HotWaterZoneMode) && zc.CurrentOperation?.Mode is { } opMode)
+                    snapshot.HotWaterZoneMode = opMode.ToString();
+
+                break;
             }
         }
     }
 
-    private static void ExtractSensorReadingsJson(JsonElement root, HeatPumpSnapshot snapshot)
+    private static void ExtractSensorReadingsJson(ControllerStatusResponse? status, HeatPumpSnapshot snapshot)
     {
-        if (!root.TryGetProperty("heatPumpControllerStatus", out var status)
-            || !status.TryGetProperty("sensors", out var allSensors)
-            || allSensors.ValueKind != JsonValueKind.Array)
+        if (status?.Sensors is not { Length: > 0 } sensors)
             return;
 
         var sensorList = new List<object>();
-        foreach (var sensor in allSensors.EnumerateArray())
+        foreach (var sensor in sensors)
         {
+            if (sensor is null) continue;
+
             var entry = new Dictionary<string, object?>();
-            if (sensor.TryGetProperty("code", out var code))
-                entry["code"] = code.GetString();
-            if (sensor.TryGetProperty("connectivity", out var conn)
-                && conn.TryGetProperty("online", out var online))
-                entry["online"] = online.ValueKind == JsonValueKind.True;
-            if (sensor.TryGetProperty("telemetry", out var tel))
+            entry["code"] = sensor.Code;
+
+            if (sensor.Connectivity?.Online is { } online)
+                entry["online"] = online;
+
+            if (sensor.Telemetry is { } tel)
             {
-                if (tel.TryGetProperty("temperatureInCelsius", out var t)
-                    && t.ValueKind == JsonValueKind.Number
-                    && t.TryGetDecimal(out var tempC))
-                    entry["tempC"] = tempC;
-                if (tel.TryGetProperty("humidityPercentage", out var h)
-                    && h.ValueKind == JsonValueKind.Number
-                    && h.TryGetDecimal(out var humidity))
-                    entry["humidity"] = humidity;
+                if (tel.TemperatureInCelsius is { } tempC)
+                    entry["tempC"] = (decimal)tempC;
+                if (tel.HumidityPercentage is { } humidity)
+                    entry["humidity"] = (decimal)humidity;
             }
+
             sensorList.Add(entry);
         }
+
         if (sensorList.Count > 0)
             snapshot.SensorReadingsJson = JsonSerializer.Serialize(sensorList);
-    }
-
-    /// <summary>
-    /// Helper for the common pattern of extracting a decimal from a nested { "value": "123.45" } property.
-    /// Handles: parent.TryGetProperty(name, out var obj) && obj.TryGetProperty("value", out var val) && decimal.TryParse(...)
-    /// </summary>
-    private static bool TryGetDecimalValue(JsonElement parent, string propertyName, out decimal result)
-    {
-        result = 0;
-        return parent.TryGetProperty(propertyName, out var obj)
-               && obj.TryGetProperty("value", out var val)
-               && decimal.TryParse(val.GetString() ?? "", out result);
     }
 }
