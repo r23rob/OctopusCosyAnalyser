@@ -5,8 +5,10 @@
 export interface AccountSettingsDto {
   id: number
   accountNumber: string
-  apiKey: string
-  anthropicApiKey?: string | null
+  hasApiKey: boolean
+  email?: string | null
+  hasOctopusPassword: boolean
+  hasAnthropicApiKey: boolean
   authMode: 'apikey' | 'password'
   createdAt: string
   updatedAt: string

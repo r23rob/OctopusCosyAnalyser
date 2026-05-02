@@ -19,10 +19,12 @@ const schema = z
     email: z.string().optional(),
     octopusPassword: z.string().optional(),
     anthropicApiKey: z.string().optional(),
+    isExisting: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.authMode === 'apikey') {
-      if (!data.apiKey || data.apiKey.trim().length === 0) {
+      // Only require API key for new settings or if it's being changed
+      if (!data.isExisting && (!data.apiKey || data.apiKey.trim().length === 0)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'API key is required', path: ['apiKey'] })
       }
     } else {
@@ -31,7 +33,8 @@ const schema = z
       } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Valid email required', path: ['email'] })
       }
-      if (!data.octopusPassword || data.octopusPassword.trim().length === 0) {
+      // Only require password for new settings or if it's being changed
+      if (!data.isExisting && (!data.octopusPassword || data.octopusPassword.trim().length === 0)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Password is required', path: ['octopusPassword'] })
       }
     }
@@ -62,12 +65,13 @@ function SettingsPage() {
       ? {
           accountNumber: existing.accountNumber,
           authMode: existing.authMode ?? 'apikey',
-          apiKey: existing.apiKey,
-          email: '',
-          octopusPassword: '',
-          anthropicApiKey: existing.anthropicApiKey ?? '',
+          apiKey: '',  // Don't populate - user must re-enter
+          email: existing.email ?? '',
+          octopusPassword: '',  // Don't populate - user must re-enter
+          anthropicApiKey: '',  // Don't populate - user must re-enter
+          isExisting: true,
         }
-      : { accountNumber: '', authMode: 'apikey', apiKey: '', email: '', octopusPassword: '', anthropicApiKey: '' },
+      : { accountNumber: '', authMode: 'apikey', apiKey: '', email: '', octopusPassword: '', anthropicApiKey: '', isExisting: false },
   })
 
   const authMode = useWatch({ control, name: 'authMode' })
@@ -87,10 +91,11 @@ function SettingsPage() {
       reset({
         accountNumber: saved?.accountNumber ?? '',
         authMode: saved?.authMode ?? 'apikey',
-        apiKey: saved?.apiKey ?? '',
-        email: '',
-        octopusPassword: '',
-        anthropicApiKey: saved?.anthropicApiKey ?? '',
+        apiKey: '',  // Clear after save
+        email: saved?.email ?? '',
+        octopusPassword: '',  // Clear after save
+        anthropicApiKey: '',  // Clear after save
+        isExisting: true,
       })
     },
   })
@@ -171,7 +176,7 @@ function SettingsPage() {
               <input
                 {...register('apiKey')}
                 type="password"
-                placeholder="sk_live_..."
+                placeholder={existing?.hasApiKey ? '••••••••••••••••••• (stored securely)' : 'sk_live_...'}
                 className={inputCls(!!errors.apiKey)}
               />
             </Field>
@@ -192,7 +197,7 @@ function SettingsPage() {
                 <input
                   {...register('octopusPassword')}
                   type="password"
-                  placeholder="Your Octopus account password"
+                  placeholder={existing?.hasOctopusPassword ? '••••••••••••••••••• (stored securely)' : 'Your Octopus account password'}
                   className={inputCls(!!errors.octopusPassword)}
                 />
               </Field>
@@ -206,7 +211,7 @@ function SettingsPage() {
             <input
               {...register('anthropicApiKey')}
               type="password"
-              placeholder="sk-ant-..."
+              placeholder={existing?.hasAnthropicApiKey ? '••••••••••••••••••• (stored securely)' : 'sk-ant-...'}
               className={inputCls(false)}
             />
           </Field>

@@ -39,27 +39,32 @@ public static class AccountSettingsEndpoints
             if (authMode is not "apikey" and not "password")
                 return Results.BadRequest("AuthMode must be 'apikey' or 'password'");
 
+            var settings = await db.OctopusAccountSettings
+                .FirstOrDefaultAsync(s => s.AccountNumber == request.AccountNumber, ct);
+
+            // Validate required fields for new settings or when switching auth modes
+            var isNewSettings = settings is null;
+            var isSwitchingToPassword = !isNewSettings && authMode == "password" && settings.AuthMode != "password";
+            var isSwitchingToApiKey = !isNewSettings && authMode == "apikey" && settings.AuthMode != "apikey";
 
             if (authMode == "password")
             {
                 if (string.IsNullOrWhiteSpace(request.Email))
                     return Results.BadRequest("Email is required for password authentication");
-                if (string.IsNullOrWhiteSpace(request.OctopusPassword))
-                    return Results.BadRequest("Octopus password is required for password authentication");
+                
+                // Only require password for new settings or when switching auth modes
+                if ((isNewSettings || isSwitchingToPassword) && string.IsNullOrWhiteSpace(request.OctopusPassword))
+                    return Results.BadRequest("Octopus password is required when setting up password authentication");
             }
             else // apikey
             {
-                if (string.IsNullOrWhiteSpace(request.ApiKey))
-                    return Results.BadRequest("API key is required for API key authentication");
+                // Only require API key for new settings or when switching auth modes
+                if ((isNewSettings || isSwitchingToApiKey) && string.IsNullOrWhiteSpace(request.ApiKey))
+                    return Results.BadRequest("API key is required when setting up API key authentication");
             }
-            var settings = await db.OctopusAccountSettings
-                .FirstOrDefaultAsync(s => s.AccountNumber == request.AccountNumber, ct);
 
             if (settings is null)
             {
-                if (string.IsNullOrWhiteSpace(request.OctopusPassword))
-                    return Results.BadRequest("Octopus password is required for initial setup");
-
                 settings = new OctopusAccountSettings
                 {
                     AccountNumber = request.AccountNumber.Trim(),
@@ -102,6 +107,7 @@ public static class AccountSettingsEndpoints
         Email = s.Email,
         HasOctopusPassword = !string.IsNullOrWhiteSpace(s.OctopusPassword),
         HasAnthropicApiKey = !string.IsNullOrWhiteSpace(s.AnthropicApiKey),
+        AuthMode = s.AuthMode,
         CreatedAt = s.CreatedAt,
         UpdatedAt = s.UpdatedAt,
     };

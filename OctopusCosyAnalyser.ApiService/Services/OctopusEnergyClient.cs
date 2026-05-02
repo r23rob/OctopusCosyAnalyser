@@ -89,7 +89,20 @@ public class OctopusEnergyClient : IOctopusEnergyClient
 
             var result = await response.Content.ReadAsStringAsync();
             var json = JsonDocument.Parse(result);
-            var token = json.RootElement.GetProperty("data").GetProperty("obtainKrakenToken").GetProperty("token").GetString();
+            
+            // Check for GraphQL errors before accessing data
+            if (json.RootElement.TryGetProperty("errors", out var errors) && errors.GetArrayLength() > 0)
+            {
+                var errorMsg = errors[0].TryGetProperty("message", out var msg) ? msg.GetString() : "Unknown error";
+                throw new InvalidOperationException($"Failed to obtain Kraken token: {errorMsg}");
+            }
+            
+            if (!json.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
+            {
+                throw new InvalidOperationException($"Failed to obtain Kraken token: no data in response. Response: {result}");
+            }
+            
+            var token = data.GetProperty("obtainKrakenToken").GetProperty("token").GetString();
 
             var entry = new TokenCacheEntry(token!, DateTime.UtcNow.AddMinutes(55));
             TokenCache[cacheKey] = entry;
@@ -823,7 +836,10 @@ public class OctopusEnergyClient : IOctopusEnergyClient
             var token = await GetAuthTokenAsync(settings);
 
             using var request = new HttpRequestMessage(HttpMethod.Post, string.Empty);
+            
+            // Send token directly in Authorization header (no Bearer prefix needed)
             request.Headers.Add("Authorization", token);
+            
             request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
             using var response = await _httpClient.SendAsync(request, cancellationToken);

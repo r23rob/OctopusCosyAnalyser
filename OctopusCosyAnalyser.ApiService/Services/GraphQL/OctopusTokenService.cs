@@ -77,8 +77,22 @@ public class OctopusTokenService : IOctopusTokenService
 
             var result = await response.Content.ReadAsStringAsync(cancellationToken);
             using var json = JsonDocument.Parse(result);
-            var token = json.RootElement
-                .GetProperty("data")
+            
+            // Check for GraphQL errors before accessing data
+            if (json.RootElement.TryGetProperty("errors", out var errors) && errors.GetArrayLength() > 0)
+            {
+                var errorMsg = errors[0].TryGetProperty("message", out var msg) ? msg.GetString() : "Unknown error";
+                _logger.LogError("Failed to obtain Kraken token: {Error}. Response: {Response}", errorMsg, result);
+                throw new InvalidOperationException($"Failed to obtain Kraken token: {errorMsg}");
+            }
+            
+            if (!json.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
+            {
+                _logger.LogError("Failed to obtain Kraken token: no data in response. Response: {Response}", result);
+                throw new InvalidOperationException($"Failed to obtain Kraken token: no data in response. Response: {result}");
+            }
+            
+            var token = data
                 .GetProperty("obtainKrakenToken")
                 .GetProperty("token")
                 .GetString()!;
