@@ -13,8 +13,9 @@ public interface IOctopusTokenService
 
 /// <summary>
 /// Manages Octopus Energy API authentication tokens.
-/// For API key mode, returns the key directly.
-/// For password mode, obtains a JWT via the obtainKrakenToken mutation and caches it for 55 minutes.
+/// Both API key mode and password mode obtain a JWT via the obtainKrakenToken mutation
+/// and cache it for 55 minutes — the backend GraphQL endpoint requires a JWT, not the
+/// raw API key.
 /// </summary>
 public class OctopusTokenService : IOctopusTokenService
 {
@@ -34,19 +35,42 @@ public class OctopusTokenService : IOctopusTokenService
 
     public async Task<string> GetAuthTokenAsync(OctopusAccountSettings settings, CancellationToken cancellationToken = default)
     {
+        string cacheKey;
+        string query;
+        object variables;
+
         if (settings.AuthMode == "apikey")
         {
             if (string.IsNullOrWhiteSpace(settings.ApiKey))
                 throw new ArgumentException("API key is required for API key authentication.");
-            return settings.ApiKey;
+
+            cacheKey = $"apikey:{settings.ApiKey}";
+            query = """
+            mutation KrakenTokenAuthentication($apiKey: String!) {
+              obtainKrakenToken(input: { APIKey: $apiKey }) {
+                token
+              }
+            }
+            """;
+            variables = new { apiKey = settings.ApiKey };
         }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(settings.Email))
+                throw new ArgumentException("Email is required for password authentication.");
+            if (string.IsNullOrWhiteSpace(settings.OctopusPassword))
+                throw new ArgumentException("Password is required for password authentication.");
 
-        if (string.IsNullOrWhiteSpace(settings.Email))
-            throw new ArgumentException("Email is required for password authentication.");
-        if (string.IsNullOrWhiteSpace(settings.OctopusPassword))
-            throw new ArgumentException("Password is required for password authentication.");
-
-        var cacheKey = $"{settings.Email}:{settings.OctopusPassword}";
+            cacheKey = $"{settings.Email}:{settings.OctopusPassword}";
+            query = """
+            mutation KrakenTokenAuthentication($email: String!, $password: String!) {
+              obtainKrakenToken(input: { email: $email, password: $password }) {
+                token
+              }
+            }
+            """;
+            variables = new { email = settings.Email, password = settings.OctopusPassword };
+        }
 
         // Fast path: return cached token without acquiring lock
         if (TokenCache.TryGetValue(cacheKey, out var cached) && DateTime.UtcNow < cached.ExpiresAt)
@@ -59,15 +83,6 @@ public class OctopusTokenService : IOctopusTokenService
             if (TokenCache.TryGetValue(cacheKey, out cached) && DateTime.UtcNow < cached.ExpiresAt)
                 return cached.Token;
 
-            var query = """
-            mutation KrakenTokenAuthentication($email: String!, $password: String!) {
-              obtainKrakenToken(input: { email: $email, password: $password }) {
-                token
-              }
-            }
-            """;
-
-            var variables = new { email = settings.Email, password = settings.OctopusPassword };
             var payload = JsonSerializer.Serialize(new { query, variables });
 
             using var client = _httpClientFactory.CreateClient();
@@ -98,7 +113,7 @@ public class OctopusTokenService : IOctopusTokenService
                 .GetString()!;
 
             TokenCache[cacheKey] = new TokenCacheEntry(token, DateTime.UtcNow.AddMinutes(55));
-            _logger.LogDebug("Obtained and cached Octopus auth token for {Email}", settings.Email);
+            _logger.LogDebug("Obtained and cached Octopus auth token using {AuthMode} mode", settings.AuthMode);
 
             return token;
         }

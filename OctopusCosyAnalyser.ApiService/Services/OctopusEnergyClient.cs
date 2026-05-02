@@ -42,12 +42,24 @@ public class OctopusEnergyClient : IOctopusEnergyClient
 
     private async Task<string> GetAuthTokenAsync(OctopusAccountSettings settings)
     {
+        string cacheKey;
+        string query;
+        object variables;
+
         if (settings.AuthMode == "apikey")
         {
             if (string.IsNullOrWhiteSpace(settings.ApiKey))
                 throw new ArgumentException("API key is required for API key authentication.");
-            // For API key mode, use the API key directly as the token
-            return settings.ApiKey;
+
+            cacheKey = $"apikey:{settings.ApiKey}";
+            query = """
+            mutation KrakenTokenAuthentication($apiKey: String!) {
+              obtainKrakenToken(input: { APIKey: $apiKey }) {
+                token
+              }
+            }
+            """;
+            variables = new { apiKey = settings.ApiKey };
         }
         else
         {
@@ -55,9 +67,17 @@ public class OctopusEnergyClient : IOctopusEnergyClient
                 throw new ArgumentException("Email is required for password authentication.");
             if (string.IsNullOrWhiteSpace(settings.OctopusPassword))
                 throw new ArgumentException("Password is required for password authentication.");
-        }
 
-        var cacheKey = $"{settings.Email}:{settings.OctopusPassword}";
+            cacheKey = $"{settings.Email}:{settings.OctopusPassword}";
+            query = """
+            mutation KrakenTokenAuthentication($email: String!, $password: String!) {
+              obtainKrakenToken(input: { email: $email, password: $password }) {
+                token
+              }
+            }
+            """;
+            variables = new { email = settings.Email, password = settings.OctopusPassword };
+        }
 
         // Fast path: return cached token without acquiring lock
         if (TokenCache.TryGetValue(cacheKey, out var cached) && DateTime.UtcNow < cached.ExpiresAt)
@@ -72,15 +92,6 @@ public class OctopusEnergyClient : IOctopusEnergyClient
             if (TokenCache.TryGetValue(cacheKey, out cached) && DateTime.UtcNow < cached.ExpiresAt)
                 return cached.Token;
 
-            var query = """
-            mutation KrakenTokenAuthentication($email: String!, $password: String!) {
-              obtainKrakenToken(input: { email: $email, password: $password }) {
-                token
-              }
-            }
-            """;
-
-            var variables = new { email = settings.Email, password = settings.OctopusPassword };
             var payload = JsonSerializer.Serialize(new { query, variables });
 
             var content = new StringContent(payload, Encoding.UTF8, "application/json");
