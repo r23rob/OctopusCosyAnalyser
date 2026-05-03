@@ -323,24 +323,6 @@ export interface ConsumptionResponseDto {
 
 // ── Time Series ───────────────────────────────────────────────────────
 
-export interface TimeSeriesPointDto {
-  startAt: string
-  endAt: string
-  coefficientOfPerformance?: string | null
-  energyOutput?: string | null
-  energyInput?: string | null
-  outdoorTemperature?: string | null
-}
-
-export interface TimeSeriesResponseDto {
-  accountNumber: string
-  euid: string
-  from: string
-  to: string
-  grouping: string
-  points: TimeSeriesPointDto[]
-}
-
 export interface TimeRangedResponseDto {
   accountNumber: string
   euid: string
