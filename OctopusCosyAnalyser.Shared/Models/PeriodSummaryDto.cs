@@ -11,7 +11,7 @@ public sealed class PeriodSummaryDto
     public double? MinCop { get; set; }
     public double? MaxCop { get; set; }
 
-    // Energy totals (kWh) — sum of (kW × 0.25h per snapshot interval)
+    // Energy totals (kWh) — sum of (kW × snapshot interval in hours)
     public double TotalInputKwh { get; set; }
     public double TotalOutputKwh { get; set; }
 

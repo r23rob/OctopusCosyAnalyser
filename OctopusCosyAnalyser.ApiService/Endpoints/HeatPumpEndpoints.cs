@@ -910,7 +910,7 @@ public static class HeatPumpEndpoints
             to ??= DateTime.UtcNow;
 
             // Cap at 366 days to prevent loading unbounded data into memory.
-            // At 15-min intervals, 366 days = ~35,000 snapshots which is manageable.
+            // At 30-min intervals, 366 days = ~17,500 snapshots which is manageable.
             var maxSpan = TimeSpan.FromDays(Constants.MaxAggregateSpanDays);
             if (to.Value - from.Value > maxSpan)
                 from = to.Value - maxSpan;

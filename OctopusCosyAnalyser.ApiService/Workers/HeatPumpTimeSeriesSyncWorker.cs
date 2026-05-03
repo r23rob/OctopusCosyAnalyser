@@ -10,7 +10,7 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<HeatPumpTimeSeriesSyncWorker> _logger;
-    private readonly TimeSpan _pollingInterval = TimeSpan.FromHours(6);
+    private readonly TimeSpan _pollingInterval = TimeSpan.FromMinutes(Constants.SnapshotIntervalMinutes);
 
     public HeatPumpTimeSeriesSyncWorker(IServiceProvider serviceProvider, ILogger<HeatPumpTimeSeriesSyncWorker> logger)
     {

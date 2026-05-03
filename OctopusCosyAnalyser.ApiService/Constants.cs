@@ -3,8 +3,8 @@ namespace OctopusCosyAnalyser.ApiService;
 public static class Constants
 {
     // Snapshot interval
-    public const int SnapshotIntervalMinutes = 15;
-    public const double SnapshotIntervalHours = 0.25; // 15 min = 0.25 hours (kW-to-kWh conversion)
+    public const int SnapshotIntervalMinutes = 30;
+    public const double SnapshotIntervalHours = 0.5; // 30 min = 0.5 hours (kW-to-kWh conversion)
 
     // Token cache
     public const int TokenExpiryMinutes = 55;

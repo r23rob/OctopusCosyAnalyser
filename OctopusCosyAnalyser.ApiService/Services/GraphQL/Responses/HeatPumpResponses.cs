@@ -8,8 +8,8 @@ namespace OctopusCosyAnalyser.ApiService.Services.GraphQL.Responses;
 public sealed record HeatPumpStatusAndConfigResponse(
     ControllerStatusResponse? ControllerStatus,
     ControllerConfigResponse? ControllerConfig,
-    TimeSeriesEntry?[]? TimeSeries,
-    LifetimePerformanceResponse? Lifetime);
+    LifetimePerformanceResponse? Lifetime,
+    LivePerformanceResponse? Live);
 
 // ── Controller Status ────────────────────────────────────────────────
 
@@ -156,6 +156,15 @@ public sealed record LifetimePerformanceResponse(
     decimal? SeasonalCoefficientOfPerformance,
     MeasurementResponse? EnergyInput,
     MeasurementResponse? HeatOutput,
+    DateTimeOffset ReadAt);
+
+// ── Live Performance (instantaneous reading) ─────────────────────────
+
+public sealed record LivePerformanceResponse(
+    decimal? CoefficientOfPerformance,
+    MeasurementResponse? PowerInput,
+    MeasurementResponse? HeatOutput,
+    MeasurementResponse? OutdoorTemperature,
     DateTimeOffset ReadAt);
 
 // ── Controllers at Location ──────────────────────────────────────────
