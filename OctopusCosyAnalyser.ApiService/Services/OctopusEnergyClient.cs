@@ -126,36 +126,37 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         }
     }
 
-    public async Task<CredentialValidationResult> ValidateCredentialsAsync(OctopusAccountSettings settings, CancellationToken cancellationToken = default)
+    public async Task<(bool Ok, string? Error)> ValidateCredentialsAsync(OctopusAccountSettings settings, CancellationToken cancellationToken = default)
     {
         try
         {
             var token = await GetAuthTokenAsync(settings);
-            if (string.IsNullOrEmpty(token))
-                return new CredentialValidationResult { Ok = false, Error = "Empty token returned from Octopus auth endpoint." };
-            return new CredentialValidationResult { Ok = true, Error = null };
+            return (!string.IsNullOrEmpty(token), string.IsNullOrEmpty(token) ? "Empty token returned from Octopus auth endpoint." : null);
         }
         catch (ArgumentException ex)
         {
-            return new CredentialValidationResult { Ok = false, Error = ex.Message };
+            // Missing credential — surface the field name
+            return (false, ex.Message);
         }
         catch (InvalidOperationException ex)
         {
-            return new CredentialValidationResult { Ok = false, Error = ex.Message };
+            // GraphQL error (e.g. invalid API key, invalid email/password)
+            return (false, ex.Message);
         }
         catch (HttpRequestException ex)
         {
+            // Network/HTTP error talking to api.octopus.energy
             _logger.LogWarning(ex, "Octopus auth HTTP failure during credential validation");
-            return new CredentialValidationResult { Ok = false, Error = "Could not reach Octopus auth endpoint: " + ex.Message };
+            return (false, $"Could not reach Octopus auth endpoint: {ex.Message}");
         }
         catch (TaskCanceledException)
         {
-            return new CredentialValidationResult { Ok = false, Error = "Octopus auth request timed out." };
+            return (false, "Octopus auth request timed out.");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error validating Octopus credentials");
-            return new CredentialValidationResult { Ok = false, Error = "Unexpected error: " + ex.Message };
+            return (false, $"Unexpected error: {ex.Message}");
         }
     }
 

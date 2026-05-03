@@ -54,9 +54,9 @@ public static class StatusEndpoints
             }
             else
             {
-                var result = await octopusClient.ValidateCredentialsAsync(settings, ct);
-                dto.OctopusAuthOk = result.Ok;
-                dto.OctopusAuthError = result.Error;
+                var (ok, error) = await octopusClient.ValidateCredentialsAsync(settings, ct);
+                dto.OctopusAuthOk = ok;
+                dto.OctopusAuthError = error;
             }
 
             // Anthropic key may come from either the account settings (DB) or global config / ANTHROPIC_API_KEY env var

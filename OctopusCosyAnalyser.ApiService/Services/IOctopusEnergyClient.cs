@@ -20,14 +20,9 @@ public interface IOctopusEnergyClient
     Task<JsonDocument> ExecuteRawQueryAsync(OctopusAccountSettings settings, string query, JsonElement? variables = null, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Attempts to obtain an auth token using the provided settings. Used by the /api/status endpoint
-    /// to surface auth issues in the UI without throwing.
+    /// Attempts to obtain an auth token using the provided settings. Returns (true, null) on success
+    /// or (false, errorMessage) on failure. Used by the /api/status endpoint to surface auth issues
+    /// in the UI without throwing.
     /// </summary>
-    Task<CredentialValidationResult> ValidateCredentialsAsync(OctopusAccountSettings settings, CancellationToken cancellationToken = default);
-}
-
-public sealed class CredentialValidationResult
-{
-    public bool Ok { get; init; }
-    public string? Error { get; init; }
+    Task<(bool Ok, string? Error)> ValidateCredentialsAsync(OctopusAccountSettings settings, CancellationToken cancellationToken = default);
 }
