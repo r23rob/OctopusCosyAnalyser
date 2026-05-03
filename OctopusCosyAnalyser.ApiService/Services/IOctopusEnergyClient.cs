@@ -18,4 +18,16 @@ public interface IOctopusEnergyClient
     Task<JsonDocument> GetApplicableRatesAsync(OctopusAccountSettings settings, string accountNumber, string mpxn, DateTime startAt, DateTime endAt, CancellationToken cancellationToken = default);
     Task<JsonDocument> GetCostOfUsageAsync(OctopusAccountSettings settings, string accountNumber, DateTime from, DateTime to, string grouping = "DAY", int? propertyId = null, string? mpxn = null, CancellationToken cancellationToken = default);
     Task<JsonDocument> ExecuteRawQueryAsync(OctopusAccountSettings settings, string query, JsonElement? variables = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Attempts to obtain an auth token using the provided settings. Used by the /api/status endpoint
+    /// to surface auth issues in the UI without throwing.
+    /// </summary>
+    Task<CredentialValidationResult> ValidateCredentialsAsync(OctopusAccountSettings settings, CancellationToken cancellationToken = default);
+}
+
+public sealed class CredentialValidationResult
+{
+    public bool Ok { get; init; }
+    public string? Error { get; init; }
 }

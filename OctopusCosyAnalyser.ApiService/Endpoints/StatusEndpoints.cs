@@ -1,3 +1,8 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OctopusCosyAnalyser.ApiService.Data;
+using OctopusCosyAnalyser.ApiService.Options;
+using OctopusCosyAnalyser.ApiService.Services;
 using OctopusCosyAnalyser.Shared.Models;
 
 namespace OctopusCosyAnalyser.ApiService.Endpoints;
@@ -6,17 +11,73 @@ public static class StatusEndpoints
 {
     public static void MapStatusEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/status", () =>
+        app.MapGet("/api/status", async (
+            CosyDbContext db,
+            IOctopusEnergyClient octopusClient,
+            IOptions<AnthropicOptions> anthropicOptions,
+            CancellationToken ct) =>
         {
-            var dto = new ApiStatusDto
+            var settings = await db.OctopusAccountSettings
+                .OrderBy(s => s.Id)
+                .FirstOrDefaultAsync(ct);
+
+            var dto = new ApiStatusDto { CheckedAt = DateTime.UtcNow };
+
+            if (settings is null)
             {
-                CheckedAt = DateTime.UtcNow,
-                HasSettings = false,
-                OctopusCredentialsConfigured = false,
-                OctopusAuthOk = false,
-                AnthropicConfigured = false,
-                HasDevice = false,
-            };
+                dto.HasSettings = false;
+                dto.OctopusCredentialsConfigured = false;
+                dto.OctopusAuthOk = false;
+                dto.OctopusAuthError = "No Octopus Energy account configured. Open Settings to add your account number and API key.";
+                dto.AnthropicConfigured = !string.IsNullOrWhiteSpace(anthropicOptions.Value.ApiKey);
+                dto.AnthropicKeySource = dto.AnthropicConfigured ? "config" : null;
+                dto.HasDevice = false;
+                return Results.Ok(dto);
+            }
+
+            dto.HasSettings = true;
+            dto.AccountNumber = settings.AccountNumber;
+            dto.AuthMode = settings.AuthMode;
+
+            var hasApiKeyCreds = settings.AuthMode == "apikey" && !string.IsNullOrWhiteSpace(settings.ApiKey);
+            var hasPasswordCreds = settings.AuthMode == "password"
+                && !string.IsNullOrWhiteSpace(settings.Email)
+                && !string.IsNullOrWhiteSpace(settings.OctopusPassword);
+            dto.OctopusCredentialsConfigured = hasApiKeyCreds || hasPasswordCreds;
+
+            if (!dto.OctopusCredentialsConfigured)
+            {
+                dto.OctopusAuthOk = false;
+                dto.OctopusAuthError = settings.AuthMode == "password"
+                    ? "Email and Octopus password are required for password authentication."
+                    : "Octopus API key is missing. Open Settings to add it.";
+            }
+            else
+            {
+                var result = await octopusClient.ValidateCredentialsAsync(settings, ct);
+                dto.OctopusAuthOk = result.Ok;
+                dto.OctopusAuthError = result.Error;
+            }
+
+            // Anthropic key may come from either the account settings (DB) or global config / ANTHROPIC_API_KEY env var
+            if (!string.IsNullOrWhiteSpace(settings.AnthropicApiKey))
+            {
+                dto.AnthropicConfigured = true;
+                dto.AnthropicKeySource = "account";
+            }
+            else if (!string.IsNullOrWhiteSpace(anthropicOptions.Value.ApiKey))
+            {
+                dto.AnthropicConfigured = true;
+                dto.AnthropicKeySource = "config";
+            }
+            else
+            {
+                dto.AnthropicConfigured = false;
+                dto.AnthropicKeySource = null;
+            }
+
+            dto.HasDevice = await db.HeatPumpDevices.AnyAsync(d => d.AccountNumber == settings.AccountNumber, ct);
+
             return Results.Ok(dto);
         }).WithName("GetApiStatus");
     }
