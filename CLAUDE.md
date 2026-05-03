@@ -375,6 +375,90 @@ These were in the original design but not yet built:
 - Data source: PostgreSQL via existing OctopusCosyAnalyser connection
 - AI analysis card calls Anthropic API — keep that wiring intact
 
+## UI Standards (apply to all React routes)
+
+### Typography
+- Fonts are **Instrument Sans** (sans) and **JetBrains Mono** (mono). Loaded once in
+  `index.html`. Never inline a `<link>` for additional font families per page.
+- Body line-height is **1.55**, headings **1.2**. Set globally in `src/index.css` —
+  do not override per-component without justification.
+- All `.font-mono` text is automatically tabular (`font-variant-numeric: tabular-nums`)
+  so number columns don't jitter. Sans-serif numeric displays should add the
+  `tabular-nums` utility class when columns of digits need to align (KPI cards, tables).
+- **Minimum readable sizes**: dashboard widgets may use `text-[10px]–text-[12px]`
+  for tertiary labels (per heat_pump_v7), but everything else (data tables, settings,
+  scatter, page headings) must be **at least 12px**, scaling to 13px on `md:`.
+- Page titles use `text-xl font-semibold tracking-tight`.
+- Body copy uses `text-sm` (14px) or `text-[13px]`.
+- Avoid `font-light` on body text — it reads thin on Windows ClearType. Use
+  `font-normal` as the default weight for content.
+
+### Layout & responsiveness
+- Top-level container: `max-w-[1440px] mx-auto` (set in `AppLayout.tsx`).
+- Content-heavy pages (data tables, scatter, charts) wrap in
+  `max-w-screen-2xl mx-auto` so they don't stretch on ultra-wide monitors.
+- Forms wrap in `max-w-xl mx-auto` (or narrower) and centre horizontally.
+- Tables that may overflow on mobile go inside `overflow-x-auto` and use
+  `whitespace-nowrap` on cells.
+- Responsive breakpoints (mobile-first): `sm:` 640px, `md:` 768px, `lg:` 1024px,
+  `xl:` 1280px, `2xl:` 1536px. Always specify the mobile style first.
+- Test all routes at **375px (mobile), 768px (tablet), 1280px (laptop), and
+  1920px (desktop monitor)**.
+- Touch targets: minimum **44×44px** on mobile (use `h-11` / `min-h-[44px]`).
+
+### Accessibility
+- Every interactive element must have a visible `:focus-visible` ring (set globally
+  in `src/index.css` — cyan 2px outline). Don't override with `outline-none`.
+- Animations respect `prefers-reduced-motion` (handled globally in `src/index.css`).
+- Colour contrast: text on white backgrounds must meet **WCAG AA** (4.5:1 for body,
+  3:1 for large text). `text-ink3` (#A1A1AA) on white fails AA — use it only for
+  decorative labels, never for important information.
+
+### Progressive Web App (PWA)
+- The web frontend is a PWA via **`vite-plugin-pwa`** (configured in
+  `octopus-cosy-web/vite.config.ts`).
+- Service worker uses `registerType: 'autoUpdate'` so users always get the latest
+  build on next navigation; registration happens in `src/main.tsx` via
+  `registerSW({ immediate: true })`.
+- Caching strategy:
+  - Static assets (JS, CSS, HTML, fonts, icons): precached at build time
+  - Google Fonts CSS: `StaleWhileRevalidate`
+  - Google Fonts WOFF2: `CacheFirst` (1 year)
+  - `/api/*` requests: `NetworkFirst` with 6s timeout, 24h fallback cache
+- Manifest fields are defined inline in `vite.config.ts` — keep `theme_color`
+  matching the navbar background (`#09090B`) and `background_color` matching
+  the page (`#F8F8F9`).
+- Icons live in `octopus-cosy-web/public/`:
+  `pwa-icon.svg`, `pwa-icon-maskable.svg` (sources) and `pwa-192.png`,
+  `pwa-512.png`, `pwa-maskable-512.png`, `apple-touch-icon.png`, `favicon-32.png`
+  (build outputs). Regenerate with `sharp` if the SVG sources change:
+  ```bash
+  npm i -D sharp
+  node -e "const s=require('sharp'),fs=require('fs');\
+   Promise.all([\
+     s(fs.readFileSync('public/pwa-icon.svg')).resize(192).png().toFile('public/pwa-192.png'),\
+     s(fs.readFileSync('public/pwa-icon.svg')).resize(512).png().toFile('public/pwa-512.png'),\
+     s(fs.readFileSync('public/pwa-icon-maskable.svg')).resize(512).png().toFile('public/pwa-maskable-512.png'),\
+     s(fs.readFileSync('public/pwa-icon.svg')).resize(180).png().toFile('public/apple-touch-icon.png'),\
+     s(fs.readFileSync('public/favicon.svg')).resize(32).png().toFile('public/favicon-32.png'),\
+   ]).then(()=>console.log('done'))"
+  npm uninstall sharp
+  ```
+- iOS install support: `apple-mobile-web-app-*` meta tags in `index.html` must
+  remain. Status bar style is `black-translucent`.
+- Safe-area: always honour `env(safe-area-inset-bottom)` on bottom-fixed elements
+  (mobile tab bar uses this).
+
+### Anti-Patterns — UI specific
+- Don't add font sizes below `text-[10px]` (8–9px text is unreadable on retina at
+  100% zoom). The dashboard density tokens are the only exception.
+- Don't use `font-light` for body text — too thin on Windows.
+- Don't override the global `:focus-visible` ring with `outline-none` unless you
+  immediately replace it with an equivalent visible focus state.
+- Don't inline `<style>` blocks in components — use Tailwind utilities or extend
+  `src/index.css` with a class.
+- Don't ship a route page without testing it at 375px **and** 1920px.
+
 ## .NET API Patterns & Best Practices
 
 ### Architecture

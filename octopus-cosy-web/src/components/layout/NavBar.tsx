@@ -51,7 +51,7 @@ export function NavBar() {
       </nav>
 
       {/* Mobile bottom tab bar */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-[200] h-12 bg-white/95 backdrop-blur-[18px] border-t border-[rgba(0,0,0,0.07)] flex items-center justify-around px-4">
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-[200] h-14 bg-white/95 backdrop-blur-[18px] border-t border-[rgba(0,0,0,0.07)] flex items-center justify-around px-4 pb-[env(safe-area-inset-bottom)]">
         <MobileTab to="/heatpump" icon={<LayoutDashboard size={20} />} label="Dashboard" exact />
         <MobileTab to="/heatpump/scatter" icon={<ScatterChart size={20} />} label="Scatter" />
         <MobileTab to="/heatpump/data" icon={<Table2 size={20} />} label="Data" />
@@ -87,7 +87,7 @@ function MobileTab({ to, icon, label, exact }: { to: string; icon: React.ReactNo
       activeProps={{ className: 'text-primary' }}
     >
       {icon}
-      <span className="font-mono text-[9px] tracking-[.05em] uppercase">{label}</span>
+      <span className="font-mono text-[10px] tracking-[.05em] uppercase">{label}</span>
     </Link>
   )
 }
