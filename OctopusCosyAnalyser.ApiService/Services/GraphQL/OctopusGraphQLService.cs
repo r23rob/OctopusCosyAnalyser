@@ -29,12 +29,8 @@ public class OctopusGraphQLService : IOctopusGraphQLService
         SetContext(settings);
         try
         {
-            var now = DateTimeOffset.UtcNow;
-            var liveStartAt = now.AddMinutes(-30);
-            var liveEndAt = now;
-
             var result = await _client.Query(
-                new { accountNumber, euid = (ID)euid, liveStartAt, liveEndAt },
+                new { accountNumber, euid = (ID)euid },
                 static (v, q) => new HeatPumpStatusAndConfigResponse(
                     // 1. Controller Status
                     q.HeatPumpControllerStatus(v.accountNumber, v.euid, status => new ControllerStatusResponse(
@@ -113,22 +109,21 @@ public class OctopusGraphQLService : IOctopusGraphQLService
                         ))
                     )),
 
-                    // 3. Time Series Performance (LIVE - last 30 mins)
-                    q.HeatPumpTimeSeriesPerformance(
-                        v.accountNumber, v.euid, v.liveStartAt, v.liveEndAt, PerformanceGrouping.Live,
-                        ts => new TimeSeriesEntry(
-                            ts.StartAt, ts.EndAt,
-                            ts.EnergyInput(e => new MeasurementResponse(e.Value)),
-                            ts.EnergyOutput(e => new MeasurementResponse(e.Value)),
-                            ts.OutdoorTemperature(t => new MeasurementResponse(t.Value))
-                        )),
-
-                    // 4. Lifetime Performance
+                    // 3. Lifetime Performance
                     q.HeatPumpLifetimePerformance(v.accountNumber, v.euid, lt => new LifetimePerformanceResponse(
                         lt.SeasonalCoefficientOfPerformance,
                         lt.EnergyInput(e => new MeasurementResponse(e.Value)),
                         lt.HeatOutput(e => new MeasurementResponse(e.Value)),
                         lt.ReadAt
+                    )),
+
+                    // 4. Live Performance (instantaneous COP, power, heat, outdoor temp)
+                    q.HeatPumpLivePerformance(v.accountNumber, v.euid, live => new LivePerformanceResponse(
+                        live.CoefficientOfPerformance,
+                        live.PowerInput(p => new MeasurementResponse(p.Value)),
+                        live.HeatOutput(p => new MeasurementResponse(p.Value)),
+                        live.OutdoorTemperature(t => new MeasurementResponse(t.Value)),
+                        live.ReadAt
                     ))
                 ),
                 cancellationToken: ct);

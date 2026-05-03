@@ -1,5 +1,20 @@
 // Auto-translated from OctopusCosyAnalyser.Shared/Models/
 
+// ── API Status ────────────────────────────────────────────────────────
+
+export interface ApiStatusDto {
+  hasSettings: boolean
+  accountNumber?: string | null
+  authMode?: string | null
+  octopusCredentialsConfigured: boolean
+  octopusAuthOk: boolean
+  octopusAuthError?: string | null
+  anthropicConfigured: boolean
+  anthropicKeySource?: 'account' | 'config' | null
+  hasDevice: boolean
+  checkedAt: string
+}
+
 // ── Account Settings ──────────────────────────────────────────────────
 
 export interface AccountSettingsDto {
@@ -322,24 +337,6 @@ export interface ConsumptionResponseDto {
 }
 
 // ── Time Series ───────────────────────────────────────────────────────
-
-export interface TimeSeriesPointDto {
-  startAt: string
-  endAt: string
-  coefficientOfPerformance?: string | null
-  energyOutput?: string | null
-  energyInput?: string | null
-  outdoorTemperature?: string | null
-}
-
-export interface TimeSeriesResponseDto {
-  accountNumber: string
-  euid: string
-  from: string
-  to: string
-  grouping: string
-  points: TimeSeriesPointDto[]
-}
 
 export interface TimeRangedResponseDto {
   accountNumber: string

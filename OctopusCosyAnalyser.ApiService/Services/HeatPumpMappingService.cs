@@ -12,7 +12,7 @@ public static class HeatPumpMappingService
         {
             ControllerStatus = MapControllerStatus(response.ControllerStatus),
             ControllerConfiguration = MapControllerConfiguration(response.ControllerConfig),
-            LivePerformance = MapLivePerformance(response.TimeSeries),
+            LivePerformance = MapLivePerformance(response.Live),
             LifetimePerformance = MapLifetimePerformance(response.Lifetime)
         };
     }
@@ -157,30 +157,18 @@ public static class HeatPumpMappingService
         };
     }
 
-    private static HeatPumpLivePerformance? MapLivePerformance(TimeSeriesEntry?[]? timeSeries)
+    private static HeatPumpLivePerformance? MapLivePerformance(LivePerformanceResponse? live)
     {
-        if (timeSeries is not { Length: > 0 })
-            return null;
-
-        // Select the last non-null entry — the schema allows nullable elements in the list
-        var live = Array.FindLast(timeSeries, entry => entry is not null);
         if (live is null)
             return null;
 
-        // COP is not returned by the API — compute client-side
-        string? cop = null;
-        var eIn = live.EnergyInput?.Value;
-        var eOut = live.EnergyOutput?.Value;
-        if (eIn is > 0 && eOut.HasValue)
-            cop = (eOut.Value / eIn.Value).ToString("F2", CultureInfo.InvariantCulture);
-
         return new HeatPumpLivePerformance
         {
-            CoefficientOfPerformance = cop,
+            CoefficientOfPerformance = live.CoefficientOfPerformance?.ToString("F2", CultureInfo.InvariantCulture),
             OutdoorTemperature = MapMeasurement(live.OutdoorTemperature),
-            HeatOutput = MapMeasurement(live.EnergyOutput),
-            PowerInput = MapMeasurement(live.EnergyInput),
-            ReadAt = live.StartAt.ToString("o")
+            HeatOutput = MapMeasurement(live.HeatOutput),
+            PowerInput = MapMeasurement(live.PowerInput),
+            ReadAt = live.ReadAt.ToString("o")
         };
     }
 

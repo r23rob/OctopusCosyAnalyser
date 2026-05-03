@@ -1,9 +1,32 @@
 import { Link } from '@tanstack/react-router'
 import { LayoutDashboard, ScatterChart, Table2, Sparkles, Settings } from 'lucide-react'
 import { useAiDrawer } from './AiDrawerContext'
+import { useApiStatus } from '@/hooks/use-api-status'
+
+type ConnectionState = { color: 'success' | 'warning' | 'danger' | 'ink3'; label: string; title: string }
+
+function connectionState(status: ReturnType<typeof useApiStatus>['data'], isLoading: boolean): ConnectionState {
+  if (isLoading || !status) return { color: 'ink3', label: 'Checking', title: 'Checking API status…' }
+  if (!status.hasSettings) return { color: 'danger', label: 'No Auth', title: 'No Octopus Energy account configured.' }
+  if (!status.octopusCredentialsConfigured) return { color: 'danger', label: 'No Auth', title: 'Octopus credentials missing.' }
+  if (!status.octopusAuthOk) return { color: 'danger', label: 'Auth Fail', title: status.octopusAuthError ?? 'Octopus auth failed.' }
+  if (!status.hasDevice) return { color: 'warning', label: 'Setup', title: 'Authenticated but no heat pump device registered.' }
+  if (!status.anthropicConfigured) return { color: 'warning', label: 'Live', title: 'Connected. Anthropic AI key not set.' }
+  return { color: 'success', label: 'Live', title: 'Connected to Octopus Energy. AI features available.' }
+}
+
+const COLOR_CLASSES: Record<ConnectionState['color'], { text: string; bg: string; border: string; dot: string; pulse: boolean }> = {
+  success: { text: 'text-success', bg: 'bg-success-bg', border: 'border-[rgba(22,163,74,0.15)]', dot: 'bg-success', pulse: true },
+  warning: { text: 'text-warning', bg: 'bg-warning-bg', border: 'border-[rgba(217,119,6,0.18)]', dot: 'bg-warning', pulse: false },
+  danger:  { text: 'text-danger',  bg: 'bg-danger-bg',  border: 'border-[rgba(220,38,38,0.18)]',  dot: 'bg-danger',  pulse: false },
+  ink3:    { text: 'text-ink3',    bg: 'bg-bg-surface', border: 'border-border-subtle',           dot: 'bg-ink3',    pulse: false },
+}
 
 export function NavBar() {
   const { toggle } = useAiDrawer()
+  const { data: status, isLoading: statusLoading } = useApiStatus()
+  const conn = connectionState(status, statusLoading)
+  const colors = COLOR_CLASSES[conn.color]
 
   return (
     <>
@@ -43,9 +66,12 @@ export function NavBar() {
           >
             <Settings size={15} />
           </Link>
-          <div className="hidden sm:flex items-center gap-[5px] font-mono text-[10px] text-success tracking-[.05em] uppercase px-[10px] py-1 rounded-full bg-success-bg border border-[rgba(22,163,74,0.15)]">
-            <div className="w-[6px] h-[6px] rounded-full bg-success pulse" />
-            Live
+          <div
+            title={conn.title}
+            className={`hidden sm:flex items-center gap-[5px] font-mono text-[10px] tracking-[.05em] uppercase px-[10px] py-1 rounded-full border ${colors.text} ${colors.bg} ${colors.border}`}
+          >
+            <div className={`w-[6px] h-[6px] rounded-full ${colors.dot} ${colors.pulse ? 'pulse' : ''}`} />
+            {conn.label}
           </div>
         </div>
       </nav>

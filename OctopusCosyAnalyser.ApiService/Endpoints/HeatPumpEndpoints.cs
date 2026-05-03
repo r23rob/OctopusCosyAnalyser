@@ -501,45 +501,6 @@ public static class HeatPumpEndpoints
             });
         }).WithName("GetHeatPumpTimeRangedPerformance");
 
-        group.MapGet("/time-series/{accountNumber}/{euid}", async (string accountNumber, string euid, DateTime? from, DateTime? to, string? grouping, IOctopusGraphQLService graphqlService, CosyDbContext db, CancellationToken ct) =>
-        {
-            var (settings, error) = await GetSettingsForAccountAsync(db, accountNumber, ct);
-            if (error is not null)
-                return error;
-
-            from ??= DateTime.UtcNow.AddDays(-7);
-            to ??= DateTime.UtcNow;
-
-            var span = to.Value - from.Value;
-            var validationError = (grouping?.ToUpperInvariant()) switch
-            {
-                "LIVE"  when span > TimeSpan.FromHours(1)     => "Live grouping requires a time period of at most 1 hour (minute-by-minute data).",
-                "DAY"   when span > TimeSpan.FromDays(2)      => "Day grouping requires a time period of at most 2 days (hour-by-hour data).",
-                "WEEK"  when span > TimeSpan.FromDays(14)     => "Week grouping requires a time period of at most 14 days (day-by-day data).",
-                "MONTH" when span > TimeSpan.FromDays(60)     => "Month grouping requires a time period of at most 60 days (day-by-day data).",
-                "YEAR"  when span > TimeSpan.FromDays(13 * 31) => "Year grouping requires a time period of at most 13 months (day-by-day data).",
-                _ => null
-            };
-
-            if (validationError is not null)
-                return Results.BadRequest(new { error = validationError });
-
-            var entries = await graphqlService.GetHeatPumpTimeSeriesPerformanceAsync(
-                settings!, accountNumber, euid, from.Value, to.Value, grouping, ct);
-
-            // Wrap in the same structure the frontend parser expects
-            // (data.octoHeatPumpTimeSeriesPerformance)
-            return Results.Ok(new
-            {
-                accountNumber,
-                euid,
-                from,
-                to,
-                grouping = grouping ?? "auto",
-                data = new { octoHeatPumpTimeSeriesPerformance = entries }
-            });
-        }).WithName("GetHeatPumpTimeSeriesPerformance");
-
         // ── Time Series – Persisted (DB) ──────────────────────────────
 
         group.MapGet("/timeseries/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, CosyDbContext db, CancellationToken ct) =>
@@ -910,7 +871,7 @@ public static class HeatPumpEndpoints
             to ??= DateTime.UtcNow;
 
             // Cap at 366 days to prevent loading unbounded data into memory.
-            // At 15-min intervals, 366 days = ~35,000 snapshots which is manageable.
+            // At 30-min intervals, 366 days = ~17,500 snapshots which is manageable.
             var maxSpan = TimeSpan.FromDays(Constants.MaxAggregateSpanDays);
             if (to.Value - from.Value > maxSpan)
                 from = to.Value - maxSpan;

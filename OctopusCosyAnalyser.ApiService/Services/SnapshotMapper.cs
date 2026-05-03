@@ -22,7 +22,7 @@ public static class SnapshotMapper
             CreatedAt = DateTime.UtcNow
         };
 
-        ExtractLivePerformance(response.TimeSeries, snapshot);
+        ExtractLivePerformance(response.Live, snapshot);
         ExtractLifetimePerformance(response.Lifetime, snapshot);
         ExtractControllerStatus(response.ControllerStatus, snapshot);
         ExtractControllerConfiguration(response.ControllerConfig, response.ControllerStatus, snapshot);
@@ -31,27 +31,19 @@ public static class SnapshotMapper
         return snapshot;
     }
 
-    private static void ExtractLivePerformance(TimeSeriesEntry?[]? timeSeries, HeatPumpSnapshot snapshot)
+    private static void ExtractLivePerformance(LivePerformanceResponse? live, HeatPumpSnapshot snapshot)
     {
-        if (timeSeries is not { Length: > 0 })
-            return;
-
-        // Select the last non-null entry — the schema allows nullable elements in the list
-        var live = Array.FindLast(timeSeries, entry => entry is not null);
         if (live is null)
             return;
 
-        var energyIn = live.EnergyInput?.Value;
-        var energyOut = live.EnergyOutput?.Value;
+        if (live.CoefficientOfPerformance.HasValue)
+            snapshot.CoefficientOfPerformance = live.CoefficientOfPerformance.Value;
 
-        if (energyIn.HasValue && energyOut.HasValue)
-        {
-            if (energyIn.Value > 0)
-                snapshot.CoefficientOfPerformance = energyOut.Value / energyIn.Value;
+        if (live.HeatOutput?.Value is { } heatOut)
+            snapshot.HeatOutputKilowatt = heatOut;
 
-            snapshot.HeatOutputKilowatt = energyOut.Value;
-            snapshot.PowerInputKilowatt = energyIn.Value;
-        }
+        if (live.PowerInput?.Value is { } powerIn)
+            snapshot.PowerInputKilowatt = powerIn;
 
         if (live.OutdoorTemperature?.Value is { } outdoorTemp)
             snapshot.OutdoorTemperatureCelsius = outdoorTemp;

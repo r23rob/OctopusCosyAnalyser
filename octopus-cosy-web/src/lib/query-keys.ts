@@ -1,6 +1,9 @@
 // TanStack Query key factories — keeps cache keys consistent across hooks
 
 export const queryKeys = {
+  status: {
+    all: () => ['status'] as const,
+  },
   settings: {
     all: () => ['settings'] as const,
     byAccount: (accountNumber: string) => ['settings', accountNumber] as const,
@@ -17,8 +20,6 @@ export const queryKeys = {
       ['heatpump', 'period-summary', deviceId, from, to] as const,
     dailyAggregates: (deviceId: string, from: string, to: string) =>
       ['heatpump', 'daily-aggregates', deviceId, from, to] as const,
-    timeSeries: (accountNumber: string, euid: string, from: string, to: string, grouping?: string) =>
-      ['heatpump', 'time-series', accountNumber, euid, from, to, grouping] as const,
     storedTimeSeries: (deviceId: string, from: string, to: string) =>
       ['heatpump', 'stored-time-series', deviceId, from, to] as const,
     consumption: (deviceId: string, from: string, to: string) =>
