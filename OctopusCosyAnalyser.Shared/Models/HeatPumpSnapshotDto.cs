@@ -1,7 +1,7 @@
 namespace OctopusCosyAnalyser.Shared.Models;
 
 /// <summary>
-/// A single snapshot persisted by the background worker every 15 minutes.
+/// A single snapshot persisted by the background worker every 30 minutes.
 /// Returned by /api/heatpump/snapshots/{deviceId}.
 /// </summary>
 public sealed class HeatPumpSnapshotDto

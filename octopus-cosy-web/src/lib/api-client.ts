@@ -19,7 +19,6 @@ import type {
   SyncResult,
   TimeSeriesChartPoint,
   TimeSeriesResult,
-  TimeSeriesStatus,
 } from '@/types/api'
 
 // ── Error class ───────────────────────────────────────────────────────
@@ -104,18 +103,6 @@ function defaultFrom(days: number): Date {
 
 // ── Time-series parsing helpers ───────────────────────────────────────
 
-function getNestedValue(item: Record<string, unknown>, property: string): number | null {
-  const prop = item[property] as Record<string, unknown> | null | undefined
-  if (!prop) return null
-  const val = prop['value']
-  if (typeof val === 'number') return val
-  if (typeof val === 'string') {
-    const n = parseFloat(val)
-    return isNaN(n) ? null : n
-  }
-  return null
-}
-
 function parseStoredTimeSeriesJson(json: string): TimeSeriesResult {
   const data = JSON.parse(json) as Record<string, unknown>
   const records = data['records']
@@ -136,33 +123,6 @@ function parseStoredTimeSeriesJson(json: string): TimeSeriesResult {
     points.push({ endAt, cop, energyOutputVal, energyInputVal, outdoorTempVal })
   }
   return { points, status: points.length > 0 ? 'Ok' : 'NoData' }
-}
-
-function parseLiveTimeSeriesJson(json: string): TimeSeriesResult {
-  const data = JSON.parse(json) as Record<string, unknown>
-  const root = data['data'] as Record<string, unknown> | null | undefined
-  if (!root) return { points: [], status: 'UnexpectedFormat' }
-
-  const seriesEl = root['octoHeatPumpTimeSeriesPerformance']
-  if (seriesEl === null) return { points: [], status: 'NoData' }
-  if (!Array.isArray(seriesEl)) return { points: [], status: 'UnexpectedFormat' }
-
-  const points: TimeSeriesChartPoint[] = []
-  for (const item of seriesEl as Record<string, unknown>[]) {
-    const endAtStr = item['endAt']
-    if (typeof endAtStr !== 'string') continue
-    const endAt = new Date(endAtStr)
-    if (isNaN(endAt.getTime())) continue
-
-    const energyOutputVal = getNestedValue(item, 'energyOutput') ?? 0
-    const energyInputVal = getNestedValue(item, 'energyInput') ?? 0
-    const outdoorTempVal = getNestedValue(item, 'outdoorTemperature') ?? 0
-    const cop = energyInputVal > 0 ? energyOutputVal / energyInputVal : 0
-
-    points.push({ endAt, cop, energyOutputVal, energyInputVal, outdoorTempVal })
-  }
-  const status: TimeSeriesStatus = points.length > 0 ? 'Ok' : 'NoData'
-  return { points, status }
 }
 
 // ── API client ────────────────────────────────────────────────────────
@@ -212,14 +172,6 @@ export const api = {
       const aggregates = data['aggregates']
       if (!Array.isArray(aggregates)) return []
       return aggregates as DailyAggregateDto[]
-    },
-
-    getTimeSeries: async (accountNumber: string, euid: string, from: Date, to: Date, grouping?: string): Promise<TimeSeriesResult> => {
-      const fromStr = encodeURIComponent(toOctopusIso(from))
-      const toStr = encodeURIComponent(toOctopusIso(to))
-      const groupParam = grouping ? `&grouping=${grouping}` : ''
-      const json = await getText(`/api/heatpump/time-series/${accountNumber}/${euid}?from=${fromStr}&to=${toStr}${groupParam}`)
-      return parseLiveTimeSeriesJson(json)
     },
 
     getStoredTimeSeries: async (deviceId: string, from: Date, to: Date): Promise<TimeSeriesResult> => {

@@ -38,7 +38,7 @@ OctopusCosyAnalyser/
 │   │   ├── TadoClient.cs               # Tado API client
 │   │   ├── GraphQLIntrospection.cs     # Schema introspection helpers
 │   │   └── Efficiency*.cs              # Efficiency analysis services
-│   ├── Workers/HeatPumpSnapshotWorker.cs # 15-min background data collector
+│   ├── Workers/HeatPumpSnapshotWorker.cs # 30-min background data collector
 │   ├── Migrations/                     # EF Core migrations
 │   └── Program.cs                      # Service registration + route mapping
 ├── OctopusCosyAnalyser.Web/            # (Legacy Blazor — no longer deployed)
@@ -94,7 +94,7 @@ Follow this 4-layer pattern:
 | Table | Purpose |
 |-------|---------|
 | `HeatPumpDevices` | Registered heat pump devices (DeviceId, AccountNumber, MPAN, Euid) |
-| `HeatPumpSnapshots` | 15-min telemetry snapshots (COP, temps, power, heating/hot water zone state, controller state, weather compensation, all sensor readings as JSONB, flow temp allowable range) |
+| `HeatPumpSnapshots` | 30-min telemetry snapshots (COP, temps, power, heating/hot water zone state, controller state, weather compensation, all sensor readings as JSONB, flow temp allowable range) |
 | `ConsumptionReadings` | Smart meter readings (kWh, demand) |
 | `OctopusAccountSettings` | Octopus API credentials (AccountNumber, ApiKey) |
 | `HeatPumpEfficiencyRecords` | Manual daily records for efficiency tracking |
@@ -127,7 +127,7 @@ All user-supplied values (`apiKey`, `accountNumber`, `euid`, `deviceId`, `make`)
 | `heatPumpDevice(accountNumber, propertyId)` | `GetHeatPumpDeviceAsync` | Debug endpoint — device serial/make/model |
 | `heatPumpStatus` | `GetHeatPumpStatusAsync` | Debug/status endpoints |
 | `heatPumpVariants` | `GetHeatPumpVariantsAsync` | Debug endpoint — lists supported makes/models |
-| **Batched query (4-in-1):** `octoHeatPumpControllerStatus` + `octoHeatPumpControllerConfiguration` + `octoHeatPumpLivePerformance` + `octoHeatPumpLifetimePerformance` | `GetHeatPumpStatusAndConfigAsync` | **Primary workhorse** — used by `/summary` endpoint and the 15-min snapshot worker |
+| **Batched query (4-in-1):** `heatPumpControllerStatus` + `heatPumpControllerConfiguration` + `heatPumpLifetimePerformance` + `heatPumpLivePerformance` | `GetHeatPumpStatusAndConfigAsync` | **Primary workhorse** — used by `/summary` endpoint and the 30-min snapshot worker |
 | `octoHeatPumpTimeRangedPerformance(euid, startAt, endAt)` | `GetHeatPumpTimeRangedPerformanceAsync` | `/time-ranged` endpoint — aggregated totals for a date range |
 | `octoHeatPumpTimeSeriesPerformance(euid, startAt, endAt, performanceGrouping)` | `GetHeatPumpTimeSeriesPerformanceAsync` | `/time-series` endpoint — bucketed data for charts |
 
@@ -143,7 +143,7 @@ Consumption history uses basic auth REST:
 
 ## Background Worker
 
-`HeatPumpSnapshotWorker` runs every **15 minutes**. For each active `HeatPumpDevice`, it:
+`HeatPumpSnapshotWorker` runs every **30 minutes**. For each active `HeatPumpDevice`, it:
 1. Calls `GetHeatPumpStatusAndConfigAsync` (the batched 4-in-1 query)
 2. Extracts: COP, heat output, power input, outdoor temp, lifetime performance, room temp/humidity, heating zone setpoints, hot water zone setpoints, controller state (HEATING/IDLE), weather compensation settings (enabled + min/max range), flow temperature (current + allowable min/max range), all sensor readings (serialised to JSONB)
 3. Upserts a `HeatPumpSnapshot` row (skips duplicates via unique constraint)
@@ -277,7 +277,7 @@ Supports AMD64 and ARM64 (runs on Raspberry Pi).
 ### First-time Setup
 1. Go to Settings → enter Octopus account number and API key
 2. Use the Setup endpoint to discover and register the heat pump device
-3. The snapshot worker starts collecting data automatically every 15 minutes
+3. The snapshot worker starts collecting data automatically every 30 minutes
 
 ## Planned Direction
 
@@ -302,7 +302,7 @@ These were in the original design but not yet built:
 - **SQLite → PostgreSQL**: original design used SQLite for simplicity; switched to PostgreSQL for robustness and easier long-term analytics
 - **Separate Collector + API → combined ApiService**: original design had a dedicated collector Worker Service project; merged into a single `ApiService` with a background `HeatPumpSnapshotWorker` for simplicity
 - **Blazor → React 19 + Vite**: migrated from Blazor Server to a React SPA for richer UI capabilities; the old Blazor project remains in-tree but is no longer deployed
-- **15-minute snapshot interval**: original design suggested 30 minutes; tightened to 15 to match Octopus telemetry resolution
+- **30-minute snapshot interval**: aligns with Octopus's underlying half-hourly telemetry cadence and keeps API call volume reasonable
 - **Manual efficiency records**: added as a pragmatic workaround while automatic daily cost/COP rollups are not yet implemented — lets the user track their own observations and make before/after comparisons manually
 - **Aspire for dev orchestration**: used for local development only (AppHost project); production runs via plain Docker Compose
 - **Tado integration removed**: was briefly added then removed — the Octopus API provides all necessary indoor/outdoor temperature data via the Cosy Pod sensors

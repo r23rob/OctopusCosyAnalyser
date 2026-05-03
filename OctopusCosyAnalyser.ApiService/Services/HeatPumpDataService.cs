@@ -82,9 +82,9 @@ public class HeatPumpDataService : IHeatPumpDataService
                     AvgCopSpaceHeatingOnly = AvgDecimal(spaceHeatingOnly, s => s.CoefficientOfPerformance),
 
                     TotalElectricityKwh = day.Where(s => s.PowerInputKilowatt.HasValue)
-                        .Sum(s => (double)s.PowerInputKilowatt!.Value * 0.25),
+                        .Sum(s => (double)s.PowerInputKilowatt!.Value * Constants.SnapshotIntervalHours),
                     TotalHeatOutputKwh = day.Where(s => s.HeatOutputKilowatt.HasValue)
-                        .Sum(s => (double)s.HeatOutputKilowatt!.Value * 0.25),
+                        .Sum(s => (double)s.HeatOutputKilowatt!.Value * Constants.SnapshotIntervalHours),
 
                     AvgOutdoorTemp = AvgDecimal(day, s => s.OutdoorTemperatureCelsius),
                     MinOutdoorTemp = day.Any(s => s.OutdoorTemperatureCelsius.HasValue)
