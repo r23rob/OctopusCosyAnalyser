@@ -130,6 +130,7 @@ app.MapGet("/", () => "OctopusCosyAnalyser API is running.");
 // Map Heat Pump endpoints
 app.MapHeatPumpEndpoints();
 app.MapAccountSettingsEndpoints();
+app.MapStatusEndpoints();
 
 app.MapDefaultEndpoints();
 

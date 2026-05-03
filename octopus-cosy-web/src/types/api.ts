@@ -1,5 +1,20 @@
 // Auto-translated from OctopusCosyAnalyser.Shared/Models/
 
+// ── API Status ────────────────────────────────────────────────────────
+
+export interface ApiStatusDto {
+  hasSettings: boolean
+  accountNumber?: string | null
+  authMode?: string | null
+  octopusCredentialsConfigured: boolean
+  octopusAuthOk: boolean
+  octopusAuthError?: string | null
+  anthropicConfigured: boolean
+  anthropicKeySource?: 'account' | 'config' | null
+  hasDevice: boolean
+  checkedAt: string
+}
+
 // ── Account Settings ──────────────────────────────────────────────────
 
 export interface AccountSettingsDto {
