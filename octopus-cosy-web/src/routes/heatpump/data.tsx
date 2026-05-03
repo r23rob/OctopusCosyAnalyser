@@ -45,14 +45,14 @@ function DataPage() {
   }, [view, aggregates, snapshots])
 
   return (
-    <div>
+    <div className="max-w-screen-2xl mx-auto">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-lg font-semibold tracking-tight">Data & export</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Data & export</h1>
         <div className="flex gap-[7px] items-center">
           <div className="flex bg-white border border-border-card rounded-[9px] p-[3px] gap-0.5">
             <button
               onClick={() => setView('daily')}
-              className={`font-mono text-[9px] tracking-[.07em] uppercase px-[11px] py-[5px] rounded-[6px] border-none cursor-pointer transition-all duration-150 ${
+              className={`font-mono text-[11px] tracking-[.07em] uppercase px-3 py-[6px] rounded-[6px] border-none cursor-pointer transition-all duration-150 ${
                 view === 'daily' ? 'bg-ink text-white' : 'bg-transparent text-ink3 hover:text-ink'
               }`}
             >
@@ -60,7 +60,7 @@ function DataPage() {
             </button>
             <button
               onClick={() => setView('hourly')}
-              className={`font-mono text-[9px] tracking-[.07em] uppercase px-[11px] py-[5px] rounded-[6px] border-none cursor-pointer transition-all duration-150 ${
+              className={`font-mono text-[11px] tracking-[.07em] uppercase px-3 py-[6px] rounded-[6px] border-none cursor-pointer transition-all duration-150 ${
                 view === 'hourly' ? 'bg-ink text-white' : 'bg-transparent text-ink3 hover:text-ink'
               }`}
             >
@@ -69,14 +69,14 @@ function DataPage() {
           </div>
           <button
             onClick={exportCSV}
-            className="font-mono text-[8.5px] tracking-[.07em] uppercase px-3 py-[6px] border border-border-card rounded-[6px] bg-white cursor-pointer text-ink2 hover:bg-bg-surface hover:text-ink transition-all duration-150"
+            className="font-mono text-[11px] tracking-[.07em] uppercase px-3 py-[6px] border border-border-card rounded-[6px] bg-white cursor-pointer text-ink2 hover:bg-bg-surface hover:text-ink transition-all duration-150"
           >
             Export CSV ↓
           </button>
         </div>
       </div>
 
-      <div className="bg-white border border-border-subtle rounded-[10px] overflow-hidden">
+      <div className="bg-white border border-border-subtle rounded-[10px] overflow-x-auto">
         {isLoading ? (
           <div className="h-64 flex items-center justify-center">
             <LoadingSpinner label="Loading data…" />
@@ -101,7 +101,7 @@ function DailyTable({ aggregates }: { aggregates: ReturnType<typeof useDailyAggr
       <thead>
         <tr>
           {['Date', 'COP', 'kWh in', 'kWh out', 'Outdoor °C', 'Flow °C', 'Setpoint °C', 'Duty %', 'Cost'].map(h => (
-            <th key={h} className="text-left px-3 py-[9px] font-mono text-[8px] tracking-[.1em] uppercase text-ink3 border-b border-border-subtle font-normal">
+            <th key={h} className="text-left px-3 py-[9px] font-mono text-[10px] md:text-[11px] tracking-[.1em] uppercase text-ink3 border-b border-border-subtle font-normal whitespace-nowrap">
               {h}
             </th>
           ))}
@@ -110,19 +110,19 @@ function DailyTable({ aggregates }: { aggregates: ReturnType<typeof useDailyAggr
       <tbody>
         {reversed.map((r) => (
           <tr key={r.date} className="hover:bg-bg-base">
-            <td className="px-3 py-[9px] border-b border-border-subtle text-[10.5px] text-ink2 font-light" style={{ fontFamily: 'Instrument Sans, sans-serif' }}>
+            <td className="px-3 py-[9px] border-b border-border-subtle text-[12px] md:text-[13px] text-ink2 font-normal whitespace-nowrap" style={{ fontFamily: 'Instrument Sans, sans-serif' }}>
               {new Date(r.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
             </td>
             <td className="px-3 py-[9px] border-b border-border-subtle">
               <CopBadge value={r.avgCopHeating} />
             </td>
-            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[10.5px] text-ink font-light">{r.totalElectricityKwh.toFixed(1)}</td>
-            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[10.5px] text-ink font-light">{r.totalHeatOutputKwh.toFixed(1)}</td>
-            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[10.5px] text-ink font-light">{fmtDec(r.avgOutdoorTemp, 1)}</td>
-            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[10.5px] text-ink font-light">{fmtDec(r.avgFlowTemp, 1)}</td>
-            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[10.5px] text-ink font-light">{fmtDec(r.avgSetpoint, 1)}</td>
-            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[10.5px] text-ink font-light">{r.heatingDutyCyclePercent.toFixed(0)}</td>
-            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[10.5px] text-ink font-light">
+            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[12px] md:text-[13px] text-ink font-normal whitespace-nowrap">{r.totalElectricityKwh.toFixed(1)}</td>
+            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[12px] md:text-[13px] text-ink font-normal whitespace-nowrap">{r.totalHeatOutputKwh.toFixed(1)}</td>
+            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[12px] md:text-[13px] text-ink font-normal whitespace-nowrap">{fmtDec(r.avgOutdoorTemp, 1)}</td>
+            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[12px] md:text-[13px] text-ink font-normal whitespace-nowrap">{fmtDec(r.avgFlowTemp, 1)}</td>
+            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[12px] md:text-[13px] text-ink font-normal whitespace-nowrap">{fmtDec(r.avgSetpoint, 1)}</td>
+            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[12px] md:text-[13px] text-ink font-normal whitespace-nowrap">{r.heatingDutyCyclePercent.toFixed(0)}</td>
+            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[12px] md:text-[13px] text-ink font-normal whitespace-nowrap">
               {r.dailyCostPence != null ? `${(r.dailyCostPence / 100).toFixed(2)}` : '—'}
             </td>
           </tr>
@@ -141,7 +141,7 @@ function SnapshotTable({ snapshots }: { snapshots: ReturnType<typeof usePeriodDa
       <thead>
         <tr>
           {['Time', 'COP', 'kW in', 'kW out', 'Outdoor °C', 'Flow °C', 'Room °C'].map(h => (
-            <th key={h} className="text-left px-3 py-[9px] font-mono text-[8px] tracking-[.1em] uppercase text-ink3 border-b border-border-subtle font-normal">
+            <th key={h} className="text-left px-3 py-[9px] font-mono text-[10px] md:text-[11px] tracking-[.1em] uppercase text-ink3 border-b border-border-subtle font-normal whitespace-nowrap">
               {h}
             </th>
           ))}
@@ -150,17 +150,17 @@ function SnapshotTable({ snapshots }: { snapshots: ReturnType<typeof usePeriodDa
       <tbody>
         {display.map((r) => (
           <tr key={r.snapshotTakenAt} className="hover:bg-bg-base">
-            <td className="px-3 py-[9px] border-b border-border-subtle text-[10.5px] text-ink2 font-light" style={{ fontFamily: 'Instrument Sans, sans-serif' }}>
+            <td className="px-3 py-[9px] border-b border-border-subtle text-[12px] md:text-[13px] text-ink2 font-normal whitespace-nowrap" style={{ fontFamily: 'Instrument Sans, sans-serif' }}>
               {new Date(r.snapshotTakenAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
             </td>
             <td className="px-3 py-[9px] border-b border-border-subtle">
               <CopBadge value={r.coefficientOfPerformance} />
             </td>
-            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[10.5px] text-ink font-light">{fmtDec(r.powerInputKilowatt, 2)}</td>
-            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[10.5px] text-ink font-light">{fmtDec(r.heatOutputKilowatt, 2)}</td>
-            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[10.5px] text-ink font-light">{fmtDec(r.outdoorTemperatureCelsius, 1)}</td>
-            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[10.5px] text-ink font-light">{fmtDec(r.heatingFlowTemperatureCelsius, 1)}</td>
-            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[10.5px] text-ink font-light">{fmtDec(r.roomTemperatureCelsius, 1)}</td>
+            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[12px] md:text-[13px] text-ink font-normal whitespace-nowrap">{fmtDec(r.powerInputKilowatt, 2)}</td>
+            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[12px] md:text-[13px] text-ink font-normal whitespace-nowrap">{fmtDec(r.heatOutputKilowatt, 2)}</td>
+            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[12px] md:text-[13px] text-ink font-normal whitespace-nowrap">{fmtDec(r.outdoorTemperatureCelsius, 1)}</td>
+            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[12px] md:text-[13px] text-ink font-normal whitespace-nowrap">{fmtDec(r.heatingFlowTemperatureCelsius, 1)}</td>
+            <td className="px-3 py-[9px] border-b border-border-subtle font-mono text-[12px] md:text-[13px] text-ink font-normal whitespace-nowrap">{fmtDec(r.roomTemperatureCelsius, 1)}</td>
           </tr>
         ))}
       </tbody>
@@ -173,7 +173,7 @@ function CopBadge({ value }: { value: number | null | undefined }) {
   const color = copColor(value)
   const bgColor = value >= 3.2 ? 'rgba(22,163,74,0.08)' : value >= 2.5 ? 'rgba(217,119,6,0.08)' : 'rgba(220,38,38,0.08)'
   return (
-    <span className="inline-block px-1.5 py-0.5 rounded font-mono text-[9px]" style={{ color, background: bgColor }}>
+    <span className="inline-block px-2 py-0.5 rounded font-mono text-[11px] md:text-[12px] font-medium" style={{ color, background: bgColor }}>
       {value.toFixed(2)}
     </span>
   )

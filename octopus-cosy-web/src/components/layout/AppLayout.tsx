@@ -10,7 +10,7 @@ export function AppLayout() {
       <div className="flex flex-col min-h-screen bg-bg-base">
         <NavBar />
         <ApiStatusBanner />
-        <main className="flex-1 px-4 sm:px-8 py-5 pb-16 sm:pb-5 max-w-[1440px] w-full mx-auto">
+        <main className="flex-1 px-4 sm:px-8 py-5 pb-20 sm:pb-5 max-w-[1440px] w-full mx-auto">
           <Outlet />
         </main>
         <AiDrawer />

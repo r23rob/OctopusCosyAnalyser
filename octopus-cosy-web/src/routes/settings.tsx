@@ -110,8 +110,8 @@ function SettingsPage() {
   const onSubmit = handleSubmit((values) => saveMutation.mutate(values))
 
   return (
-    <div className="max-w-xl">
-      <h1 className="text-lg font-semibold mb-1">Account Settings</h1>
+    <div className="max-w-xl mx-auto">
+      <h1 className="text-xl font-semibold mb-1">Account Settings</h1>
       <p className="text-sm text-ink2 mb-6">
         Your Octopus Energy credentials for accessing the heat pump API.
       </p>
