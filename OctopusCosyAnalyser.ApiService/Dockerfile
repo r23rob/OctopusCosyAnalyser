@@ -3,6 +3,10 @@ FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG TARGETARCH
 WORKDIR /src
 
+# Restore .NET local tools (zeroql) – ZeroQL's MSBuild props invoke `dotnet zeroql` during build
+COPY [".config/dotnet-tools.json", ".config/"]
+RUN dotnet tool restore
+
 # Restore dependencies first for better layer caching
 COPY ["OctopusCosyAnalyser.ApiService/OctopusCosyAnalyser.ApiService.csproj", "OctopusCosyAnalyser.ApiService/"]
 COPY ["OctopusCosyAnalyser.ServiceDefaults/OctopusCosyAnalyser.ServiceDefaults.csproj", "OctopusCosyAnalyser.ServiceDefaults/"]
