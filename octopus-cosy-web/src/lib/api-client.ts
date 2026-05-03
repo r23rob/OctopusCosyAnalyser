@@ -4,6 +4,7 @@ import type {
   AiAnalysisRequestDto,
   AiAnalysisResponseDto,
   AiSummaryDto,
+  ApiStatusDto,
   ConsumptionResponseDto,
   DailyAggregateDto,
   EnergyIntervalDto,
@@ -167,6 +168,11 @@ function parseLiveTimeSeriesJson(json: string): TimeSeriesResult {
 // ── API client ────────────────────────────────────────────────────────
 
 export const api = {
+  // Connection / API status
+  status: {
+    get: () => get<ApiStatusDto>('/api/status'),
+  },
+
   // Settings
   settings: {
     getAll: () => get<AccountSettingsDto[]>('/api/settings'),

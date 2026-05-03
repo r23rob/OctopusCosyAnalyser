@@ -126,6 +126,40 @@ public class OctopusEnergyClient : IOctopusEnergyClient
         }
     }
 
+    public async Task<(bool Ok, string? Error)> ValidateCredentialsAsync(OctopusAccountSettings settings, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var token = await GetAuthTokenAsync(settings);
+            return (!string.IsNullOrEmpty(token), string.IsNullOrEmpty(token) ? "Empty token returned from Octopus auth endpoint." : null);
+        }
+        catch (ArgumentException ex)
+        {
+            // Missing credential — surface the field name
+            return (false, ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // GraphQL error (e.g. invalid API key, invalid email/password)
+            return (false, ex.Message);
+        }
+        catch (HttpRequestException ex)
+        {
+            // Network/HTTP error talking to api.octopus.energy
+            _logger.LogWarning(ex, "Octopus auth HTTP failure during credential validation");
+            return (false, $"Could not reach Octopus auth endpoint: {ex.Message}");
+        }
+        catch (TaskCanceledException)
+        {
+            return (false, "Octopus auth request timed out.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error validating Octopus credentials");
+            return (false, $"Unexpected error: {ex.Message}");
+        }
+    }
+
     // ── Account & Device Discovery ───────────────────────────────────
 
     /// <summary>
