@@ -489,14 +489,14 @@ function buildTrendData(aSnaps: HeatPumpSnapshotDto[], bSnaps: HeatPumpSnapshotD
 
   const points: TrendPoint[] = []
   for (let i = 0; i < len; i++) {
-    const a = aDown[Math.min(i, aDown.length - 1)]
-    const b = bDown[Math.min(i, bDown.length - 1)]
+    const a = i < aDown.length ? aDown[i] : null
+    const b = i < bDown.length ? bDown[i] : null
     const ts = a?.snapshotTakenAt ?? b?.snapshotTakenAt
     const date = ts ? new Date(ts) : null
     points.push({
       t: date ? `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}` : '',
-      a: i < aDown.length ? aDown[i]?.heatingFlowTemperatureCelsius ?? null : null,
-      b: i < bDown.length ? bDown[i]?.heatingFlowTemperatureCelsius ?? null : null,
+      a: a?.heatingFlowTemperatureCelsius ?? null,
+      b: b?.heatingFlowTemperatureCelsius ?? null,
     })
   }
   return points

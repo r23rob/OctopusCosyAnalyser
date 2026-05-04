@@ -84,8 +84,8 @@ function KpiCard({ label, unit, current, previous, higherIsBetter, vsLabel = '',
 
   return (
     <div
-      className="bg-white border border-border-subtle rounded-[10px] px-[18px] pt-[18px] pb-4 hover:border-border-card transition-colors duration-150 flex flex-col gap-2 min-h-[132px]"
-      style={{ animation: `slide-up 0.4s ease both`, animationDelay: `${delay}s` }}
+      className="animate-up bg-white border border-border-subtle rounded-[10px] px-[18px] pt-[18px] pb-4 hover:border-border-card transition-colors duration-150 flex flex-col gap-2 min-h-[132px]"
+      style={{ animationDelay: `${delay}s` }}
     >
       <div className="font-mono text-[12px] tracking-[.1em] uppercase text-ink3">{label}</div>
       <div className="font-mono text-[32px] font-normal tracking-tight leading-none text-ink">

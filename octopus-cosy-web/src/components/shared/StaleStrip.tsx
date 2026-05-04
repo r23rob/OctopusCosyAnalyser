@@ -9,7 +9,7 @@ interface Props {
  *  20+ minutes. Returns null when the worker is healthy. */
 export function StaleStrip({ latest }: Props) {
   const minutesAgo = latest?.minutesAgo
-  if (minutesAgo == null || minutesAgo <= 20) return null
+  if (minutesAgo == null || minutesAgo < 20) return null
 
   const isOffline = minutesAgo > 60
 

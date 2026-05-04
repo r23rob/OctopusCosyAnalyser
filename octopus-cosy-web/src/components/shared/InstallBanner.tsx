@@ -8,13 +8,20 @@ interface BeforeInstallPromptEvent extends Event {
 
 const DISMISSED_KEY = 'install-dismissed'
 
+function readDismissed(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(DISMISSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 /** PWA install banner driven by the `beforeinstallprompt` event.
  *  Hidden once dismissed (persisted in localStorage) or when running standalone. */
 export function InstallBanner() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null)
-  const [dismissed, setDismissed] = useState(() =>
-    typeof window !== 'undefined' && window.localStorage.getItem(DISMISSED_KEY) === '1',
-  )
+  const [dismissed, setDismissed] = useState(readDismissed)
   const [standalone, setStandalone] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches,
   )
@@ -43,7 +50,11 @@ export function InstallBanner() {
     deferred.userChoice.then(() => setDeferred(null))
   }
   const onDismiss = () => {
-    window.localStorage.setItem(DISMISSED_KEY, '1')
+    try {
+      window.localStorage.setItem(DISMISSED_KEY, '1')
+    } catch {
+      // Storage blocked (e.g. Safari private mode) — still hide for this session.
+    }
     setDismissed(true)
   }
 

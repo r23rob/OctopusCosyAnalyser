@@ -3,7 +3,7 @@ import { LayoutDashboard, ScatterChart, Table2, Sparkles, Settings, Columns2, Lo
 import { useAiDrawer } from './AiDrawerContext'
 import { useApiStatus } from '@/hooks/use-api-status'
 import { useDevice } from '@/hooks/use-device'
-import { useDashboard } from '@/hooks/use-dashboard'
+import { useLatestSnapshot } from '@/hooks/use-dashboard'
 
 type ConnectionState = { color: 'success' | 'warning' | 'danger' | 'ink3'; label: string; title: string }
 
@@ -38,7 +38,7 @@ export function NavBar() {
   const { toggle } = useAiDrawer()
   const { data: status, isLoading: statusLoading } = useApiStatus()
   const { device } = useDevice()
-  const { latest } = useDashboard(device?.deviceId)
+  const { latest } = useLatestSnapshot(device?.deviceId)
   const conn = connectionState(status, statusLoading, latest?.minutesAgo)
   const colors = COLOR_CLASSES[conn.color]
   const router = useRouter()
