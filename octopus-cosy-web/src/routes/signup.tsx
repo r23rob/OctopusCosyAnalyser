@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, type FormEvent } from 'react'
 import { auth } from '@/lib/auth-client'
+import { GoogleSignInButton } from '@/components/shared/GoogleSignInButton'
 
 export const Route = createFileRoute('/signup')({
   component: SignupPage,
@@ -78,6 +79,12 @@ function SignupPage() {
           >
             {submitting ? 'Creating…' : 'Create account'}
           </button>
+          <div className="flex items-center gap-3 text-xs text-ink2">
+            <span className="flex-1 border-t" aria-hidden="true" />
+            <span>or</span>
+            <span className="flex-1 border-t" aria-hidden="true" />
+          </div>
+          <GoogleSignInButton returnUrl="/heatpump" label="Sign up with Google" />
         </form>
         <p className="mt-4 text-center text-sm text-ink2">
           Already have an account?{' '}
