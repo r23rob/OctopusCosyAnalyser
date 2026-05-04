@@ -95,6 +95,28 @@ builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
             return Task.CompletedTask;
         };
+    })
+    // ExternalScheme cookie is required for the OAuth round-trip (AddIdentityCore
+    // doesn't register it; AddIdentity would). Short-lived — only needed between the
+    // Google redirect and our callback handler.
+    .AddCookie(IdentityConstants.ExternalScheme, options =>
+    {
+        options.Cookie.Name = IdentityConstants.ExternalScheme;
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(10);
+    })
+    .AddGoogle(options =>
+    {
+        options.ClientId = builder.Configuration["Authentication:Google:ClientId"] ?? "";
+        options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? "";
+        options.SignInScheme = IdentityConstants.ExternalScheme;
+        // Routed under /api so the existing Vite/nginx proxy forwards it without changes.
+        options.CallbackPath = "/api/auth/signin-google";
+        options.SaveTokens = false;
     });
 builder.Services.AddAuthorization();
 
@@ -294,6 +316,9 @@ app.MapGet("/", () => "OctopusCosyAnalyser API is running.");
 // Identity API endpoints — register / login / forgot-password / reset-password / refresh / etc.
 // Mounted under /api/auth so the SPA hits e.g. POST /api/auth/login.
 app.MapGroup("/api/auth").MapIdentityApi<ApplicationUser>();
+
+// External (Google) sign-in — challenge + callback handlers.
+app.MapExternalAuthEndpoints();
 
 // Logout endpoint — Identity API doesn't ship this for cookie auth; handle it ourselves.
 app.MapPost("/api/auth/logout", async (SignInManager<ApplicationUser> signInManager) =>
