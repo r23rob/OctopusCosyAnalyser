@@ -44,8 +44,8 @@ public static class AccountSettingsEndpoints
 
             // Validate required fields for new settings or when switching auth modes
             var isNewSettings = settings is null;
-            var isSwitchingToPassword = !isNewSettings && authMode == "password" && settings.AuthMode != "password";
-            var isSwitchingToApiKey = !isNewSettings && authMode == "apikey" && settings.AuthMode != "apikey";
+            var isSwitchingToPassword = !isNewSettings && authMode == "password" && settings!.AuthMode != "password";
+            var isSwitchingToApiKey = !isNewSettings && authMode == "apikey" && settings!.AuthMode != "apikey";
 
             if (authMode == "password")
             {

@@ -75,7 +75,7 @@ public class OctopusGraphQLService : IOctopusGraphQLService
                             zi.Schedules(sch => new ZoneScheduleResponse(
                                 sch.Days,
                                 sch.Settings(s => new ZoneScheduleSettingResponse(
-                                    s.StartTime, s.Action, s.SetpointInCelsius))
+                                    s.StartTime!, s.Action, s.SetpointInCelsius))
                             ))
                         )),
                         config.HeatPump(hp => new HeatPumpConfigResponse(

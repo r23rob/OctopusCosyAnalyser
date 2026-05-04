@@ -40,6 +40,8 @@ builder.AddNpgsqlDbContext<CosyDbContext>("cosydb", configureSettings: settings 
 });
 
 // HttpContext + current-user accessor — required for multi-tenant query filtering.
+// Transient lifetime allows DbContext pooling to work correctly (DbContext constructor
+// injects ICurrentUserAccessor, and pooled contexts are created from root scope).
 builder.Services.AddHttpContextAccessor();
 if (isRunOnceMode)
 {
@@ -48,7 +50,7 @@ if (isRunOnceMode)
 }
 else
 {
-    builder.Services.AddScoped<ICurrentUserAccessor, HttpContextCurrentUserAccessor>();
+    builder.Services.AddTransient<ICurrentUserAccessor, HttpContextCurrentUserAccessor>();
 }
 
 // ASP.NET Core Identity (self-hosted auth).
