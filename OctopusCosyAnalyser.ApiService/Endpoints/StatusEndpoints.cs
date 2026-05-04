@@ -17,6 +17,8 @@ public static class StatusEndpoints
             IOptions<AnthropicOptions> anthropicOptions,
             CancellationToken ct) =>
         {
+            // Status returns the current user's account state — no need to scope by hand,
+            // the global query filter already does it.
             var settings = await db.OctopusAccountSettings
                 .OrderBy(s => s.Id)
                 .FirstOrDefaultAsync(ct);
@@ -79,6 +81,6 @@ public static class StatusEndpoints
             dto.HasDevice = await db.HeatPumpDevices.AnyAsync(d => d.AccountNumber == settings.AccountNumber, ct);
 
             return Results.Ok(dto);
-        }).WithName("GetApiStatus");
+        }).WithName("GetApiStatus").RequireAuthorization();
     }
 }

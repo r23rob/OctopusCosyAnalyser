@@ -9,7 +9,7 @@ public static class AccountSettingsEndpoints
 {
     public static void MapAccountSettingsEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/settings");
+        var group = app.MapGroup("/api/settings").RequireAuthorization();
 
         group.MapGet("", async (CosyDbContext db, CancellationToken ct) =>
         {

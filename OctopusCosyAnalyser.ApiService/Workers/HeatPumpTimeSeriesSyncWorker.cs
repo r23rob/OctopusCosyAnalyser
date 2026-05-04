@@ -42,13 +42,20 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
         _logger.LogInformation("Heat Pump Time Series Sync Worker stopped");
     }
 
+    /// <summary>
+    /// Run-once entry point used by ACA Jobs / scheduled runners.
+    /// </summary>
+    public Task RunOnceAsync(CancellationToken ct) => SyncAllDevicesAsync(ct);
+
     private async Task SyncAllDevicesAsync(CancellationToken stoppingToken)
     {
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
         var graphqlService = scope.ServiceProvider.GetRequiredService<IOctopusGraphQLService>();
 
+        // Workers run with no user context — bypass the multi-tenant query filter.
         var devices = await db.HeatPumpDevices
+            .IgnoreQueryFilters()
             .Where(d => d.IsActive && d.Euid != null && d.Euid != "")
             .ToListAsync(stoppingToken);
 
@@ -65,12 +72,14 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
         HeatPumpDevice device, CancellationToken stoppingToken)
     {
         var settings = await db.OctopusAccountSettings
-            .FirstOrDefaultAsync(s => s.AccountNumber == device.AccountNumber, stoppingToken);
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.OwnerId == device.OwnerId
+                && s.AccountNumber == device.AccountNumber, stoppingToken);
 
         if (settings is null)
         {
-            _logger.LogWarning("No settings found for account {Account}, skipping time series sync for device {DeviceId}",
-                device.AccountNumber, device.DeviceId);
+            _logger.LogWarning("No settings found for owner {Owner} / account {Account}, skipping time series sync for device {DeviceId}",
+                device.OwnerId, device.AccountNumber, device.DeviceId);
             return;
         }
 
@@ -81,6 +90,7 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
             var to = DateTime.UtcNow;
 
             var existing = await db.HeatPumpTimeSeriesRecords
+                .IgnoreQueryFilters()
                 .Where(r => r.DeviceId == device.DeviceId && r.StartAt >= from)
                 .Select(r => r.StartAt)
                 .ToListAsync(stoppingToken);
@@ -89,7 +99,7 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
             var entries = await graphqlService.GetHeatPumpTimeSeriesPerformanceAsync(
                 settings, device.AccountNumber, device.Euid!, from, to, "DAY", stoppingToken);
 
-            var synced = MapAndPersistTimeSeriesEntries(entries, device.DeviceId, existingSet, db);
+            var synced = MapAndPersistTimeSeriesEntries(entries, device.DeviceId, existingSet, db, device.OwnerId);
 
             if (synced > 0)
                 await db.SaveChangesAsync(stoppingToken);
@@ -105,10 +115,12 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
     /// <summary>
     /// Maps typed TimeSeriesEntry responses to HeatPumpTimeSeriesRecord entities and adds to the DbContext.
     /// Shared utility for time-series sync operations.
+    /// Pass ownerId to stamp tenancy on the new rows; null is allowed for the worker
+    /// path where the DbContext stamps OwnerId from the current user instead.
     /// </summary>
     internal static int MapAndPersistTimeSeriesEntries(
         TimeSeriesEntry?[]? entries, string deviceId,
-        HashSet<DateTime> existingSet, CosyDbContext db)
+        HashSet<DateTime> existingSet, CosyDbContext db, string? ownerId = null)
     {
         if (entries is null)
             return 0;
@@ -124,6 +136,7 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
 
             var record = new HeatPumpTimeSeriesRecord
             {
+                OwnerId = ownerId,
                 DeviceId = deviceId,
                 StartAt = startAt,
                 EndAt = entry.EndAt.UtcDateTime,

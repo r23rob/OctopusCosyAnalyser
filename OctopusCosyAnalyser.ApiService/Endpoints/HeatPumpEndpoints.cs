@@ -15,7 +15,7 @@ public static class HeatPumpEndpoints
 {
     public static void MapHeatPumpEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/heatpump");
+        var group = app.MapGroup("/api/heatpump").RequireAuthorization();
 
         static async Task<(HeatPumpDevice? Device, OctopusAccountSettings? Settings, IResult? Error)> GetDeviceAndSettingsAsync(
             CosyDbContext db, string deviceId, CancellationToken ct)

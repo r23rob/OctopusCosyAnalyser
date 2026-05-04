@@ -1,8 +1,9 @@
 namespace OctopusCosyAnalyser.ApiService.Models;
 
-public class TariffRate
+public class TariffRate : IOwnedEntity
 {
     public int Id { get; set; }
+    public string? OwnerId { get; set; }
     public string DeviceId { get; set; } = string.Empty;
     public DateTime ValidFrom { get; set; }
     public DateTime? ValidTo { get; set; }

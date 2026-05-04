@@ -1,8 +1,9 @@
 namespace OctopusCosyAnalyser.ApiService.Models;
 
-public class EnergyInterval
+public class EnergyInterval : IOwnedEntity
 {
     public int Id { get; set; }
+    public string? OwnerId { get; set; }
     public string DeviceId { get; set; } = string.Empty;
     public DateTime IntervalStart { get; set; }
     public DateTime IntervalEnd { get; set; }

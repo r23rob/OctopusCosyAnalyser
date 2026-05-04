@@ -1,8 +1,9 @@
 namespace OctopusCosyAnalyser.ApiService.Models;
 
-public class ConsumptionReading
+public class ConsumptionReading : IOwnedEntity
 {
     public int Id { get; set; }
+    public string? OwnerId { get; set; }
     public string DeviceId { get; set; } = string.Empty;
     public DateTime ReadAt { get; set; }
     public decimal Consumption { get; set; } // kWh

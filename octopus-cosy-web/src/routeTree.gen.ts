@@ -9,15 +9,27 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as HeatpumpIndexRouteImport } from './routes/heatpump/index'
 import { Route as HeatpumpScatterRouteImport } from './routes/heatpump/scatter'
 import { Route as HeatpumpDataRouteImport } from './routes/heatpump/data'
 
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -43,14 +55,18 @@ const HeatpumpDataRoute = HeatpumpDataRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
+  '/signup': typeof SignupRoute
   '/heatpump/data': typeof HeatpumpDataRoute
   '/heatpump/scatter': typeof HeatpumpScatterRoute
   '/heatpump/': typeof HeatpumpIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
+  '/signup': typeof SignupRoute
   '/heatpump/data': typeof HeatpumpDataRoute
   '/heatpump/scatter': typeof HeatpumpScatterRoute
   '/heatpump': typeof HeatpumpIndexRoute
@@ -58,7 +74,9 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
+  '/signup': typeof SignupRoute
   '/heatpump/data': typeof HeatpumpDataRoute
   '/heatpump/scatter': typeof HeatpumpScatterRoute
   '/heatpump/': typeof HeatpumpIndexRoute
@@ -67,16 +85,27 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/login'
     | '/settings'
+    | '/signup'
     | '/heatpump/data'
     | '/heatpump/scatter'
     | '/heatpump/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/settings' | '/heatpump/data' | '/heatpump/scatter' | '/heatpump'
+  to:
+    | '/'
+    | '/login'
+    | '/settings'
+    | '/signup'
+    | '/heatpump/data'
+    | '/heatpump/scatter'
+    | '/heatpump'
   id:
     | '__root__'
     | '/'
+    | '/login'
     | '/settings'
+    | '/signup'
     | '/heatpump/data'
     | '/heatpump/scatter'
     | '/heatpump/'
@@ -84,7 +113,9 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRoute
+  SignupRoute: typeof SignupRoute
   HeatpumpDataRoute: typeof HeatpumpDataRoute
   HeatpumpScatterRoute: typeof HeatpumpScatterRoute
   HeatpumpIndexRoute: typeof HeatpumpIndexRoute
@@ -92,11 +123,25 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -132,7 +177,9 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LoginRoute: LoginRoute,
   SettingsRoute: SettingsRoute,
+  SignupRoute: SignupRoute,
   HeatpumpDataRoute: HeatpumpDataRoute,
   HeatpumpScatterRoute: HeatpumpScatterRoute,
   HeatpumpIndexRoute: HeatpumpIndexRoute,

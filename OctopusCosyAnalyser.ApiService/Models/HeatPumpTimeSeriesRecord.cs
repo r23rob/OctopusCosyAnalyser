@@ -1,8 +1,9 @@
 namespace OctopusCosyAnalyser.ApiService.Models;
 
-public class HeatPumpTimeSeriesRecord
+public class HeatPumpTimeSeriesRecord : IOwnedEntity
 {
     public int Id { get; set; }
+    public string? OwnerId { get; set; }
     public string DeviceId { get; set; } = string.Empty;
     public DateTime StartAt { get; set; }
     public DateTime EndAt { get; set; }

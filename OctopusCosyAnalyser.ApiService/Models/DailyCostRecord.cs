@@ -1,8 +1,9 @@
 namespace OctopusCosyAnalyser.ApiService.Models;
 
-public class DailyCostRecord
+public class DailyCostRecord : IOwnedEntity
 {
     public int Id { get; set; }
+    public string? OwnerId { get; set; }
     public string DeviceId { get; set; } = string.Empty;
     public DateOnly Date { get; set; }
     public decimal TotalCostPence { get; set; }

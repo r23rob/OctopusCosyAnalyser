@@ -43,13 +43,20 @@ public class CostDataSyncWorker : BackgroundService
         _logger.LogInformation("Cost Data Sync Worker stopped");
     }
 
+    /// <summary>
+    /// Run-once entry point used by ACA Jobs / scheduled runners.
+    /// </summary>
+    public Task RunOnceAsync(CancellationToken ct) => SyncAllDevicesAsync(ct);
+
     private async Task SyncAllDevicesAsync(CancellationToken stoppingToken)
     {
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
         var client = scope.ServiceProvider.GetRequiredService<IOctopusEnergyClient>();
 
+        // Workers run with no user context — bypass the multi-tenant query filter.
         var devices = await db.HeatPumpDevices
+            .IgnoreQueryFilters()
             .Where(d => d.IsActive)
             .ToListAsync(stoppingToken);
 
@@ -65,12 +72,14 @@ public class CostDataSyncWorker : BackgroundService
     private async Task SyncDeviceAsync(CosyDbContext db, IOctopusEnergyClient client, HeatPumpDevice device, CancellationToken stoppingToken)
     {
         var settings = await db.OctopusAccountSettings
-            .FirstOrDefaultAsync(s => s.AccountNumber == device.AccountNumber, stoppingToken);
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.OwnerId == device.OwnerId
+                && s.AccountNumber == device.AccountNumber, stoppingToken);
 
         if (settings is null)
         {
-            _logger.LogWarning("No settings found for account {Account}, skipping cost sync for device {DeviceId}",
-                device.AccountNumber, device.DeviceId);
+            _logger.LogWarning("No settings found for owner {Owner} / account {Account}, skipping cost sync for device {DeviceId}",
+                device.OwnerId, device.AccountNumber, device.DeviceId);
             return;
         }
 
@@ -78,6 +87,7 @@ public class CostDataSyncWorker : BackgroundService
         {
             // Check if this device has any existing cost records to determine backfill range
             var hasExisting = await db.DailyCostRecords
+                .IgnoreQueryFilters()
                 .AnyAsync(r => r.DeviceId == device.DeviceId, stoppingToken);
 
             // First run: backfill 90 days. Subsequent runs: sync last 7 days to catch late data.
@@ -145,6 +155,7 @@ public class CostDataSyncWorker : BackgroundService
 
             // Upsert into database
             var existingRecords = await db.DailyCostRecords
+                .IgnoreQueryFilters()
                 .Where(r => r.DeviceId == device.DeviceId && r.Date >= DateOnly.FromDateTime(from))
                 .ToDictionaryAsync(r => r.Date, stoppingToken);
 
@@ -163,6 +174,7 @@ public class CostDataSyncWorker : BackgroundService
                 {
                     db.DailyCostRecords.Add(new DailyCostRecord
                     {
+                        OwnerId = device.OwnerId,
                         DeviceId = device.DeviceId,
                         Date = date,
                         TotalCostPence = data.cost,

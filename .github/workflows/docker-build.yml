@@ -107,3 +107,85 @@ jobs:
           labels: ${{ steps.meta-web.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # ── SHA tag for Azure deploy step ─────────────────────────────────────
+      - name: Compute short SHA tag
+        if: github.event_name == 'push'
+        id: sha
+        run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+  # ── Deploy to Azure Container Apps ─────────────────────────────────────────
+  # Only runs on push to main/master, after the build job succeeded.
+  # Uses OIDC federated credentials — no client secret stored as a GitHub secret.
+  # Pre-requisite (one-time): create an Azure App Registration with a federated
+  # credential bound to this repo + branch, and set repo secrets:
+  #   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+  # plus the resource-group/app-name vars below.
+  deploy-azure:
+    name: Deploy to Azure Container Apps
+    needs: build-and-push
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write       # required for OIDC federated auth to Azure
+      contents: read
+
+    steps:
+      - name: Compute image tag
+        id: tag
+        run: echo "image_tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Update API Container App image
+        run: |
+          az containerapp update \
+            --name "${{ vars.AZURE_API_APP_NAME }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "ghcr.io/${{ env.IMAGE_NAME }}/apiservice:${{ steps.tag.outputs.image_tag }}" \
+            --output table
+
+      - name: Update worker Jobs (snapshot, timeseries, cost, intervals)
+        run: |
+          for JOB in \
+              "${{ vars.AZURE_JOB_SNAPSHOT_NAME }}" \
+              "${{ vars.AZURE_JOB_TIMESERIES_NAME }}" \
+              "${{ vars.AZURE_JOB_COST_NAME }}" \
+              "${{ vars.AZURE_JOB_INTERVALS_NAME }}"; do
+            az containerapp job update \
+              --name "$JOB" \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --image "ghcr.io/${{ env.IMAGE_NAME }}/apiservice:${{ steps.tag.outputs.image_tag }}" \
+              --output table
+          done
+
+      - name: Build SPA bundle for static hosting
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: octopus-cosy-web/package-lock.json
+
+      - name: Checkout (needed for SPA build)
+        uses: actions/checkout@v4
+
+      - name: Install + build SPA
+        run: |
+          npm ci
+          npm run build
+        working-directory: octopus-cosy-web
+
+      - name: Upload SPA bundle to Azure Storage $web
+        run: |
+          az storage blob upload-batch \
+            --account-name "${{ vars.AZURE_STORAGE_ACCOUNT }}" \
+            --auth-mode login \
+            --source octopus-cosy-web/dist \
+            --destination '$web' \
+            --overwrite
