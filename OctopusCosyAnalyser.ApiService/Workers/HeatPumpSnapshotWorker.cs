@@ -39,13 +39,21 @@ public class HeatPumpSnapshotWorker : BackgroundService
         _logger.LogInformation("Heat Pump Snapshot Worker stopped");
     }
 
+    /// <summary>
+    /// Run-once entry point used by ACA Jobs / scheduled runners.
+    /// Exits after one full pass over all active devices.
+    /// </summary>
+    public Task RunOnceAsync(CancellationToken ct) => SnapshotAllDevicesAsync(ct);
+
     private async Task SnapshotAllDevicesAsync(CancellationToken stoppingToken)
     {
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
         var graphqlService = scope.ServiceProvider.GetRequiredService<IOctopusGraphQLService>();
 
+        // Workers run with no user context — bypass the multi-tenant query filter.
         var devices = await db.HeatPumpDevices
+            .IgnoreQueryFilters()
             .Where(d => d.IsActive)
             .ToListAsync(stoppingToken);
 
@@ -70,11 +78,14 @@ public class HeatPumpSnapshotWorker : BackgroundService
         }
 
         var settings = await db.OctopusAccountSettings
-            .FirstOrDefaultAsync(s => s.AccountNumber == device.AccountNumber, stoppingToken);
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.OwnerId == device.OwnerId
+                && s.AccountNumber == device.AccountNumber, stoppingToken);
 
         if (settings is null)
         {
-            _logger.LogWarning("No settings found for account {Account}, skipping device {DeviceId}", device.AccountNumber, device.DeviceId);
+            _logger.LogWarning("No settings found for owner {Owner} / account {Account}, skipping device {DeviceId}",
+                device.OwnerId, device.AccountNumber, device.DeviceId);
             return;
         }
 
@@ -96,6 +107,8 @@ public class HeatPumpSnapshotWorker : BackgroundService
                 return;
             }
 
+            // Worker has no HttpContext — stamp tenant ownership explicitly from the device.
+            snapshot.OwnerId = device.OwnerId;
             db.HeatPumpSnapshots.Add(snapshot);
             _logger.LogInformation("Snapshotted device {DeviceId}: COP={COP}", device.DeviceId, snapshot.CoefficientOfPerformance);
         }

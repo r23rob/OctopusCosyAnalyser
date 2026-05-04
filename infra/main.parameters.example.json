@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "cosy-prod"
+    },
+    "location": {
+      "value": "uksouth"
+    },
+    "imageTag": {
+      "value": "latest"
+    },
+    "ghcrOwner": {
+      "value": "r23rob"
+    },
+    "ghcrRepo": {
+      "value": "octopuscosyanalyser"
+    },
+    "postgresAdminUser": {
+      "value": "cosyadmin"
+    },
+    "postgresAdminPassword": {
+      "value": "REPLACE-WITH-STRONG-PASSWORD-OR-USE-KEYVAULT-REFERENCE"
+    },
+    "corsAllowedOrigins": {
+      "value": ""
+    },
+    "anthropicApiKey": {
+      "value": ""
+    }
+  }
+}

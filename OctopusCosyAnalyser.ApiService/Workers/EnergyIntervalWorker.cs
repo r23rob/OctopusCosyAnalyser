@@ -52,13 +52,25 @@ public class EnergyIntervalWorker : BackgroundService
         _logger.LogInformation("Energy Interval Worker stopped");
     }
 
+    /// <summary>
+    /// Run-once entry point used by ACA Jobs / scheduled runners.
+    /// Runs the regular pass plus the nightly backfill in a single shot.
+    /// </summary>
+    public async Task RunOnceAsync(CancellationToken ct)
+    {
+        await ProcessAllDevicesAsync(ct);
+        await TryNightlyBackfillAsync(ct);
+    }
+
     private async Task ProcessAllDevicesAsync(CancellationToken stoppingToken)
     {
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
         var tariffService = scope.ServiceProvider.GetRequiredService<ITariffSyncService>();
 
+        // Workers run with no user context — bypass the multi-tenant query filter.
         var devices = await db.HeatPumpDevices
+            .IgnoreQueryFilters()
             .Where(d => d.IsActive)
             .ToListAsync(stoppingToken);
 
@@ -86,6 +98,7 @@ public class EnergyIntervalWorker : BackgroundService
         CancellationToken stoppingToken)
     {
         var hasExisting = await db.EnergyIntervals
+            .IgnoreQueryFilters()
             .AnyAsync(e => e.DeviceId == device.DeviceId, stoppingToken);
 
         DateTime rangeStart;
@@ -98,7 +111,9 @@ public class EnergyIntervalWorker : BackgroundService
 
             // Sync tariff rates for the full backfill range before computing intervals
             var settings = await db.OctopusAccountSettings
-                .FirstOrDefaultAsync(s => s.AccountNumber == device.AccountNumber, stoppingToken);
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => s.OwnerId == device.OwnerId
+                    && s.AccountNumber == device.AccountNumber, stoppingToken);
             if (settings is not null)
             {
                 _logger.LogInformation("Syncing tariff rates for backfill range ({Days} days) for device {DeviceId}",
@@ -110,6 +125,7 @@ public class EnergyIntervalWorker : BackgroundService
         {
             // Subsequent runs: process recent windows with overlap for late data
             var latestInterval = await db.EnergyIntervals
+                .IgnoreQueryFilters()
                 .Where(e => e.DeviceId == device.DeviceId)
                 .MaxAsync(e => e.IntervalStart, stoppingToken);
 
@@ -130,7 +146,7 @@ public class EnergyIntervalWorker : BackgroundService
             var chunkEnd = currentDate.AddDays(ChunkSizeDays);
             if (chunkEnd > cutoff) chunkEnd = cutoff;
 
-            await ProcessWindowsForRangeAsync(db, device.DeviceId, chunkStart, chunkEnd, stoppingToken);
+            await ProcessWindowsForRangeAsync(db, device, chunkStart, chunkEnd, stoppingToken);
 
             // Clear change tracker between chunks to bound memory during backfills
             db.ChangeTracker.Clear();
@@ -140,11 +156,13 @@ public class EnergyIntervalWorker : BackgroundService
 
     private async Task ProcessWindowsForRangeAsync(
         CosyDbContext db,
-        string deviceId,
+        HeatPumpDevice device,
         DateTime rangeStart,
         DateTime rangeEnd,
         CancellationToken stoppingToken)
     {
+        var deviceId = device.DeviceId;
+
         // Generate all 30-min window starts in this range
         var windowStarts = GenerateWindowStarts(rangeStart, rangeEnd);
         if (windowStarts.Count == 0) return;
@@ -154,6 +172,7 @@ public class EnergyIntervalWorker : BackgroundService
 
         // Batch-load snapshots for the entire range (AsNoTracking — read-only)
         var snapshots = await db.HeatPumpSnapshots
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(s => s.DeviceId == deviceId
                 && s.SnapshotTakenAt >= firstWindow
@@ -168,6 +187,7 @@ public class EnergyIntervalWorker : BackgroundService
 
         // Batch-load consumption readings for the range (AsNoTracking — read-only)
         var consumption = await db.ConsumptionReadings
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(c => c.DeviceId == deviceId
                 && c.ReadAt >= firstWindow
@@ -176,6 +196,7 @@ public class EnergyIntervalWorker : BackgroundService
 
         // Batch-load tariff rates covering the range — avoids N+1 per-window DB queries
         var tariffRates = await db.TariffRates
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(r => r.DeviceId == deviceId
                 && r.ValidFrom <= lastWindowEnd
@@ -187,6 +208,7 @@ public class EnergyIntervalWorker : BackgroundService
         var firstDate = DateOnly.FromDateTime(firstWindow);
         var lastDate = DateOnly.FromDateTime(lastWindowEnd);
         var standingCharges = await db.DailyCostRecords
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(r => r.DeviceId == deviceId && r.Date >= firstDate && r.Date <= lastDate)
             .Where(r => r.StandingChargePence != null)
@@ -194,6 +216,7 @@ public class EnergyIntervalWorker : BackgroundService
 
         // Load existing intervals for upsert (tracked — we need to update them)
         var existingIntervals = await db.EnergyIntervals
+            .IgnoreQueryFilters()
             .Where(e => e.DeviceId == deviceId
                 && e.IntervalStart >= firstWindow
                 && e.IntervalStart <= windowStarts[windowStarts.Count - 1])
@@ -225,7 +248,7 @@ public class EnergyIntervalWorker : BackgroundService
             }
 
             // Compute interval values
-            var interval = ComputeInterval(deviceId, windowStart, windowEnd, windowSnapshots, consumptionReading, unitRate, standingCharge);
+            var interval = ComputeInterval(device.OwnerId, deviceId, windowStart, windowEnd, windowSnapshots, consumptionReading, unitRate, standingCharge);
 
             if (existingIntervals.TryGetValue(windowStart, out var existing))
             {
@@ -262,6 +285,7 @@ public class EnergyIntervalWorker : BackgroundService
     }
 
     private static EnergyInterval ComputeInterval(
+        string? ownerId,
         string deviceId,
         DateTime windowStart,
         DateTime windowEnd,
@@ -323,6 +347,7 @@ public class EnergyIntervalWorker : BackgroundService
 
         return new EnergyInterval
         {
+            OwnerId = ownerId,
             DeviceId = deviceId,
             IntervalStart = windowStart,
             IntervalEnd = windowEnd,
@@ -352,6 +377,14 @@ public class EnergyIntervalWorker : BackgroundService
     private static bool UpdateIfChanged(EnergyInterval existing, EnergyInterval computed)
     {
         var changed = false;
+
+        // Rescue legacy rows written before tenancy was added: stamp OwnerId from the
+        // freshly-computed row (which carries device.OwnerId).
+        if (string.IsNullOrEmpty(existing.OwnerId) && !string.IsNullOrEmpty(computed.OwnerId))
+        {
+            existing.OwnerId = computed.OwnerId;
+            changed = true;
+        }
 
         // Patch null consumption with late-arriving data
         if (!existing.ConsumptionKwh.HasValue && computed.ConsumptionKwh.HasValue)
@@ -427,6 +460,7 @@ public class EnergyIntervalWorker : BackgroundService
         var tariffService = scope.ServiceProvider.GetRequiredService<ITariffSyncService>();
 
         var devices = await db.HeatPumpDevices
+            .IgnoreQueryFilters()
             .Where(d => d.IsActive)
             .ToListAsync(stoppingToken);
 
@@ -438,7 +472,9 @@ public class EnergyIntervalWorker : BackgroundService
             {
                 // Refresh tariff rates for the last 7 days
                 var settings = await db.OctopusAccountSettings
-                    .FirstOrDefaultAsync(s => s.AccountNumber == device.AccountNumber, stoppingToken);
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(s => s.OwnerId == device.OwnerId
+                        && s.AccountNumber == device.AccountNumber, stoppingToken);
 
                 if (settings is not null)
                 {
@@ -448,12 +484,13 @@ public class EnergyIntervalWorker : BackgroundService
 
                 // Re-process yesterday's 48 windows
                 var yesterday = now.Date.AddDays(-1);
-                await ProcessWindowsForRangeAsync(db, device.DeviceId,
+                await ProcessWindowsForRangeAsync(db, device,
                     yesterday, yesterday.AddDays(1), stoppingToken);
 
                 // Also patch any intervals from the last 7 days that still have null cost
                 var weekAgo = now.AddDays(-7);
                 var nullCostIntervals = await db.EnergyIntervals
+                    .IgnoreQueryFilters()
                     .Where(e => e.DeviceId == device.DeviceId
                         && e.IntervalStart >= weekAgo
                         && e.ConsumptionKwh.HasValue

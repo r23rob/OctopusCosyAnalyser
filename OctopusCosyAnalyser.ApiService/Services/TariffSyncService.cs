@@ -68,6 +68,7 @@ public class TariffSyncService : ITariffSyncService
 
             rates.Add(new TariffRate
             {
+                OwnerId = device.OwnerId,
                 DeviceId = device.DeviceId,
                 ValidFrom = validFrom,
                 ValidTo = validTo,
@@ -83,8 +84,9 @@ public class TariffSyncService : ITariffSyncService
             return;
         }
 
-        // Upsert: update existing rates, insert new ones
+        // Upsert: update existing rates, insert new ones (workers run with no user context).
         var existingRates = await db.TariffRates
+            .IgnoreQueryFilters()
             .Where(r => r.DeviceId == device.DeviceId && r.ValidFrom >= from && r.ValidFrom <= to)
             .ToDictionaryAsync(r => r.ValidFrom, cancellationToken);
 
@@ -95,12 +97,20 @@ public class TariffSyncService : ITariffSyncService
         {
             if (existingRates.TryGetValue(rate.ValidFrom, out var existing))
             {
+                var changed = false;
                 if (existing.UnitRatePence != rate.UnitRatePence || existing.ValidTo != rate.ValidTo)
                 {
                     existing.UnitRatePence = rate.UnitRatePence;
                     existing.ValidTo = rate.ValidTo;
-                    updatedCount++;
+                    changed = true;
                 }
+                // Rescue legacy rows written before tenancy.
+                if (string.IsNullOrEmpty(existing.OwnerId))
+                {
+                    existing.OwnerId = device.OwnerId;
+                    changed = true;
+                }
+                if (changed) updatedCount++;
             }
             else
             {

@@ -1,8 +1,9 @@
 namespace OctopusCosyAnalyser.ApiService.Models;
 
-public class OctopusAccountSettings
+public class OctopusAccountSettings : IOwnedEntity
 {
     public int Id { get; set; }
+    public string? OwnerId { get; set; }
     public string AccountNumber { get; set; } = string.Empty;
     public string ApiKey { get; set; } = string.Empty;
     public string? Email { get; set; }
@@ -17,4 +18,3 @@ public class OctopusAccountSettings
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
-

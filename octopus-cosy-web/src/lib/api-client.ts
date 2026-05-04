@@ -33,8 +33,12 @@ export class ApiError extends Error {
 
 // ── Base fetch helpers ────────────────────────────────────────────────
 
+// All API calls send credentials so the auth cookie flows on same-origin AND
+// cross-origin (CORS-allowlisted) deployments.
+const FETCH_INIT: RequestInit = { credentials: 'include' }
+
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(path)
+  const res = await fetch(path, FETCH_INIT)
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
     throw new ApiError(res.status, text)
@@ -43,7 +47,7 @@ async function get<T>(path: string): Promise<T> {
 }
 
 async function getText(path: string): Promise<string> {
-  const res = await fetch(path)
+  const res = await fetch(path, FETCH_INIT)
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
     throw new ApiError(res.status, text)
@@ -53,6 +57,7 @@ async function getText(path: string): Promise<string> {
 
 async function put<TBody, TResult>(path: string, body: TBody): Promise<TResult> {
   const res = await fetch(path, {
+    ...FETCH_INIT,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -66,6 +71,7 @@ async function put<TBody, TResult>(path: string, body: TBody): Promise<TResult> 
 
 async function post<TBody, TResult>(path: string, body?: TBody): Promise<TResult> {
   const res = await fetch(path, {
+    ...FETCH_INIT,
     method: 'POST',
     headers: body != null ? { 'Content-Type': 'application/json' } : {},
     body: body != null ? JSON.stringify(body) : undefined,
@@ -78,7 +84,7 @@ async function post<TBody, TResult>(path: string, body?: TBody): Promise<TResult
 }
 
 async function postNoContent(path: string): Promise<void> {
-  const res = await fetch(path, { method: 'POST' })
+  const res = await fetch(path, { ...FETCH_INIT, method: 'POST' })
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
     throw new ApiError(res.status, text)

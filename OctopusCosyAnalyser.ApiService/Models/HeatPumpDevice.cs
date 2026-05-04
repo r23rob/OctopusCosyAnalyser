@@ -1,8 +1,9 @@
 namespace OctopusCosyAnalyser.ApiService.Models;
 
-public class HeatPumpDevice
+public class HeatPumpDevice : IOwnedEntity
 {
     public int Id { get; set; }
+    public string? OwnerId { get; set; }
     public string DeviceId { get; set; } = string.Empty;
     public string AccountNumber { get; set; } = string.Empty;
     public string? MeterSerialNumber { get; set; }
