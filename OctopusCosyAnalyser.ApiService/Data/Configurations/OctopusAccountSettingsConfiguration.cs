@@ -9,7 +9,6 @@ public class OctopusAccountSettingsConfiguration : IEntityTypeConfiguration<Octo
     public void Configure(EntityTypeBuilder<OctopusAccountSettings> entity)
     {
         entity.HasKey(e => e.Id);
-        entity.HasIndex(e => e.AccountNumber).IsUnique();
         entity.Property(e => e.AccountNumber).IsRequired().HasMaxLength(100);
         entity.Property(e => e.ApiKey).IsRequired().HasMaxLength(200);
         entity.Property(e => e.Email).HasMaxLength(255);
