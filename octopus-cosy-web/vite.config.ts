@@ -14,8 +14,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Ecodan Thermal Monitor',
-        short_name: 'Ecodan',
+        name: 'Octopus Heat Pump',
+        short_name: 'Octopus Heat Pump',
         description: 'Heat pump efficiency dashboard for Octopus Energy Cosy customers.',
         theme_color: '#09090B',
         background_color: '#F8F8F9',

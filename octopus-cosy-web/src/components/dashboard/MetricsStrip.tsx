@@ -5,26 +5,35 @@ interface Props {
   periodSummary: PeriodSummaryDto | null | undefined
   previousPeriodSummary?: PeriodSummaryDto | null
   vsLabel?: string
+  /** When true, render a 2-up grid (used by the gauge-as-hero layout). */
+  hero?: boolean
 }
 
-export function MetricsStrip({ periodSummary: p, previousPeriodSummary: prev, vsLabel = '' }: Props) {
+export function MetricsStrip({ periodSummary: p, previousPeriodSummary: prev, vsLabel = '', hero = false }: Props) {
+  const gridClass = hero
+    ? 'grid grid-cols-1 sm:grid-cols-2 gap-3'
+    : 'grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3'
+
   if (!p) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-[100px] rounded-[10px] bg-white border border-border-subtle animate-pulse" />
+      <div className={gridClass}>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-[132px] rounded-[10px] bg-white border border-border-subtle animate-pulse" />
         ))}
       </div>
     )
   }
 
-  const days = p.snapshotCount > 0 ? Math.max(1, Math.round(p.snapshotCount / 96)) : 1
-  const avgKwIn = p.totalInputKwh != null ? p.totalInputKwh / Math.max(days, 1) / 24 : null
-
   const kpis: KpiProps[] = [
     {
-      label: 'Total kWh in',
-      value: fmtDec(p.totalInputKwh, 1),
+      label: 'Heat output',
+      unit: 'kWh',
+      current: p.totalOutputKwh,
+      previous: prev?.totalOutputKwh,
+      higherIsBetter: true,
+    },
+    {
+      label: 'Energy used',
       unit: 'kWh',
       current: p.totalInputKwh,
       previous: prev?.totalInputKwh,
@@ -32,44 +41,24 @@ export function MetricsStrip({ periodSummary: p, previousPeriodSummary: prev, vs
     },
     {
       label: 'Avg COP',
-      value: fmtDec(p.avgCop, 2),
       unit: '',
       current: p.avgCop,
       previous: prev?.avgCop,
       higherIsBetter: true,
     },
     {
-      label: 'Heat output',
-      value: fmtDec(p.totalOutputKwh, 1),
-      unit: 'kWh',
-      current: p.totalOutputKwh,
-      previous: prev?.totalOutputKwh,
-      higherIsBetter: true,
-    },
-    {
       label: 'Avg outdoor',
-      value: fmtDec(p.avgOutdoorTemp, 1),
       unit: '°C',
       current: p.avgOutdoorTemp,
       previous: prev?.avgOutdoorTemp,
       higherIsBetter: true,
     },
-    {
-      label: 'Avg kW in',
-      value: fmtDec(avgKwIn, 2),
-      unit: 'kW',
-      current: avgKwIn,
-      previous: prev?.totalInputKwh != null
-        ? prev.totalInputKwh / Math.max(1, Math.round((prev.snapshotCount ?? 1) / 96)) / 24
-        : undefined,
-      higherIsBetter: false,
-    },
   ]
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
+    <div className={gridClass}>
       {kpis.map((k, i) => (
-        <KpiCard key={i} {...k} vsLabel={vsLabel} delay={i * 0.04} />
+        <KpiCard key={k.label} {...k} vsLabel={vsLabel} delay={i * 0.04} />
       ))}
     </div>
   )
@@ -77,7 +66,6 @@ export function MetricsStrip({ periodSummary: p, previousPeriodSummary: prev, vs
 
 interface KpiProps {
   label: string
-  value: string
   unit: string
   current?: number | null
   previous?: number | null
@@ -86,43 +74,67 @@ interface KpiProps {
   delay?: number
 }
 
-function KpiCard({ label, value, unit, current, previous, higherIsBetter, vsLabel = '', delay = 0 }: KpiProps) {
-  const delta = computeDelta(current, previous, higherIsBetter)
+function KpiCard({ label, unit, current, previous, higherIsBetter, vsLabel = '', delay = 0 }: KpiProps) {
+  const value = formatValue(current, unit)
+  const hasPrev = previous != null && Number.isFinite(previous) && current != null && Number.isFinite(current)
+  const absDelta = hasPrev ? (current as number) - (previous as number) : null
+  const pctDelta = hasPrev && previous !== 0 ? ((absDelta as number) / Math.abs(previous as number)) * 100 : null
+  const isUp = absDelta != null && absDelta >= 0
+  const isGood = absDelta != null && (higherIsBetter ? isUp : !isUp)
 
   return (
     <div
-      className="bg-white border border-border-subtle rounded-[10px] px-[18px] pt-[18px] pb-4 hover:border-border-card transition-colors duration-150"
+      className="bg-white border border-border-subtle rounded-[10px] px-[18px] pt-[18px] pb-4 hover:border-border-card transition-colors duration-150 flex flex-col gap-2 min-h-[132px]"
       style={{ animation: `slide-up 0.4s ease both`, animationDelay: `${delay}s` }}
     >
-      <div className="font-mono text-[12px] tracking-[.1em] uppercase text-ink3 mb-[7px]">{label}</div>
+      <div className="font-mono text-[12px] tracking-[.1em] uppercase text-ink3">{label}</div>
       <div className="font-mono text-[32px] font-normal tracking-tight leading-none text-ink">
         {value}
-        {unit && <span className="text-[16px] font-light text-ink3 ml-[2px]">{unit}</span>}
+        {unit && unit !== '°C' && <span className="text-[16px] font-light text-ink3 ml-[3px]">{unit}</span>}
+        {unit === '°C' && <span className="text-[20px] font-light text-ink3">°C</span>}
       </div>
-      {delta && (
-        <div
-          className={`inline-flex items-center gap-0.5 mt-[5px] font-mono text-[11px] px-1.5 py-0.5 rounded ${
-            delta.good
-              ? 'bg-success-bg text-success'
-              : 'bg-danger-bg text-danger'
-          }`}
-        >
-          {delta.up ? '↑' : '↓'} {Math.abs(delta.pct).toFixed(0)}% {vsLabel}
+
+      {hasPrev ? (
+        <div className="flex flex-col gap-[2px] mt-auto">
+          <span
+            className={`self-start font-mono text-[12px] px-2 py-[3px] rounded whitespace-nowrap ${
+              isGood ? 'bg-success-bg text-success' : 'bg-danger-bg text-danger'
+            }`}
+          >
+            {`${isUp ? '↑' : '↓'} ${formatAbsDelta(absDelta as number, unit)}${
+              pctDelta != null ? ` (${Math.abs(pctDelta).toFixed(0)}%)` : ''
+            }`}
+          </span>
+          <span className="font-mono text-ink3 text-[11px] tracking-[.02em]">
+            was {formatPrevValue(previous as number, unit)} {vsLabel}
+          </span>
         </div>
+      ) : (
+        <span className="font-mono text-ink3 text-[11px] mt-auto">No prior period</span>
       )}
     </div>
   )
 }
 
-function computeDelta(
-  current: number | null | undefined,
-  previous: number | null | undefined,
-  higherIsBetter: boolean,
-) {
-  if (current == null || previous == null || previous === 0) return null
-  const diff = current - previous
-  const pct = (diff / Math.abs(previous)) * 100
-  const up = diff > 0
-  const good = higherIsBetter ? up : !up
-  return { pct, up, good }
+function formatValue(n: number | null | undefined, unit: string): string {
+  if (n == null) return '—'
+  if (unit === '£') return `£${n.toFixed(2)}`
+  if (unit === '') return n.toFixed(2)
+  return fmtDec(n, 1)
+}
+
+function formatPrevValue(n: number, unit: string): string {
+  if (unit === '£') return `£${n.toFixed(2)}`
+  if (unit === '') return n.toFixed(2)
+  if (unit === '°C') return `${n.toFixed(1)}°C`
+  return `${fmtDec(n, 1)} ${unit}`
+}
+
+function formatAbsDelta(n: number, unit: string): string {
+  const sign = n >= 0 ? '+' : '−'
+  const abs = Math.abs(n)
+  if (unit === '£') return `${sign}£${abs.toFixed(2)}`
+  if (unit === '') return `${sign}${abs.toFixed(2)}`
+  if (unit === '°C') return `${sign}${abs.toFixed(1)}°C`
+  return `${sign}${fmtDec(abs, 1)} ${unit}`
 }
