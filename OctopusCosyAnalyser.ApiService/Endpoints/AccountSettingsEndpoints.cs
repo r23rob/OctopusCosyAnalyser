@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Models;
+using OctopusCosyAnalyser.ApiService.Services.CurrentUser;
 using OctopusCosyAnalyser.Shared.Models;
 
 namespace OctopusCosyAnalyser.ApiService.Endpoints;
@@ -30,7 +31,11 @@ public static class AccountSettingsEndpoints
                 : Results.Ok(ToDto(settings));
         }).WithName("GetAccountSettingsByAccount");
 
-        group.MapPut("", async (AccountSettingsRequest request, CosyDbContext db, CancellationToken ct) =>
+        group.MapPut("", async (
+            AccountSettingsRequest request,
+            CosyDbContext db,
+            ICurrentUserAccessor currentUser,
+            CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.AccountNumber))
                 return Results.BadRequest("Account number is required");
@@ -39,8 +44,19 @@ public static class AccountSettingsEndpoints
             if (authMode is not "apikey" and not "password")
                 return Results.BadRequest("AuthMode must be 'apikey' or 'password'");
 
+            var userId = currentUser.UserId;
+            if (string.IsNullOrEmpty(userId))
+                return Results.Unauthorized();
+
+            // Match either the user's owned row or a legacy unowned (OwnerId == null) row with
+            // the same account number. Bypass the per-tenant query filter so we can adopt
+            // pre-multi-tenancy rows instead of inserting a duplicate.
             var settings = await db.OctopusAccountSettings
-                .FirstOrDefaultAsync(s => s.AccountNumber == request.AccountNumber, ct);
+                .IgnoreQueryFilters()
+                .Where(s => s.AccountNumber == request.AccountNumber
+                            && (s.OwnerId == userId || s.OwnerId == null))
+                .OrderByDescending(s => s.OwnerId == userId)
+                .FirstOrDefaultAsync(ct);
 
             // Validate required fields for new settings or when switching auth modes
             var isNewSettings = settings is null;
@@ -51,7 +67,7 @@ public static class AccountSettingsEndpoints
             {
                 if (string.IsNullOrWhiteSpace(request.Email))
                     return Results.BadRequest("Email is required for password authentication");
-                
+
                 // Only require password for new settings or when switching auth modes
                 if ((isNewSettings || isSwitchingToPassword) && string.IsNullOrWhiteSpace(request.OctopusPassword))
                     return Results.BadRequest("Octopus password is required when setting up password authentication");
@@ -67,6 +83,7 @@ public static class AccountSettingsEndpoints
             {
                 settings = new OctopusAccountSettings
                 {
+                    OwnerId = userId,
                     AccountNumber = request.AccountNumber.Trim(),
                     ApiKey = request.ApiKey?.Trim() ?? string.Empty,
                     Email = request.Email?.Trim(),
@@ -81,6 +98,10 @@ public static class AccountSettingsEndpoints
             }
             else
             {
+                // Claim a legacy unowned row for the current user.
+                if (settings.OwnerId is null)
+                    settings.OwnerId = userId;
+
                 // Only overwrite secrets when the caller provides a new value
                 if (!string.IsNullOrWhiteSpace(request.ApiKey))
                     settings.ApiKey = request.ApiKey.Trim();
