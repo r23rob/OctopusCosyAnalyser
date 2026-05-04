@@ -378,6 +378,14 @@ public class EnergyIntervalWorker : BackgroundService
     {
         var changed = false;
 
+        // Rescue legacy rows written before tenancy was added: stamp OwnerId from the
+        // freshly-computed row (which carries device.OwnerId).
+        if (string.IsNullOrEmpty(existing.OwnerId) && !string.IsNullOrEmpty(computed.OwnerId))
+        {
+            existing.OwnerId = computed.OwnerId;
+            changed = true;
+        }
+
         // Patch null consumption with late-arriving data
         if (!existing.ConsumptionKwh.HasValue && computed.ConsumptionKwh.HasValue)
         {

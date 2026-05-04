@@ -169,6 +169,10 @@ public class CostDataSyncWorker : BackgroundService
                     record.AvgUnitRatePence = data.unitRate;
                     record.StandingChargePence = data.standingCharge;
                     record.UpdatedAt = DateTime.UtcNow;
+                    // Rescue any pre-tenancy rows whose OwnerId is null, so they
+                    // become visible to the user via the global query filter.
+                    if (string.IsNullOrEmpty(record.OwnerId))
+                        record.OwnerId = device.OwnerId;
                 }
                 else
                 {

@@ -115,8 +115,12 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
     /// <summary>
     /// Maps typed TimeSeriesEntry responses to HeatPumpTimeSeriesRecord entities and adds to the DbContext.
     /// Shared utility for time-series sync operations.
-    /// Pass ownerId to stamp tenancy on the new rows; null is allowed for the worker
-    /// path where the DbContext stamps OwnerId from the current user instead.
+    ///
+    /// <para>
+    /// Workers (no HttpContext) MUST pass ownerId — there is no current user for the
+    /// DbContext to stamp from. Endpoint callers (with HttpContext) may pass null and
+    /// rely on CosyDbContext.SaveChanges to stamp OwnerId from the authenticated user.
+    /// </para>
     /// </summary>
     internal static int MapAndPersistTimeSeriesEntries(
         TimeSeriesEntry?[]? entries, string deviceId,

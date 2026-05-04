@@ -43,8 +43,11 @@ public class CosyDbContext : IdentityDbContext<ApplicationUser>, IDataProtection
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(CosyDbContext).Assembly);
 
         // Apply per-tenant global query filter to every IOwnedEntity in the model.
-        // When _currentUser.UserId is null (background workers, migrations), the filter
-        // resolves to false → workers must call IgnoreQueryFilters() explicitly.
+        // The filter is `CurrentUserId != null && OwnerId == CurrentUserId`. The first
+        // clause matters: without it, EF translates `OwnerId == null` (worker context)
+        // into `OwnerId IS NULL` and returns every legacy/unowned row. With it, a null
+        // CurrentUserId short-circuits to false and the worker sees nothing through
+        // filtered queries — workers must call IgnoreQueryFilters() to read across tenants.
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
             if (typeof(IOwnedEntity).IsAssignableFrom(entityType.ClrType))
@@ -53,7 +56,9 @@ public class CosyDbContext : IdentityDbContext<ApplicationUser>, IDataProtection
                 var ownerProp = Expression.Property(parameter, nameof(IOwnedEntity.OwnerId));
                 var currentUserExpr = Expression.Property(
                     Expression.Constant(this), nameof(CurrentUserId));
-                var body = Expression.Equal(ownerProp, currentUserExpr);
+                var notNull = Expression.NotEqual(currentUserExpr, Expression.Constant(null, typeof(string)));
+                var ownerEquals = Expression.Equal(ownerProp, currentUserExpr);
+                var body = Expression.AndAlso(notNull, ownerEquals);
                 var lambda = Expression.Lambda(body, parameter);
                 modelBuilder.Entity(entityType.ClrType).HasQueryFilter(lambda);
             }

@@ -161,13 +161,18 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
-          env: [
-            { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production' }
-            { name: 'ASPNETCORE_URLS', value: 'http://+:8080' }
-            { name: 'ConnectionStrings__cosydb', secretRef: 'pg-connection' }
-            { name: 'Anthropic__ApiKey', secretRef: 'anthropic-api-key' }
-            { name: 'Cors__AllowedOrigins__0', value: corsAllowedOrigins }
-          ]
+          env: concat([
+              { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production' }
+              { name: 'ASPNETCORE_URLS', value: 'http://+:8080' }
+              { name: 'ConnectionStrings__cosydb', secretRef: 'pg-connection' }
+              { name: 'Anthropic__ApiKey', secretRef: 'anthropic-api-key' }
+            ],
+            // Only set Cors:AllowedOrigins when there's a real value — an empty env var
+            // would short-circuit ASP.NET Core's array binding to `[""]` and crash CORS.
+            // Comma-separated origins are split by Program.cs.
+            empty(corsAllowedOrigins) ? [] : [
+              { name: 'Cors__AllowedOrigins', value: corsAllowedOrigins }
+            ])
           probes: [
             {
               type: 'Liveness'

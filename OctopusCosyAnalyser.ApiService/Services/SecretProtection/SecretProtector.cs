@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.DataProtection;
 
 namespace OctopusCosyAnalyser.ApiService.Services.SecretProtection;
@@ -9,10 +10,12 @@ public sealed class SecretProtector : ISecretProtector
     private const string Purpose = "OctopusCosyAnalyser.SecretAtRest.v1";
 
     private readonly IDataProtector _protector;
+    private readonly ILogger<SecretProtector> _logger;
 
-    public SecretProtector(IDataProtectionProvider provider)
+    public SecretProtector(IDataProtectionProvider provider, ILogger<SecretProtector> logger)
     {
         _protector = provider.CreateProtector(Purpose);
+        _logger = logger;
     }
 
     public string? Protect(string? plaintext)
@@ -26,10 +29,15 @@ public sealed class SecretProtector : ISecretProtector
         {
             return _protector.Unprotect(ciphertext);
         }
-        catch
+        catch (CryptographicException ex)
         {
-            // Legacy plaintext (written before encryption was enabled) round-trips as-is.
-            // On next save, the value converter will encrypt it.
+            // The Data Protection API throws CryptographicException for: tampered payloads,
+            // unknown key id (rotated/lost key), and — most importantly here — values that
+            // were written before encryption was wired up (legacy plaintext). We can't tell
+            // which case is which from the exception alone, so log at debug and pass the
+            // value through unchanged. The next save will re-encrypt legitimate plaintext;
+            // tampered/lost-key payloads will surface as wrong-looking secrets downstream.
+            _logger.LogDebug(ex, "SecretProtector.Unprotect failed; treating value as legacy plaintext");
             return ciphertext;
         }
     }

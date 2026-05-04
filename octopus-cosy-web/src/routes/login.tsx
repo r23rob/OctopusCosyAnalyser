@@ -6,6 +6,22 @@ interface LoginSearch {
   redirect?: string
 }
 
+const DEFAULT_LANDING = '/heatpump'
+
+/**
+ * Only allow same-origin relative paths starting with a single `/`. Rejects:
+ *  - protocol-relative URLs (`//attacker.com/path`)
+ *  - absolute URLs of any scheme (`https://attacker.com`, `javascript:...`)
+ *  - empty / undefined
+ * Returns the safe relative target otherwise.
+ */
+function sanitizeRedirect(target: string | undefined): string {
+  if (!target) return DEFAULT_LANDING
+  if (!target.startsWith('/')) return DEFAULT_LANDING
+  if (target.startsWith('//')) return DEFAULT_LANDING
+  return target
+}
+
 export const Route = createFileRoute('/login')({
   validateSearch: (search: Record<string, unknown>): LoginSearch =>
     typeof search['redirect'] === 'string'
@@ -32,14 +48,7 @@ function LoginPage() {
       await auth.login(email, password)
       await routerAuth.refresh()
       // After refresh the gate in __root will let us through.
-      // Use the router so client-side state stays consistent.
-      const target = redirect ?? '/heatpump'
-      // Hard navigation if `redirect` is an external href; otherwise client-side.
-      if (target.startsWith('http')) {
-        window.location.href = target
-      } else {
-        navigate({ to: target as '/heatpump' })
-      }
+      navigate({ to: sanitizeRedirect(redirect) as '/heatpump' })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {

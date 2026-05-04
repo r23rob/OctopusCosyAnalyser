@@ -18,8 +18,10 @@ public sealed class HttpContextCurrentUserAccessor : ICurrentUserAccessor
 
 /// <summary>
 /// Used by background workers and run-once jobs that have no HttpContext.
-/// CosyDbContext sees a null UserId and skips the query filter — workers must call
-/// IgnoreQueryFilters() explicitly when reading owned data they want unscoped.
+/// With UserId null, CosyDbContext's global query filter short-circuits to false
+/// (the filter is `CurrentUserId != null && OwnerId == CurrentUserId`), so any
+/// owned-entity read goes through zero results unless the worker calls
+/// IgnoreQueryFilters() — which all workers do explicitly when iterating across tenants.
 /// </summary>
 public sealed class SystemCurrentUserAccessor : ICurrentUserAccessor
 {

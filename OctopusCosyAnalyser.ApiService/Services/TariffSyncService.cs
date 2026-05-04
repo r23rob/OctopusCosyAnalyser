@@ -97,12 +97,20 @@ public class TariffSyncService : ITariffSyncService
         {
             if (existingRates.TryGetValue(rate.ValidFrom, out var existing))
             {
+                var changed = false;
                 if (existing.UnitRatePence != rate.UnitRatePence || existing.ValidTo != rate.ValidTo)
                 {
                     existing.UnitRatePence = rate.UnitRatePence;
                     existing.ValidTo = rate.ValidTo;
-                    updatedCount++;
+                    changed = true;
                 }
+                // Rescue legacy rows written before tenancy.
+                if (string.IsNullOrEmpty(existing.OwnerId))
+                {
+                    existing.OwnerId = device.OwnerId;
+                    changed = true;
+                }
+                if (changed) updatedCount++;
             }
             else
             {

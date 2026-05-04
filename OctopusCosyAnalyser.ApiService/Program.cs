@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -68,12 +69,17 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     .AddApiEndpoints();
 
 // Cookie-based auth for the same-origin SPA (simpler + safer than JWT-in-localStorage).
+// In production, ACA terminates TLS upstream so the app sees HTTP — set Always to ensure
+// the cookie always gets `Secure`, and rely on the forwarded headers middleware below
+// to make Url/Scheme reflect the actual public scheme.
 builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
     .AddCookie(IdentityConstants.ApplicationScheme, options =>
     {
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
         options.ExpireTimeSpan = TimeSpan.FromDays(14);
         options.SlidingExpiration = true;
         // SPA-friendly: API responses, not redirects to /login.
@@ -89,6 +95,16 @@ builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
         };
     });
 builder.Services.AddAuthorization();
+
+// Trust X-Forwarded-* from ACA's ingress (TLS is terminated at the edge — the container
+// sees HTTP). Without this, IsHttps is false, redirect URLs are http://, and cookie
+// SecurePolicy decisions are wrong.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // Data Protection — encrypts auth cookies and any IDataProtector-protected payloads.
 // Persisted to the DB so keys survive container restarts and scale-to-zero on ACA.
@@ -111,7 +127,14 @@ builder.Services.Configure<AnthropicOptions>(builder.Configuration.GetSection(An
 
 // CORS — when the SPA is hosted from a separate origin (Front Door / Static Web App
 // in production), allow credentialed requests from configured allowed origins.
-var allowedSpaOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+//
+// Cors:AllowedOrigins is a comma-separated string (so Bicep can pass a single env var)
+// or an array. Empty/whitespace entries are filtered so an unset value cleanly disables CORS.
+var allowedSpaOrigins = (builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+        ?? new[] { builder.Configuration["Cors:AllowedOrigins"] ?? string.Empty })
+    .SelectMany(o => (o ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    .Where(o => !string.IsNullOrWhiteSpace(o))
+    .ToArray();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Spa", policy =>
@@ -251,6 +274,8 @@ if (isRunOnceMode)
 }
 
 // Configure the HTTP request pipeline.
+// Forwarded headers MUST run before any middleware that inspects scheme/IP (auth, CORS).
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
