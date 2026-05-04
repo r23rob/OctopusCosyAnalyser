@@ -32,6 +32,20 @@ export function useDashboard(deviceId: string | undefined) {
   }
 }
 
+/** Latest-snapshot poll, decoupled from the heavier `useDashboard` summary call.
+ *  Drives the connection pill in the nav and the stale strip on the dashboard. */
+export function useLatestSnapshot(deviceId: string | undefined) {
+  const query = useQuery({
+    queryKey: queryKeys.heatpump.latestSnapshot(deviceId ?? ''),
+    queryFn: () => api.heatpump.getLatestSnapshot(deviceId!),
+    enabled: !!deviceId,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    staleTime: 55_000,
+  })
+  return { latest: query.data, isLoading: query.isLoading }
+}
+
 /** AI summary with manual refresh capability. */
 export function useAiSummary(deviceId: string | undefined) {
   const queryClient = useQueryClient()

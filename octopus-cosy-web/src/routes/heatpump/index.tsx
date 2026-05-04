@@ -8,6 +8,7 @@ import { useDashboard } from '@/hooks/use-dashboard'
 import { usePeriodData } from '@/hooks/use-period-data'
 import { usePeriodNavigation } from '@/hooks/use-period-navigation'
 import { useSnapshotMetrics } from '@/hooks/use-snapshot-metrics'
+import { usePreviousPeriodSummary } from '@/hooks/use-previous-period'
 
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector'
 import { MetricsStrip } from '@/components/dashboard/MetricsStrip'
@@ -20,6 +21,8 @@ import { CopByTempCard } from '@/components/dashboard/CopByTempCard'
 
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { ErrorAlert } from '@/components/shared/ErrorAlert'
+import { StaleStrip } from '@/components/shared/StaleStrip'
+import { InstallBanner } from '@/components/shared/InstallBanner'
 import { api } from '@/lib/api-client'
 import { queryKeys } from '@/lib/query-keys'
 import { downsample, periodSubtitle, vsLabel } from '@/lib/utils'
@@ -33,8 +36,9 @@ function DashboardPage() {
   const { device, settings, isLoading: deviceLoading, hasDevice } = useDevice()
   const deviceId = device?.deviceId
 
-  const { summary, isError: summaryError } = useDashboard(deviceId)
+  const { summary, latest, isError: summaryError } = useDashboard(deviceId)
   const { snapshots, periodSummary, isLoading: periodLoading } = usePeriodData(deviceId, period.from, period.to)
+  const { previousPeriodSummary } = usePreviousPeriodSummary(deviceId, period.periodType, period.from, period.to)
 
   const displayed = downsample(snapshots, 500)
   const { roomTemps, avgPowerIn, avgPowerOut } = useSnapshotMetrics(snapshots, periodSummary, summary)
@@ -59,7 +63,7 @@ function DashboardPage() {
         <div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
           <Settings size={20} className="text-primary" />
         </div>
-        <h2 className="text-lg font-semibold">Welcome to Ecodan Monitor</h2>
+        <h2 className="text-lg font-semibold">Welcome to Octopus Heat Pump</h2>
         <p className="text-sm text-ink2">Enter your Octopus Energy credentials to get started.</p>
         <Link
           to="/settings"
@@ -92,6 +96,9 @@ function DashboardPage() {
 
   return (
     <div>
+      <StaleStrip latest={latest} />
+      <InstallBanner />
+
       <PeriodSelector
         periodType={period.periodType}
         onPeriodChange={period.setPeriodType}
@@ -106,22 +113,29 @@ function DashboardPage() {
         <ErrorAlert message="Could not load live data. The API may be unavailable." />
       )}
 
-      <MetricsStrip
-        periodSummary={periodSummary}
-        vsLabel={vsLabel(period.periodType)}
-      />
-
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_290px] gap-4 mb-4 animate-up" style={{ animationDelay: '0.2s' }}>
-        <ChartSection snapshots={displayed} isLoading={periodLoading} />
-
-        <div className="flex flex-col gap-4">
+      {/* Hero row: gauge in left rail + 2x2 KPI grid */}
+      <div
+        className="grid gap-3 mb-3 animate-up"
+        style={{ animationDelay: '0.1s', gridTemplateColumns: 'minmax(0, 1fr)' }}
+      >
+        <div className="grid gap-3 lg:[grid-template-columns:minmax(280px,320px)_1fr]">
           <CopGaugeCard
             cop={periodSummary?.avgCop ?? (summary?.livePerformance?.coefficientOfPerformance != null ? parseFloat(summary.livePerformance.coefficientOfPerformance) : null)}
             flowTemp={periodSummary?.avgFlowTemp ?? null}
             setpointTemp={null}
           />
-          <RoomTempsCard rooms={roomTemps} />
+          <MetricsStrip
+            periodSummary={periodSummary}
+            previousPeriodSummary={previousPeriodSummary}
+            vsLabel={vsLabel(period.periodType)}
+            hero
+          />
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_290px] gap-4 mb-4 animate-up" style={{ animationDelay: '0.2s' }}>
+        <ChartSection snapshots={displayed} isLoading={periodLoading} />
+        <RoomTempsCard rooms={roomTemps} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-up" style={{ animationDelay: '0.28s' }}>

@@ -16,6 +16,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as HeatpumpIndexRouteImport } from './routes/heatpump/index'
 import { Route as HeatpumpScatterRouteImport } from './routes/heatpump/scatter'
 import { Route as HeatpumpDataRouteImport } from './routes/heatpump/data'
+import { Route as HeatpumpCompareRouteImport } from './routes/heatpump/compare'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -52,12 +53,18 @@ const HeatpumpDataRoute = HeatpumpDataRouteImport.update({
   path: '/heatpump/data',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HeatpumpCompareRoute = HeatpumpCompareRouteImport.update({
+  id: '/heatpump/compare',
+  path: '/heatpump/compare',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
+  '/heatpump/compare': typeof HeatpumpCompareRoute
   '/heatpump/data': typeof HeatpumpDataRoute
   '/heatpump/scatter': typeof HeatpumpScatterRoute
   '/heatpump/': typeof HeatpumpIndexRoute
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
+  '/heatpump/compare': typeof HeatpumpCompareRoute
   '/heatpump/data': typeof HeatpumpDataRoute
   '/heatpump/scatter': typeof HeatpumpScatterRoute
   '/heatpump': typeof HeatpumpIndexRoute
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
+  '/heatpump/compare': typeof HeatpumpCompareRoute
   '/heatpump/data': typeof HeatpumpDataRoute
   '/heatpump/scatter': typeof HeatpumpScatterRoute
   '/heatpump/': typeof HeatpumpIndexRoute
@@ -88,6 +97,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/settings'
     | '/signup'
+    | '/heatpump/compare'
     | '/heatpump/data'
     | '/heatpump/scatter'
     | '/heatpump/'
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/settings'
     | '/signup'
+    | '/heatpump/compare'
     | '/heatpump/data'
     | '/heatpump/scatter'
     | '/heatpump'
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/settings'
     | '/signup'
+    | '/heatpump/compare'
     | '/heatpump/data'
     | '/heatpump/scatter'
     | '/heatpump/'
@@ -116,6 +128,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRoute
   SignupRoute: typeof SignupRoute
+  HeatpumpCompareRoute: typeof HeatpumpCompareRoute
   HeatpumpDataRoute: typeof HeatpumpDataRoute
   HeatpumpScatterRoute: typeof HeatpumpScatterRoute
   HeatpumpIndexRoute: typeof HeatpumpIndexRoute
@@ -172,6 +185,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HeatpumpDataRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/heatpump/compare': {
+      id: '/heatpump/compare'
+      path: '/heatpump/compare'
+      fullPath: '/heatpump/compare'
+      preLoaderRoute: typeof HeatpumpCompareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -180,6 +200,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRoute,
   SignupRoute: SignupRoute,
+  HeatpumpCompareRoute: HeatpumpCompareRoute,
   HeatpumpDataRoute: HeatpumpDataRoute,
   HeatpumpScatterRoute: HeatpumpScatterRoute,
   HeatpumpIndexRoute: HeatpumpIndexRoute,
