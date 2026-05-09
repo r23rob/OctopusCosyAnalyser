@@ -56,14 +56,27 @@ public static class HeatPumpEndpoints
         }
 
         // Get account info and set up device
-        group.MapPost("/setup", async (string accountNumber, IOctopusEnergyClient client, IOctopusGraphQLService graphqlService, CosyDbContext db, CancellationToken ct) =>
+        group.MapPost("/setup", async (string accountNumber, IOctopusEnergyClient client, IOctopusGraphQLService graphqlService, CosyDbContext db, ILogger<HeatPumpDevice> logger, CancellationToken ct) =>
         {
+            try
+            {
             var (settings, settingsError) = await GetSettingsForAccountAsync(db, accountNumber, ct);
             if (settingsError is not null)
                 return settingsError;
 
             // Get account data with electricity agreements
             var accountData = await client.GetAccountAsync(settings!,accountNumber);
+
+            // Surface GraphQL-level errors (invalid API key, account not on key, schema drift)
+            // as a 502 with the actual message rather than letting GetProperty("data") throw.
+            if (accountData.RootElement.TryGetProperty("errors", out var errors)
+                && errors.ValueKind == JsonValueKind.Array && errors.GetArrayLength() > 0)
+            {
+                var firstError = errors[0].TryGetProperty("message", out var m) ? m.GetString() : "GraphQL error";
+                logger.LogWarning("Octopus rejected setup for {Account}: {Error}", accountNumber, firstError);
+                return Results.Problem(detail: firstError, title: "Octopus API rejected the request", statusCode: StatusCodes.Status502BadGateway);
+            }
+
             var data = accountData.RootElement.GetProperty("data").GetProperty("account");
             var agreements = data.GetProperty("electricityAgreements");
 
@@ -182,6 +195,15 @@ public static class HeatPumpEndpoints
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(new { deviceId, mpan, serialNumber, euid, propertyId, message = "Device setup complete" });
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Heat pump setup failed for account {Account}", accountNumber);
+                return Results.Problem(
+                    detail: ex.Message,
+                    title: "Heat pump setup failed",
+                    statusCode: StatusCodes.Status500InternalServerError);
+            }
         }).WithName("SetupHeatPump");
 
         // Get current telemetry
