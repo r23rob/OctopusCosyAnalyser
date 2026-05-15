@@ -73,8 +73,10 @@ export default defineConfig({
     port: parseInt(process.env.VITE_PORT ?? '5173'),
     proxy: {
       '/api': {
-        target: process.env.VITE_API_TARGET ?? 'http://localhost:5532',
+        target: process.env.VITE_API_TARGET ?? 'https://localhost:7558',
         changeOrigin: true,
+        // The .NET dev cert is self-signed; node-https rejects it by default.
+        secure: false,
       },
     },
   },
