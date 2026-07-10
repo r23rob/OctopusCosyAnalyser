@@ -1,5 +1,5 @@
-import { Link, useRouter } from '@tanstack/react-router'
-import { LayoutDashboard, ScatterChart, Table2, Sparkles, Settings, Columns2, LogOut } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { LayoutDashboard, ScatterChart, Table2, Sparkles, Settings, Columns2 } from 'lucide-react'
 import { useAiDrawer } from './AiDrawerContext'
 import { useApiStatus } from '@/hooks/use-api-status'
 import { useDevice } from '@/hooks/use-device'
@@ -41,14 +41,6 @@ export function NavBar() {
   const { latest } = useLatestSnapshot(device?.deviceId)
   const conn = connectionState(status, statusLoading, latest?.minutesAgo)
   const colors = COLOR_CLASSES[conn.color]
-  const router = useRouter()
-  const auth = router.options.context.auth
-
-  const handleLogout = async () => {
-    await auth.signOut()
-    router.navigate({ to: '/login' })
-  }
-
   return (
     <>
       {/* Top nav bar */}
@@ -96,15 +88,6 @@ export function NavBar() {
           >
             <Settings size={16} />
           </Link>
-          <button
-            type="button"
-            onClick={handleLogout}
-            title={auth.user ? `Sign out ${auth.user.email}` : 'Sign out'}
-            aria-label="Sign out"
-            className="w-[34px] h-[34px] rounded-[7px] flex items-center justify-center text-ink3 hover:bg-white hover:text-ink hover:border-border-subtle border border-transparent transition-all duration-150"
-          >
-            <LogOut size={15} />
-          </button>
           <div
             title={conn.title}
             className={`hidden sm:flex items-center gap-[7px] font-mono text-[12px] tracking-[.05em] px-3 py-[6px] rounded-full border ${colors.text} ${colors.bg} ${colors.border} font-medium`}

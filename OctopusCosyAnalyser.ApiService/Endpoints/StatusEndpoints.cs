@@ -81,6 +81,6 @@ public static class StatusEndpoints
             dto.HasDevice = await db.HeatPumpDevices.AnyAsync(d => d.AccountNumber == settings.AccountNumber, ct);
 
             return Results.Ok(dto);
-        }).WithName("GetApiStatus").RequireAuthorization();
+        }).WithName("GetApiStatus");
     }
 }

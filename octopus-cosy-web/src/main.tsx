@@ -40,14 +40,10 @@ const queryClient = new QueryClient({
   },
 })
 
-// Resolve the current user once at startup so the first paint already knows whether
-// to render the app or redirect to /login. After this, refresh() is called on demand.
-auth.refresh().finally(() => {
-  createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
-    </StrictMode>,
-  )
-})
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>
+  </StrictMode>,
+)

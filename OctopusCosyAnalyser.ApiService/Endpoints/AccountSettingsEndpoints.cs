@@ -10,7 +10,7 @@ public static class AccountSettingsEndpoints
 {
     public static void MapAccountSettingsEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/settings").RequireAuthorization();
+        var group = app.MapGroup("/api/settings");
 
         group.MapGet("", async (CosyDbContext db, CancellationToken ct) =>
         {
@@ -44,9 +44,7 @@ public static class AccountSettingsEndpoints
             if (authMode is not "apikey" and not "password")
                 return Results.BadRequest("AuthMode must be 'apikey' or 'password'");
 
-            var userId = currentUser.UserId;
-            if (string.IsNullOrEmpty(userId))
-                return Results.Unauthorized();
+            var userId = currentUser.UserId!;
 
             // Match either the user's owned row or a legacy unowned (OwnerId == null) row with
             // the same account number. Bypass the per-tenant query filter so we can adopt
