@@ -1,13 +1,9 @@
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Http.Resilience;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Endpoints;
-using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.ApiService.Options;
 using OctopusCosyAnalyser.ApiService.GraphQL;
 using OctopusCosyAnalyser.ApiService.Services;
@@ -39,86 +35,16 @@ builder.AddNpgsqlDbContext<CosyDbContext>("cosydb", configureSettings: settings 
     }
 });
 
-// HttpContext + current-user accessor — required for multi-tenant query filtering.
-// Transient lifetime allows DbContext pooling to work correctly (DbContext constructor
-// injects ICurrentUserAccessor, and pooled contexts are created from root scope).
-builder.Services.AddHttpContextAccessor();
+// Current-user accessor — returns a fixed user for all requests (auth disabled).
+// Workers iterate all tenants' devices via IgnoreQueryFilters().
 if (isRunOnceMode)
 {
-    // Workers iterate all tenants' devices; they must not be scoped to one user.
     builder.Services.AddSingleton<ICurrentUserAccessor, SystemCurrentUserAccessor>();
 }
 else
 {
-    builder.Services.AddTransient<ICurrentUserAccessor, HttpContextCurrentUserAccessor>();
+    builder.Services.AddSingleton<ICurrentUserAccessor, HttpContextCurrentUserAccessor>();
 }
-
-// ASP.NET Core Identity (self-hosted auth).
-builder.Services.AddIdentityCore<ApplicationUser>(options =>
-{
-    options.User.RequireUniqueEmail = true;
-    options.Password.RequireDigit = true;
-    options.Password.RequiredLength = 8;
-    options.Password.RequireLowercase = true;
-    options.Password.RequireUppercase = false;
-    options.Password.RequireNonAlphanumeric = false;
-    options.SignIn.RequireConfirmedEmail = false;
-})
-    .AddRoles<IdentityRole>()
-    .AddEntityFrameworkStores<CosyDbContext>()
-    .AddSignInManager()
-    .AddDefaultTokenProviders()
-    .AddApiEndpoints();
-
-// Cookie-based auth for the same-origin SPA (simpler + safer than JWT-in-localStorage).
-// In production, ACA terminates TLS upstream so the app sees HTTP — set Always to ensure
-// the cookie always gets `Secure`, and rely on the forwarded headers middleware below
-// to make Url/Scheme reflect the actual public scheme.
-builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
-    .AddCookie(IdentityConstants.ApplicationScheme, options =>
-    {
-        options.Cookie.HttpOnly = true;
-        options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
-            ? CookieSecurePolicy.SameAsRequest
-            : CookieSecurePolicy.Always;
-        options.ExpireTimeSpan = TimeSpan.FromDays(14);
-        options.SlidingExpiration = true;
-        // SPA-friendly: API responses, not redirects to /login.
-        options.Events.OnRedirectToLogin = ctx =>
-        {
-            ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            return Task.CompletedTask;
-        };
-        options.Events.OnRedirectToAccessDenied = ctx =>
-        {
-            ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
-            return Task.CompletedTask;
-        };
-    })
-    // ExternalScheme cookie is required for the OAuth round-trip (AddIdentityCore
-    // doesn't register it; AddIdentity would). Short-lived — only needed between the
-    // Google redirect and our callback handler.
-    .AddCookie(IdentityConstants.ExternalScheme, options =>
-    {
-        options.Cookie.Name = IdentityConstants.ExternalScheme;
-        options.Cookie.HttpOnly = true;
-        options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
-            ? CookieSecurePolicy.SameAsRequest
-            : CookieSecurePolicy.Always;
-        options.ExpireTimeSpan = TimeSpan.FromMinutes(10);
-    })
-    .AddGoogle(options =>
-    {
-        options.ClientId = builder.Configuration["Authentication:Google:ClientId"] ?? "";
-        options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? "";
-        options.SignInScheme = IdentityConstants.ExternalScheme;
-        // Routed under /api so the existing Vite/nginx proxy forwards it without changes.
-        options.CallbackPath = "/api/auth/signin-google";
-        options.SaveTokens = false;
-    });
-builder.Services.AddAuthorization();
 
 // Trust X-Forwarded-* from ACA's ingress (TLS is terminated at the edge — the container
 // sees HTTP). Without this, IsHttps is false, redirect URLs are http://, and cookie
@@ -308,40 +234,17 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("Spa");
-app.UseAuthentication();
-app.UseAuthorization();
 
 app.MapGet("/", () => "OctopusCosyAnalyser API is running.");
 
-// Identity API endpoints — register / login / forgot-password / reset-password / refresh / etc.
-// Mounted under /api/auth so the SPA hits e.g. POST /api/auth/login.
-app.MapGroup("/api/auth").MapIdentityApi<ApplicationUser>();
-
-// External (Google) sign-in — challenge + callback handlers.
-app.MapExternalAuthEndpoints();
-
-// Logout endpoint — Identity API doesn't ship this for cookie auth; handle it ourselves.
-app.MapPost("/api/auth/logout", async (SignInManager<ApplicationUser> signInManager) =>
+// "Who am I" — returns the hardcoded user (auth disabled).
+app.MapGet("/api/auth/me", () => Results.Ok(new
 {
-    await signInManager.SignOutAsync();
-    return Results.Ok();
-}).RequireAuthorization();
+    id = HttpContextCurrentUserAccessor.FixedUserId,
+    email = "Rob@hutchin.co.uk",
+}));
 
-// "Who am I" — useful for the SPA's beforeLoad guard.
-app.MapGet("/api/auth/me", (HttpContext ctx) =>
-{
-    if (ctx.User.Identity?.IsAuthenticated != true)
-        return Results.Unauthorized();
 
-    return Results.Ok(new
-    {
-        id = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
-        email = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
-            ?? ctx.User.Identity.Name,
-    });
-}).RequireAuthorization();
-
-// Map Heat Pump endpoints — all require authentication.
 app.MapHeatPumpEndpoints();
 app.MapAccountSettingsEndpoints();
 app.MapStatusEndpoints();

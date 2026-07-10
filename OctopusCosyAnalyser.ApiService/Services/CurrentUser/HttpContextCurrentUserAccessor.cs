@@ -1,19 +1,12 @@
-using System.Security.Claims;
-
 namespace OctopusCosyAnalyser.ApiService.Services.CurrentUser;
 
 public sealed class HttpContextCurrentUserAccessor : ICurrentUserAccessor
 {
-    private readonly IHttpContextAccessor _httpContextAccessor;
+    public const string FixedUserId = "rob";
 
-    public HttpContextCurrentUserAccessor(IHttpContextAccessor httpContextAccessor)
-    {
-        _httpContextAccessor = httpContextAccessor;
-    }
+    public string? UserId => FixedUserId;
 
-    public string? UserId => _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.NameIdentifier);
-
-    public bool IsAuthenticated => _httpContextAccessor.HttpContext?.User?.Identity?.IsAuthenticated == true;
+    public bool IsAuthenticated => true;
 }
 
 /// <summary>
