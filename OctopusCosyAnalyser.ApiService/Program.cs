@@ -74,7 +74,11 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 // In production, ACA terminates TLS upstream so the app sees HTTP — set Always to ensure
 // the cookie always gets `Secure`, and rely on the forwarded headers middleware below
 // to make Url/Scheme reflect the actual public scheme.
-builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
+var googleClientId = builder.Configuration["Authentication:Google:ClientId"];
+var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+var googleAuthEnabled = !string.IsNullOrEmpty(googleClientId) && !string.IsNullOrEmpty(googleClientSecret);
+
+var authBuilder = builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
     .AddCookie(IdentityConstants.ApplicationScheme, options =>
     {
         options.Cookie.HttpOnly = true;
@@ -95,29 +99,34 @@ builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
             return Task.CompletedTask;
         };
-    })
-    // ExternalScheme cookie is required for the OAuth round-trip (AddIdentityCore
-    // doesn't register it; AddIdentity would). Short-lived — only needed between the
-    // Google redirect and our callback handler.
-    .AddCookie(IdentityConstants.ExternalScheme, options =>
-    {
-        options.Cookie.Name = IdentityConstants.ExternalScheme;
-        options.Cookie.HttpOnly = true;
-        options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
-            ? CookieSecurePolicy.SameAsRequest
-            : CookieSecurePolicy.Always;
-        options.ExpireTimeSpan = TimeSpan.FromMinutes(10);
-    })
-    .AddGoogle(options =>
-    {
-        options.ClientId = builder.Configuration["Authentication:Google:ClientId"] ?? "";
-        options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? "";
-        options.SignInScheme = IdentityConstants.ExternalScheme;
-        // Routed under /api so the existing Vite/nginx proxy forwards it without changes.
-        options.CallbackPath = "/api/auth/signin-google";
-        options.SaveTokens = false;
     });
+
+if (googleAuthEnabled)
+{
+    authBuilder
+        // ExternalScheme cookie is required for the OAuth round-trip (AddIdentityCore
+        // doesn't register it; AddIdentity would). Short-lived — only needed between the
+        // Google redirect and our callback handler.
+        .AddCookie(IdentityConstants.ExternalScheme, options =>
+        {
+            options.Cookie.Name = IdentityConstants.ExternalScheme;
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+                ? CookieSecurePolicy.SameAsRequest
+                : CookieSecurePolicy.Always;
+            options.ExpireTimeSpan = TimeSpan.FromMinutes(10);
+        })
+        .AddGoogle(options =>
+        {
+            options.ClientId = googleClientId!;
+            options.ClientSecret = googleClientSecret!;
+            options.SignInScheme = IdentityConstants.ExternalScheme;
+            // Routed under /api so the existing Vite/nginx proxy forwards it without changes.
+            options.CallbackPath = "/api/auth/signin-google";
+            options.SaveTokens = false;
+        });
+}
 builder.Services.AddAuthorization();
 
 // Trust X-Forwarded-* from ACA's ingress (TLS is terminated at the edge — the container
@@ -318,7 +327,10 @@ app.MapGet("/", () => "OctopusCosyAnalyser API is running.");
 app.MapGroup("/api/auth").MapIdentityApi<ApplicationUser>();
 
 // External (Google) sign-in — challenge + callback handlers.
-app.MapExternalAuthEndpoints();
+if (googleAuthEnabled)
+{
+    app.MapExternalAuthEndpoints();
+}
 
 // Logout endpoint — Identity API doesn't ship this for cookie auth; handle it ourselves.
 app.MapPost("/api/auth/logout", async (SignInManager<ApplicationUser> signInManager) =>
