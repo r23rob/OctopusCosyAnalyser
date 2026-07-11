@@ -204,7 +204,7 @@ public static class HeatPumpEndpoints
                     title: "Heat pump setup failed",
                     statusCode: StatusCodes.Status500InternalServerError);
             }
-        }).WithName("SetupHeatPump");
+        }).WithName("SetupHeatPump").RequireDatabase();
 
         // Get current telemetry
         group.MapGet("/telemetry/{deviceId}", async (string deviceId, IOctopusEnergyClient client, CosyDbContext db, CancellationToken ct) =>
@@ -215,7 +215,7 @@ public static class HeatPumpEndpoints
 
             var telemetry = await client.GetSmartMeterTelemetryAsync(settings!,deviceId);
             return Results.Ok(telemetry);
-        }).WithName("GetTelemetry");
+        }).WithName("GetTelemetry").RequireDatabase();
 
         // Sync historical data
         group.MapPost("/sync/{deviceId}", async (string deviceId, DateTime? from, DateTime? to,
@@ -261,7 +261,7 @@ public static class HeatPumpEndpoints
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(new { synced = readings.Count, from, to });
-        }).WithName("SyncConsumption");
+        }).WithName("SyncConsumption").RequireDatabase();
 
         // Get consumption data
         group.MapGet("/consumption/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, int? skip, int? take, CosyDbContext db, CancellationToken ct) =>
@@ -293,14 +293,14 @@ public static class HeatPumpEndpoints
                 hasMore = safeSkip + readings.Count < totalCount,
                 readings
             });
-        }).WithName("GetConsumption");
+        }).WithName("GetConsumption").RequireDatabase();
 
         // Get devices
         group.MapGet("/devices", async (CosyDbContext db, CancellationToken ct) =>
         {
             var devices = await db.HeatPumpDevices.AsNoTracking().Where(d => d.IsActive).ToListAsync(ct);
             return Results.Ok(devices);
-        }).WithName("GetDevices");
+        }).WithName("GetDevices").RequireDatabase();
 
         // Get account properties (needed for heat pump device query)
         group.MapGet("/properties/{accountNumber}", async (string accountNumber, IOctopusEnergyClient client, CosyDbContext db, CancellationToken ct) =>
@@ -319,7 +319,7 @@ public static class HeatPumpEndpoints
 
             var properties = account.Value.GetProperty("properties");
             return Results.Ok(properties);
-        }).WithName("GetProperties");
+        }).WithName("GetProperties").RequireDatabase();
 
         // Get heat pump device info
         group.MapGet("/heatpump-device/{accountNumber}/{propertyId}", async (string accountNumber, int propertyId, IOctopusEnergyClient client, CosyDbContext db, CancellationToken ct) =>
@@ -330,7 +330,7 @@ public static class HeatPumpEndpoints
 
             var heatPump = await client.GetHeatPumpDeviceAsync(settings!,accountNumber, propertyId);
             return Results.Ok(heatPump);
-        }).WithName("GetHeatPumpDevice");
+        }).WithName("GetHeatPumpDevice").RequireDatabase();
 
         // Get heat pump status
         group.MapGet("/heatpump-status", async (string accountNumber, IOctopusEnergyClient client, CosyDbContext db, CancellationToken ct) =>
@@ -341,7 +341,7 @@ public static class HeatPumpEndpoints
 
             var status = await client.GetHeatPumpStatusAsync(settings!, accountNumber);
             return Results.Ok(status);
-        }).WithName("GetHeatPumpStatus");
+        }).WithName("GetHeatPumpStatus").RequireDatabase();
 
         // Get viewer properties with heat pump device details
         group.MapGet("/heatpump-config", async (string accountNumber, IOctopusEnergyClient client, CosyDbContext db, CancellationToken ct) =>
@@ -352,7 +352,7 @@ public static class HeatPumpEndpoints
 
             var config = await client.GetViewerPropertiesWithDevicesAsync(settings!);
             return Results.Ok(config);
-        }).WithName("GetHeatPumpConfig");
+        }).WithName("GetHeatPumpConfig").RequireDatabase();
 
         // Get heat pump controller status (uses basic heatPumpStatus query)
         group.MapGet("/heatpump-controller-status", async (string accountNumber, IOctopusEnergyClient client, CosyDbContext db, CancellationToken ct) =>
@@ -363,7 +363,7 @@ public static class HeatPumpEndpoints
 
             var status = await client.GetHeatPumpStatusAsync(settings!, accountNumber);
             return Results.Ok(status);
-        }).WithName("GetHeatPumpControllerStatus");
+        }).WithName("GetHeatPumpControllerStatus").RequireDatabase();
 
         // Get heat pump variants
         group.MapGet("/heatpump-variants", async (string accountNumber, string? make, IOctopusEnergyClient client, CosyDbContext db, CancellationToken ct) =>
@@ -374,7 +374,7 @@ public static class HeatPumpEndpoints
 
             var variants = await client.GetHeatPumpVariantsAsync(settings!,make);
             return Results.Ok(variants);
-        }).WithName("GetHeatPumpVariants");
+        }).WithName("GetHeatPumpVariants").RequireDatabase();
 
         // Get complete heat pump data (COP, temperatures, performance — uses primary batched query)
         group.MapGet("/heatpump-complete/{accountNumber}/{euid}", async (string accountNumber, string euid, IOctopusGraphQLService graphqlService, CosyDbContext db, CancellationToken ct) =>
@@ -389,7 +389,7 @@ public static class HeatPumpEndpoints
 
             var data = await graphqlService.GetHeatPumpStatusAndConfigAsync(settings!, accountNumber, euid, ct);
             return Results.Ok(data);
-        }).WithName("GetHeatPumpCompleteData");
+        }).WithName("GetHeatPumpCompleteData").RequireDatabase();
 
         if (app.Environment.IsDevelopment())
         {
@@ -402,7 +402,7 @@ public static class HeatPumpEndpoints
                 var introspectionQuery = $"{{ __type(name: \"{typeName}\") {{ name kind fields {{ name args {{ name type {{ name kind ofType {{ name kind ofType {{ name kind }} }} }} defaultValue }} type {{ name kind ofType {{ name kind ofType {{ name kind }} }} }} }} }} }}";
                 var result = await client.ExecuteRawQueryAsync(settings!,introspectionQuery);
                 return Results.Ok(result);
-            }).WithName("IntrospectType");
+            }).WithName("IntrospectType").RequireDatabase();
 
             group.MapPost("/graphql", async (GraphqlQueryRequest request, IOctopusEnergyClient client, CosyDbContext db, CancellationToken ct) =>
             {
@@ -418,7 +418,7 @@ public static class HeatPumpEndpoints
 
                 var result = await client.ExecuteRawQueryAsync(settings!,request.Query, request.Variables);
                 return Results.Ok(result);
-            }).WithName("RunGraphqlQuery");
+            }).WithName("RunGraphqlQuery").RequireDatabase();
         }
 
         group.MapGet("/controller-euids/{accountNumber}", async (string accountNumber, IOctopusEnergyClient client, CosyDbContext db, CancellationToken ct) =>
@@ -429,19 +429,48 @@ public static class HeatPumpEndpoints
 
             var euids = await client.GetHeatPumpControllerEuidsAsync(settings!,accountNumber);
             return Results.Ok(euids);
-        }).WithName("GetHeatPumpControllerEuids");
+        }).WithName("GetHeatPumpControllerEuids").RequireDatabase();
 
-        group.MapGet("/summary/{deviceId}", async (string deviceId, IOctopusGraphQLService graphqlService, CosyDbContext db, CancellationToken ct) =>
+        group.MapGet("/summary/{deviceId}", async (string deviceId, IOctopusGraphQLService graphqlService, FeatureAvailability features, CosyDbContext db, CancellationToken ct) =>
         {
-            var (device, settings, error) = await GetDeviceAndSettingsAsync(db, deviceId, ct);
-            if (error is not null)
-                return error;
+            OctopusAccountSettings settings;
+            string accountNumber;
+            string euid;
 
-            if (string.IsNullOrWhiteSpace(device!.Euid))
-                return Results.Problem("EUID not found for device. Run setup first.");
+            if (features.DatabaseAvailable)
+            {
+                // Full mode: look up device and settings from DB
+                var (device, dbSettings, dbError) = await GetDeviceAndSettingsAsync(db, deviceId, ct);
+                if (dbError is not null)
+                    return dbError;
+
+                if (string.IsNullOrWhiteSpace(device!.Euid))
+                    return Results.Problem("EUID not found for device. Run setup first.");
+
+                settings = dbSettings!;
+                accountNumber = device.AccountNumber;
+                euid = device.Euid;
+            }
+            else
+            {
+                // Lite mode: use environment variable fallback credentials
+                if (!features.HasFallbackCredentials)
+                    return Results.Problem(
+                        detail: "Set OCTOPUS_ACCOUNT_NUMBER and OCTOPUS_API_KEY environment variables for lite mode.",
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+
+                if (string.IsNullOrWhiteSpace(features.FallbackEuid))
+                    return Results.Problem(
+                        detail: "Set OCTOPUS_EUID environment variable for lite mode live data.",
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+
+                settings = features.CreateFallbackSettings();
+                accountNumber = features.FallbackAccountNumber!;
+                euid = features.FallbackEuid;
+            }
 
             var response = await graphqlService.GetHeatPumpStatusAndConfigAsync(
-                settings!, device.AccountNumber, device.Euid, ct);
+                settings, accountNumber, euid, ct);
 
             if (response is null)
                 return Results.Problem("No data returned from Octopus API.");
@@ -479,7 +508,7 @@ public static class HeatPumpEndpoints
                 hasMore = safeSkip + snapshots.Count < totalCount,
                 snapshots
             });
-        }).WithName("GetHeatPumpSnapshots");
+        }).WithName("GetHeatPumpSnapshots").RequireDatabase();
 
         group.MapGet("/snapshots/{deviceId}/latest", async (string deviceId, CosyDbContext db, CancellationToken ct) =>
         {
@@ -499,7 +528,7 @@ public static class HeatPumpEndpoints
                 SnapshotTakenAt = latest.SnapshotTakenAt,
                 MinutesAgo = minutesAgo
             });
-        }).WithName("GetLatestSnapshot");
+        }).WithName("GetLatestSnapshot").RequireDatabase();
 
         group.MapGet("/time-ranged/{accountNumber}/{euid}", async (string accountNumber, string euid, DateTime? from, DateTime? to, IOctopusGraphQLService graphqlService, CosyDbContext db, CancellationToken ct) =>
         {
@@ -521,7 +550,7 @@ public static class HeatPumpEndpoints
                 to,
                 data
             });
-        }).WithName("GetHeatPumpTimeRangedPerformance");
+        }).WithName("GetHeatPumpTimeRangedPerformance").RequireDatabase();
 
         // ── Time Series – Persisted (DB) ──────────────────────────────
 
@@ -567,7 +596,7 @@ public static class HeatPumpEndpoints
                     r.OutdoorTemperatureCelsius
                 })
             });
-        }).WithName("GetStoredTimeSeries");
+        }).WithName("GetStoredTimeSeries").RequireDatabase();
 
         group.MapPost("/sync-timeseries/{deviceId}", async (string deviceId, DateTime? from, DateTime? to,
             IOctopusGraphQLService graphqlService, CosyDbContext db, ILoggerFactory loggerFactory, CancellationToken ct) =>
@@ -632,7 +661,7 @@ public static class HeatPumpEndpoints
             }
 
             return Results.Ok(new { synced, skipped = 0, from, to });
-        }).WithName("SyncTimeSeries");
+        }).WithName("SyncTimeSeries").RequireDatabase();
 
         // ── Controllers at Location (Multi-HP) ────────────────────────
 
@@ -645,7 +674,7 @@ public static class HeatPumpEndpoints
             var data = await graphqlService.GetHeatPumpControllersAtLocationAsync(
                 settings!, accountNumber, propertyId, ct);
             return Results.Ok(data);
-        }).WithName("GetControllersAtLocation");
+        }).WithName("GetControllersAtLocation").RequireDatabase();
 
         // ── Applicable Rates (Tariff) ─────────────────────────────────
 
@@ -678,7 +707,7 @@ public static class HeatPumpEndpoints
                 data = root,
                 errors
             });
-        }).WithName("GetApplicableRates");
+        }).WithName("GetApplicableRates").RequireDatabase();
 
         // ── Cost of Usage ─────────────────────────────────────────────
 
@@ -710,7 +739,7 @@ public static class HeatPumpEndpoints
                 data = root,
                 errors
             });
-        }).WithName("GetCostOfUsage");
+        }).WithName("GetCostOfUsage").RequireDatabase();
 
         // ── Stored Cost Data (from background sync) ─────────────────
 
@@ -742,7 +771,7 @@ public static class HeatPumpEndpoints
                 totalDays = records.Count,
                 records
             });
-        }).WithName("GetStoredCostData");
+        }).WithName("GetStoredCostData").RequireDatabase();
 
         // ── Period Summary (server-side aggregation) ────────────────
 
@@ -883,7 +912,7 @@ public static class HeatPumpEndpoints
             };
 
             return Results.Ok(summary);
-        }).WithName("GetPeriodSummary");
+        }).WithName("GetPeriodSummary").RequireDatabase();
 
         // ── Daily Aggregates ─────────────────────────────────────────
 
@@ -915,7 +944,7 @@ public static class HeatPumpEndpoints
                 days = aggregates.Count,
                 aggregates
             });
-        }).WithName("GetDailyAggregates");
+        }).WithName("GetDailyAggregates").RequireDatabase();
 
         // ── AI Analysis ──────────────────────────────────────────────
 
@@ -1173,7 +1202,7 @@ public static class HeatPumpEndpoints
                 TotalTimeSeriesRecords = timeSeriesRecords.Count,
                 CostDataStatus = costDataStatus
             });
-        }).WithName("GetAiAnalysis");
+        }).WithName("GetAiAnalysis").RequireDatabase();
 
         // AI Dashboard Summary (auto-cached 30 min, reuses daily aggregate pipeline)
         group.MapGet("/ai-summary/{deviceId}", async (string deviceId, IAiAnalysisService aiService, CosyDbContext db, CancellationToken ct) =>
@@ -1185,7 +1214,7 @@ public static class HeatPumpEndpoints
             var anthropicKey = settings?.AnthropicApiKey;
             var summary = await aiService.GenerateDashboardSummaryAsync(deviceId, anthropicApiKey: anthropicKey);
             return Results.Ok(summary);
-        }).WithName("GetAiSummary");
+        }).WithName("GetAiSummary").RequireDatabase();
 
         group.MapGet("/ai-summary/{deviceId}/refresh", async (string deviceId, IAiAnalysisService aiService, CosyDbContext db, CancellationToken ct) =>
         {
@@ -1196,7 +1225,7 @@ public static class HeatPumpEndpoints
             var anthropicKey = settings?.AnthropicApiKey;
             var summary = await aiService.GenerateDashboardSummaryAsync(deviceId, forceRefresh: true, anthropicApiKey: anthropicKey);
             return Results.Ok(summary);
-        }).WithName("RefreshAiSummary");
+        }).WithName("RefreshAiSummary").RequireDatabase();
 
         // ── Energy Intervals ──────────────────────────────────────────
 
@@ -1236,7 +1265,7 @@ public static class HeatPumpEndpoints
                 .ToListAsync(ct);
 
             return Results.Ok(intervals);
-        }).WithName("GetEnergyIntervals");
+        }).WithName("GetEnergyIntervals").RequireDatabase();
 
         group.MapGet("/energy-summary/{deviceId}", async (string deviceId, DateTime? from, DateTime? to, string? grouping, CosyDbContext db, CancellationToken ct) =>
         {
@@ -1318,7 +1347,7 @@ public static class HeatPumpEndpoints
                 Grouping = grouping,
                 Periods = periods
             });
-        }).WithName("GetEnergySummary");
+        }).WithName("GetEnergySummary").RequireDatabase();
     }
 
     private static DateTime GetWeekStart(DateTime date)

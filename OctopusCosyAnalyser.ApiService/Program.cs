@@ -23,13 +23,40 @@ var isRunOnceMode = workerJobName is not null;
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
 
+// Detect whether a real database connection is available.
+// When no connection string is configured the API runs in "lite mode":
+// live data from the Octopus API still works, but history, snapshots,
+// settings persistence, and background workers are disabled.
+var connectionString = builder.Configuration.GetConnectionString("cosydb");
+var databaseAvailable = !string.IsNullOrWhiteSpace(connectionString);
+
+var features = new FeatureAvailability
+{
+    DatabaseAvailable = databaseAvailable,
+    FallbackAccountNumber = builder.Configuration["OCTOPUS_ACCOUNT_NUMBER"],
+    FallbackApiKey = builder.Configuration["OCTOPUS_API_KEY"],
+    FallbackEuid = builder.Configuration["OCTOPUS_EUID"],
+};
+builder.Services.AddSingleton(features);
+
 // Add PostgreSQL DbContext.
 // Maximum Pool Size=10 keeps each replica well under the connection ceiling of small
 // managed Postgres tiers (Azure Flex B1ms ≈ 50 conns; Cloud SQL smallest ≈ 25).
+// In lite mode (no connection string), a dummy connection string is injected so DI
+// resolution works — all DB access is guarded by FeatureAvailability at the endpoint level.
 builder.AddNpgsqlDbContext<CosyDbContext>("cosydb", configureSettings: settings =>
 {
-    if (!string.IsNullOrEmpty(settings.ConnectionString) &&
-        !settings.ConnectionString.Contains("Maximum Pool Size", StringComparison.OrdinalIgnoreCase))
+    if (string.IsNullOrEmpty(settings.ConnectionString))
+    {
+        // Lite mode: provide a parseable connection string so Npgsql registration
+        // succeeds. No connection is ever opened — endpoints return 503 before
+        // any DB call is made.
+        settings.ConnectionString = "Host=localhost;Port=0;Database=lite_mode_unused";
+        settings.DisableHealthChecks = true;
+        settings.DisableTracing = true;
+        settings.DisableMetrics = true;
+    }
+    else if (!settings.ConnectionString.Contains("Maximum Pool Size", StringComparison.OrdinalIgnoreCase))
     {
         settings.ConnectionString += ";Maximum Pool Size=10";
     }
@@ -57,10 +84,14 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 // Data Protection — encrypts auth cookies and any IDataProtector-protected payloads.
-// Persisted to the DB so keys survive container restarts and scale-to-zero on ACA.
-builder.Services.AddDataProtection()
-    .PersistKeysToDbContext<CosyDbContext>()
+// When a database is available, keys are persisted to PostgreSQL so they survive
+// container restarts. In lite mode, the default filesystem persistence is used.
+var dataProtection = builder.Services.AddDataProtection()
     .SetApplicationName("OctopusCosyAnalyser");
+if (databaseAvailable)
+{
+    dataProtection.PersistKeysToDbContext<CosyDbContext>();
+}
 
 // Secret protection for Octopus / Anthropic credentials at rest.
 builder.Services.AddSingleton<ISecretProtector, SecretProtector>();
@@ -159,23 +190,28 @@ builder.Services.AddSingleton<IHeatPumpDataService, HeatPumpDataService>();
 builder.Services.AddScoped<ITariffSyncService, TariffSyncService>();
 
 // Worker registration:
+//   - Workers require the database for reading devices and writing snapshots/time-series.
+//     In lite mode they are skipped entirely.
 //   - Long-running mode (the API container): each worker runs as a HostedService on its
 //     internal interval.
 //   - Run-once mode (--run-worker-once <name>, used by ACA Jobs): the worker class is
 //     resolved as a transient service so we can call its run-once entry point and exit.
-if (isRunOnceMode)
+if (databaseAvailable)
 {
-    builder.Services.AddTransient<HeatPumpSnapshotWorker>();
-    builder.Services.AddTransient<HeatPumpTimeSeriesSyncWorker>();
-    builder.Services.AddTransient<CostDataSyncWorker>();
-    builder.Services.AddTransient<EnergyIntervalWorker>();
-}
-else
-{
-    builder.Services.AddHostedService<HeatPumpSnapshotWorker>();
-    builder.Services.AddHostedService<HeatPumpTimeSeriesSyncWorker>();
-    builder.Services.AddHostedService<CostDataSyncWorker>();
-    builder.Services.AddHostedService<EnergyIntervalWorker>();
+    if (isRunOnceMode)
+    {
+        builder.Services.AddTransient<HeatPumpSnapshotWorker>();
+        builder.Services.AddTransient<HeatPumpTimeSeriesSyncWorker>();
+        builder.Services.AddTransient<CostDataSyncWorker>();
+        builder.Services.AddTransient<EnergyIntervalWorker>();
+    }
+    else
+    {
+        builder.Services.AddHostedService<HeatPumpSnapshotWorker>();
+        builder.Services.AddHostedService<HeatPumpTimeSeriesSyncWorker>();
+        builder.Services.AddHostedService<CostDataSyncWorker>();
+        builder.Services.AddHostedService<EnergyIntervalWorker>();
+    }
 }
 
 // Add services to the container.
@@ -186,9 +222,10 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// Auto-migrate database on startup
-using (var scope = app.Services.CreateScope())
+// Auto-migrate database on startup (skip in lite mode — no real DB to migrate).
+if (databaseAvailable)
 {
+    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     try
@@ -202,8 +239,20 @@ using (var scope = app.Services.CreateScope())
         throw;
     }
 }
+else
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogInformation("Running in lite mode — no database configured. "
+        + "Live data from Octopus API is available; history/snapshots/settings require PostgreSQL.");
+}
 
 // ── Run-once worker mode (for ACA Jobs / cron runners) ───────────────────────
+if (isRunOnceMode && !databaseAvailable)
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogCritical("--run-worker-once requires a database connection. Set ConnectionStrings__cosydb.");
+    return 1;
+}
 if (isRunOnceMode)
 {
     using var scope = app.Services.CreateScope();
@@ -244,6 +293,15 @@ app.MapGet("/api/auth/me", () => Results.Ok(new
     email = "Rob@hutchin.co.uk",
 }));
 
+
+// Feature availability — the PWA calls this on load to know what to show/hide.
+app.MapGet("/api/features", (FeatureAvailability f) => Results.Ok(new
+{
+    database = f.DatabaseAvailable,
+    history = f.History,
+    efficiency = f.Efficiency,
+    liveData = f.LiveData,
+})).WithName("GetFeatures");
 
 app.MapHeatPumpEndpoints();
 app.MapAccountSettingsEndpoints();

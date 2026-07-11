@@ -13,17 +13,47 @@ public static class StatusEndpoints
     {
         app.MapGet("/api/status", async (
             CosyDbContext db,
+            FeatureAvailability features,
             IOctopusEnergyClient octopusClient,
             IOptions<AnthropicOptions> anthropicOptions,
             CancellationToken ct) =>
         {
-            // Status returns the current user's account state — no need to scope by hand,
-            // the global query filter already does it.
+            var dto = new ApiStatusDto { CheckedAt = DateTime.UtcNow };
+
+            // In lite mode, report status based on environment variable credentials.
+            if (!features.DatabaseAvailable)
+            {
+                dto.HasSettings = features.HasFallbackCredentials;
+                dto.AccountNumber = features.FallbackAccountNumber;
+                dto.AuthMode = "apikey";
+
+                dto.OctopusCredentialsConfigured = features.HasFallbackCredentials;
+                if (features.HasFallbackCredentials)
+                {
+                    var fallbackSettings = features.CreateFallbackSettings();
+                    var (ok, error) = await octopusClient.ValidateCredentialsAsync(fallbackSettings, ct);
+                    dto.OctopusAuthOk = ok;
+                    dto.OctopusAuthError = error;
+                }
+                else
+                {
+                    dto.OctopusAuthOk = false;
+                    dto.OctopusAuthError = "Running in lite mode without database. "
+                        + "Set OCTOPUS_ACCOUNT_NUMBER and OCTOPUS_API_KEY environment variables for live data.";
+                }
+
+                dto.AnthropicConfigured = !string.IsNullOrWhiteSpace(anthropicOptions.Value.ApiKey);
+                dto.AnthropicKeySource = dto.AnthropicConfigured ? "config" : null;
+                dto.HasDevice = !string.IsNullOrWhiteSpace(features.FallbackEuid);
+
+                return Results.Ok(dto);
+            }
+
+            // Full mode: query the database for account state.
+            // The global query filter scopes to the current user automatically.
             var settings = await db.OctopusAccountSettings
                 .OrderBy(s => s.Id)
                 .FirstOrDefaultAsync(ct);
-
-            var dto = new ApiStatusDto { CheckedAt = DateTime.UtcNow };
 
             if (settings is null)
             {

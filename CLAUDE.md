@@ -1,8 +1,8 @@
-# OctopusCosyAnalyser — Project Context
+# Cosydays — Project Context
 
 ## Purpose
 
-A personal heat pump monitoring dashboard for Octopus Energy Cosy heat pump customers. The goal is a simple, clear view of how your heat pump is running — efficiency, power, temperatures, and energy use — with the long-term aim of passing this data through AI to suggest improvements (e.g. whether weather compensation curve adjustments would help).
+A personal heat pump monitoring dashboard for Octopus Energy Cosy heat pump customers (branded **Cosydays**). The goal is a simple, clear view of how your heat pump is running — efficiency, power, temperatures, and energy use — with the long-term aim of passing this data through AI to suggest improvements (e.g. whether weather compensation curve adjustments would help).
 
 **Core question the app answers:** Is my heat pump running efficiently, and did any changes I made improve it?
 
@@ -41,20 +41,24 @@ OctopusCosyAnalyser/
 │   ├── Workers/HeatPumpSnapshotWorker.cs # 30-min background data collector
 │   ├── Migrations/                     # EF Core migrations
 │   └── Program.cs                      # Service registration + route mapping
-├── OctopusCosyAnalyser.Web/            # (Legacy Blazor — no longer deployed)
-├── octopus-cosy-web/                   # React 19 SPA frontend
+├── octopus-cosy-web/                   # React 19 SPA frontend (Cosydays UI)
 │   ├── src/
 │   │   ├── components/                 # Reusable UI components
 │   │   │   ├── charts/                 # Recharts-based chart components
 │   │   │   ├── dashboard/              # Dashboard widget cards
-│   │   │   ├── layout/                 # AppLayout, NavBar
-│   │   │   └── shared/                 # LoadingSpinner, ErrorAlert, etc.
-│   │   ├── hooks/                      # Custom React hooks
+│   │   │   ├── layout/                 # AppLayout, NavBar, BottomTabs
+│   │   │   ├── onboarding/            # Onboarding wizard steps
+│   │   │   ├── settings/              # Settings page components
+│   │   │   └── shared/                 # LoadingSpinner, ErrorAlert, FeatureGate, etc.
+│   │   ├── hooks/                      # Custom React hooks (use-features, use-dashboard, etc.)
 │   │   ├── lib/                        # api-client, query-keys, utils
 │   │   ├── routes/                     # TanStack Router file-based routes
 │   │   │   ├── __root.tsx              # Root layout
-│   │   │   ├── settings.tsx            # Settings page
-│   │   │   └── heatpump/              # Heat pump pages
+│   │   │   ├── index.tsx               # Home (dashboard)
+│   │   │   ├── history.tsx             # History page
+│   │   │   ├── compare.tsx             # Compare page
+│   │   │   ├── more.tsx                # More/Settings page
+│   │   │   └── onboarding.tsx          # First-run setup wizard
 │   │   └── types/                      # TypeScript type definitions (api.ts)
 │   ├── vite.config.ts                  # Vite + React plugin + Tailwind
 │   └── package.json
@@ -100,6 +104,15 @@ Follow this 4-layer pattern:
 | `HeatPumpEfficiencyRecords` | Manual daily records for efficiency tracking |
 
 Unique constraints prevent duplicate snapshots `(DeviceId, SnapshotTakenAt)` and consumption readings `(DeviceId, ReadAt)`.
+
+### Optional Database (Lite Mode)
+
+PostgreSQL is optional — the API runs in "lite mode" without a database connection:
+- **With DB**: full functionality — snapshot history, efficiency records, device registration, background worker
+- **Without DB**: live Octopus API queries work (summary, time-series, time-ranged), but no snapshot history, no efficiency records, no device persistence
+- **Environment variable fallback** for credentials (no DB needed): `OCTOPUS_ACCOUNT_NUMBER`, `OCTOPUS_API_KEY`, `OCTOPUS_EUID`
+- `GET /api/features` endpoint reports which capabilities are available (database, snapshots, efficiency, etc.)
+- Frontend uses the `useFeatures()` hook (`hooks/use-features.ts`) and `FeatureGate` component (`components/shared/FeatureGate.tsx`) for conditional rendering based on available features
 
 ## Octopus Energy API
 
@@ -183,12 +196,14 @@ TanStack Router file-based routing in `octopus-cosy-web/src/routes/`:
 
 | Page | Route | Shows |
 |------|-------|-------|
-| Dashboard | `/heatpump` | Current status overview, trend chart, COP gauge, room temps, power, efficiency |
-| Data Explorer | `/heatpump/data` | Daily aggregates table + CSV export |
-| Scatter Plot | `/heatpump/scatter` | COP vs outdoor temperature scatter analysis |
-| Settings | `/settings` | Octopus API credentials (account number + API key) |
+| Home | `/` | Current status, COP gauge, metrics, trends |
+| History | `/history` | Daily aggregates, temperature charts, COP scatter |
+| Compare | `/compare` | Two-period efficiency comparison |
+| More/Settings | `/more` | Account credentials, device info, system status |
+| Onboarding | `/onboarding` | First-run setup wizard |
+| AI Analysis | `/ai` | Claude-powered heat pump insights |
 
-Navigation: top navbar on desktop (`sm:flex`), fixed bottom tab bar on mobile (`sm:hidden`).
+Navigation: bottom tabs (Home / History / Compare / More) on mobile, left rail on desktop.
 Route tree auto-generated by TanStack Router plugin (`routeTree.gen.ts`).
 
 ## Efficiency Analysis
@@ -301,7 +316,9 @@ These were in the original design but not yet built:
 
 - **SQLite → PostgreSQL**: original design used SQLite for simplicity; switched to PostgreSQL for robustness and easier long-term analytics
 - **Separate Collector + API → combined ApiService**: original design had a dedicated collector Worker Service project; merged into a single `ApiService` with a background `HeatPumpSnapshotWorker` for simplicity
-- **Blazor → React 19 + Vite**: migrated from Blazor Server to a React SPA for richer UI capabilities; the old Blazor project remains in-tree but is no longer deployed
+- **Blazor → React 19 + Vite**: migrated from Blazor Server to a React SPA for richer UI capabilities; the old Blazor project has been removed from the tree
+- **Cosydays rebrand**: the dashboard was rebranded from "OctopusCosyAnalyser" to "Cosydays" as the user-facing product name; solution/project names remain OctopusCosyAnalyser
+- **Optional PostgreSQL**: the API runs in "lite mode" without a database — live Octopus API queries work, but snapshot history and efficiency records are unavailable. This allows zero-config first use with environment variable credentials
 - **30-minute snapshot interval**: aligns with Octopus's underlying half-hourly telemetry cadence and keeps API call volume reasonable
 - **Manual efficiency records**: added as a pragmatic workaround while automatic daily cost/COP rollups are not yet implemented — lets the user track their own observations and make before/after comparisons manually
 - **Aspire for dev orchestration**: used for local development only (AppHost project); production runs via plain Docker Compose
@@ -349,7 +366,7 @@ These were in the original design but not yet built:
 ### Navigation & Responsive Design
 - Use **TanStack Router** file-based routing; route tree auto-generated
 - **Mobile-first**: design for mobile viewport first, enhance for larger screens
-- Bottom tab bar on mobile (`sm:hidden fixed bottom-0`), top navbar on desktop (`hidden sm:flex`)
+- Bottom tab bar on mobile (Home / History / Compare / More), left rail navigation on desktop
 - Use Tailwind responsive breakpoints (`sm:`, `md:`, `lg:`) — always specify mobile styles first
 - Use responsive grid patterns: `grid-cols-1 md:grid-cols-2 lg:grid-cols-3`
 - Touch-friendly: minimum 44px tap targets on interactive elements
@@ -370,9 +387,9 @@ These were in the original design but not yet built:
 - No manual `loading/error/data` state triplets for async calls — use TanStack Query
 
 ## Heat Pump Dashboard
-- Design: heat_pump_v7.html — do not change fonts (JetBrains Mono + Instrument Sans),
+- Do not change fonts (JetBrains Mono + Instrument Sans),
   colours (cyan #06B6D4 accent, near-black ink), or layout structure
-- Data source: PostgreSQL via existing OctopusCosyAnalyser connection
+- Data source: PostgreSQL via existing OctopusCosyAnalyser connection (optional — see "Optional Database" below)
 - AI analysis card calls Anthropic API — keep that wiring intact
 
 ## UI Standards (apply to all React routes)
@@ -386,7 +403,7 @@ These were in the original design but not yet built:
   so number columns don't jitter. Sans-serif numeric displays should add the
   `tabular-nums` utility class when columns of digits need to align (KPI cards, tables).
 - **Minimum readable sizes**: dashboard widgets may use `text-[10px]–text-[12px]`
-  for tertiary labels (per heat_pump_v7), but everything else (data tables, settings,
+  for tertiary labels, but everything else (data tables, settings,
   scatter, page headings) must be **at least 12px**, scaling to 13px on `md:`.
 - Page titles use `text-xl font-semibold tracking-tight`.
 - Body copy uses `text-sm` (14px) or `text-[13px]`.

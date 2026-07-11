@@ -28,15 +28,15 @@ export function PeriodSelector({ periodType, onPeriodChange, label, subtitle, on
 
       <div className="flex items-center gap-2.5">
         {/* Period pills */}
-        <div className="flex bg-white border border-border-card rounded-[9px] p-[3px] gap-0.5">
+        <div className="flex bg-bg-surface border border-border-subtle rounded-[var(--radius-pill)] p-[3px] gap-0.5">
           {PERIODS.map(({ type, label: lbl }) => (
             <button
               key={type}
               onClick={() => onPeriodChange(type)}
-              className={`font-mono text-[12px] tracking-[.07em] uppercase px-[16px] py-[7px] rounded-[6px] border-none cursor-pointer transition-all duration-150 ${
+              className={`font-mono text-[12px] tracking-[.07em] uppercase px-[16px] py-[7px] rounded-[var(--radius-pill)] border-none cursor-pointer transition-all duration-150 ${
                 periodType === type
-                  ? 'bg-ink text-white'
-                  : 'bg-transparent text-ink3 hover:text-ink'
+                  ? 'bg-purple text-white'
+                  : 'bg-transparent text-ink2 hover:text-ink'
               }`}
             >
               {lbl}

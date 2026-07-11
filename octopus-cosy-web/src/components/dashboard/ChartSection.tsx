@@ -15,12 +15,12 @@ interface TrendSeriesItem {
 }
 
 const TREND_SERIES: TrendSeriesItem[] = [
-  { key: 'powerInputKilowatt', label: 'kW in', color: '#F97316', yAxisId: 'left' },
-  { key: 'heatOutputKilowatt', label: 'kW out', color: '#06B6D4', yAxisId: 'left' },
-  { key: 'coefficientOfPerformance', label: 'COP', color: '#16A34A', yAxisId: 'left' },
-  { key: 'outdoorTemperatureCelsius', label: 'Outside °C', color: '#8B5CF6', yAxisId: 'right' },
-  { key: 'heatingFlowTemperatureCelsius', label: 'Flow °C', color: '#D97706', yAxisId: 'right' },
-  { key: 'heatingZoneSetpointCelsius', label: 'Setpoint', color: '#D97706', yAxisId: 'right', dash: '4 3' },
+  { key: 'powerInputKilowatt', label: 'kW in', color: 'var(--chart-1)', yAxisId: 'left' },
+  { key: 'heatOutputKilowatt', label: 'kW out', color: 'var(--cyan-accent)', yAxisId: 'left' },
+  { key: 'coefficientOfPerformance', label: 'COP', color: 'var(--chart-3)', yAxisId: 'left' },
+  { key: 'outdoorTemperatureCelsius', label: 'Outside °C', color: 'var(--chart-4)', yAxisId: 'right' },
+  { key: 'heatingFlowTemperatureCelsius', label: 'Flow °C', color: 'var(--chart-5)', yAxisId: 'right' },
+  { key: 'heatingZoneSetpointCelsius', label: 'Setpoint', color: 'var(--chart-5)', yAxisId: 'right', dash: '4 3' },
 ]
 
 interface Props {
@@ -45,7 +45,7 @@ export function ChartSection({ snapshots, isLoading }: Props) {
   }
 
   return (
-    <div className="bg-white border border-border-subtle rounded-[10px] p-5 hover:border-border-card transition-colors duration-150">
+    <div className="bg-bg-card border border-border-subtle rounded-[var(--radius-lg)] p-5 hover:border-border-card transition-colors duration-150">
       <div className="flex justify-between items-start mb-2.5 gap-2">
         <div className="font-mono text-[11px] tracking-[.1em] uppercase text-ink3">
           Energy · COP · Temperature · Setpoint

@@ -14,15 +14,15 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Octopus Heat Pump',
-        short_name: 'Octopus Heat Pump',
+        name: 'Cosydays',
+        short_name: 'Cosydays',
         description: 'Heat pump efficiency dashboard for Octopus Energy Cosy customers.',
         theme_color: '#09090B',
         background_color: '#F8F8F9',
         display: 'standalone',
         orientation: 'any',
         scope: '/',
-        start_url: '/heatpump',
+        start_url: '/',
         categories: ['utilities', 'productivity'],
         icons: [
           { src: '/pwa-192.png', sizes: '192x192', type: 'image/png' },

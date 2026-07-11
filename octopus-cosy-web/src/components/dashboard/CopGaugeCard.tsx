@@ -13,12 +13,12 @@ export function CopGaugeCard({ cop, flowTemp, setpointTemp }: Props) {
 
   const spDelta = flowTemp != null && setpointTemp != null ? +(flowTemp - setpointTemp).toFixed(1) : null
   const spColor = spDelta != null
-    ? Math.abs(spDelta) > 4 ? '#F87171' : Math.abs(spDelta) > 2 ? '#FCD34D' : '#4ADE80'
-    : 'rgba(255,255,255,0.3)'
+    ? Math.abs(spDelta) > 4 ? 'var(--cop-poor)' : Math.abs(spDelta) > 2 ? 'var(--cop-ok)' : 'var(--cop-good)'
+    : 'var(--color-ink4)'
 
   return (
-    <div className="bg-ink rounded-[10px] p-6 flex flex-col items-center">
-      <div className="font-mono text-[11px] tracking-[.1em] uppercase text-white/20 self-start mb-0.5">
+    <div className="bg-bg-card border border-border-subtle rounded-[var(--radius-lg)] p-6 flex flex-col items-center hover:border-border-card transition-colors duration-150">
+      <div className="font-mono text-[11px] tracking-[.1em] uppercase text-ink3 self-start mb-0.5">
         Avg COP
       </div>
       <GaugeSvg cop={cop ?? 0} color={clr} />
@@ -27,15 +27,15 @@ export function CopGaugeCard({ cop, flowTemp, setpointTemp }: Props) {
       </div>
       <div
         className={`font-mono text-[11px] tracking-[.08em] uppercase mt-1.5 px-[9px] py-[3px] rounded ${
-          cls === 'g' ? 'bg-[rgba(22,163,74,0.18)] text-[#4ADE80]'
-          : cls === 'w' ? 'bg-[rgba(217,119,6,0.18)] text-[#FCD34D]'
-          : 'bg-[rgba(220,38,38,0.18)] text-[#F87171]'
+          cls === 'g' ? 'bg-success-bg text-cop-good'
+          : cls === 'w' ? 'bg-warning-bg text-cop-ok'
+          : 'bg-danger-bg text-cop-poor'
         }`}
       >
         {label}
       </div>
-      <div className="flex justify-between items-center self-stretch mt-2.5 px-2.5 py-[7px] bg-white/[0.06] rounded-[7px]">
-        <span className="font-mono text-[11px] tracking-[.07em] uppercase text-white/30">Flow vs setpoint</span>
+      <div className="flex justify-between items-center self-stretch mt-2.5 px-2.5 py-[7px] bg-bg-surface rounded-[var(--radius-md)]">
+        <span className="font-mono text-[11px] tracking-[.07em] uppercase text-ink3">Flow vs setpoint</span>
         <span className="font-mono text-[16px]" style={{ color: spColor }}>
           {spDelta != null ? `${spDelta > 0 ? '+' : ''}${spDelta}°` : '—'}
         </span>
@@ -66,15 +66,15 @@ function GaugeSvg({ cop, color }: { cop: number; color: string }) {
       {/* Background arcs */}
       <path
         d={`M${x1},${y1} A${r},${r} 0 0,1 ${b2x.toFixed(1)},${b2y.toFixed(1)}`}
-        stroke="rgba(248,113,113,0.13)" strokeWidth="11" fill="none"
+        stroke="rgba(220,38,38,0.10)" strokeWidth="11" fill="none"
       />
       <path
         d={`M${b2x.toFixed(1)},${b2y.toFixed(1)} A${r},${r} 0 0,1 ${b3x.toFixed(1)},${b3y.toFixed(1)}`}
-        stroke="rgba(252,211,77,0.13)" strokeWidth="11" fill="none"
+        stroke="rgba(217,119,6,0.10)" strokeWidth="11" fill="none"
       />
       <path
         d={`M${b3x.toFixed(1)},${b3y.toFixed(1)} A${r},${r} 0 0,1 ${b4x.toFixed(1)},${b4y.toFixed(1)}`}
-        stroke="rgba(6,182,212,0.13)" strokeWidth="11" fill="none"
+        stroke="rgba(22,163,74,0.10)" strokeWidth="11" fill="none"
       />
       {/* Active arc */}
       <path
@@ -83,8 +83,8 @@ function GaugeSvg({ cop, color }: { cop: number; color: string }) {
         stroke={color} strokeWidth="11" fill="none" strokeLinecap="round"
       />
       {/* Scale labels */}
-      <text x="14" y="105" fill="rgba(255,255,255,0.18)" fontSize="10.5" fontFamily="JetBrains Mono, monospace">1</text>
-      <text x="190" y="105" fill="rgba(255,255,255,0.18)" fontSize="10.5" fontFamily="JetBrains Mono, monospace">5</text>
+      <text x="14" y="105" fill="#D4D4D8" fontSize="10.5" fontFamily="JetBrains Mono, monospace">1</text>
+      <text x="190" y="105" fill="#D4D4D8" fontSize="10.5" fontFamily="JetBrains Mono, monospace">5</text>
     </svg>
   )
 }

@@ -19,12 +19,6 @@
       "runtimeArgs": ["run", "dev"],
       "port": 5173,
       "cwd": "octopus-cosy-web"
-    },
-    {
-      "name": "blazor-web",
-      "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "OctopusCosyAnalyser.Web"],
-      "port": 5165
     }
   ]
 }

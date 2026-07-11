@@ -11,14 +11,14 @@ interface Props {
 
 export function MetricsStrip({ periodSummary: p, previousPeriodSummary: prev, vsLabel = '', hero = false }: Props) {
   const gridClass = hero
-    ? 'grid grid-cols-1 sm:grid-cols-2 gap-3'
-    : 'grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3'
+    ? 'bg-gradient-to-br from-aurora-deep to-aurora-mid rounded-[var(--radius-xl)] p-5 grid grid-cols-1 sm:grid-cols-2 gap-3'
+    : 'bg-gradient-to-br from-aurora-deep to-aurora-mid rounded-[var(--radius-xl)] p-5 grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3'
 
   if (!p) {
     return (
       <div className={gridClass}>
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-[132px] rounded-[10px] bg-white border border-border-subtle animate-pulse" />
+          <div key={i} className="h-[132px] rounded-[var(--radius-lg)] bg-white/[0.07] animate-pulse" />
         ))}
       </div>
     )
@@ -84,33 +84,33 @@ function KpiCard({ label, unit, current, previous, higherIsBetter, vsLabel = '',
 
   return (
     <div
-      className="animate-up bg-white border border-border-subtle rounded-[10px] px-[18px] pt-[18px] pb-4 hover:border-border-card transition-colors duration-150 flex flex-col gap-2 min-h-[132px]"
+      className="animate-up bg-white/[0.07] backdrop-blur-sm rounded-[var(--radius-lg)] px-[18px] pt-[18px] pb-4 transition-colors duration-150 flex flex-col gap-2 min-h-[132px]"
       style={{ animationDelay: `${delay}s` }}
     >
-      <div className="font-mono text-[12px] tracking-[.1em] uppercase text-ink3">{label}</div>
-      <div className="font-mono text-[32px] font-normal tracking-tight leading-none text-ink">
+      <div className="font-mono text-[12px] tracking-[.1em] uppercase text-white/40">{label}</div>
+      <div className="font-mono text-[32px] font-normal tracking-tight leading-none text-white">
         {value}
-        {unit && unit !== '°C' && <span className="text-[16px] font-light text-ink3 ml-[3px]">{unit}</span>}
-        {unit === '°C' && <span className="text-[20px] font-light text-ink3">°C</span>}
+        {unit && unit !== '°C' && <span className="text-[16px] font-light text-white/40 ml-[3px]">{unit}</span>}
+        {unit === '°C' && <span className="text-[20px] font-light text-white/40">°C</span>}
       </div>
 
       {hasPrev ? (
         <div className="flex flex-col gap-[2px] mt-auto">
           <span
             className={`self-start font-mono text-[12px] px-2 py-[3px] rounded whitespace-nowrap ${
-              isGood ? 'bg-success-bg text-success' : 'bg-danger-bg text-danger'
+              isGood ? 'bg-[rgba(22,163,74,0.18)] text-[#4ADE80]' : 'bg-[rgba(220,38,38,0.18)] text-[#F87171]'
             }`}
           >
             {`${isUp ? '↑' : '↓'} ${formatAbsDelta(absDelta as number, unit)}${
               pctDelta != null ? ` (${Math.abs(pctDelta).toFixed(0)}%)` : ''
             }`}
           </span>
-          <span className="font-mono text-ink3 text-[11px] tracking-[.02em]">
+          <span className="font-mono text-white/30 text-[11px] tracking-[.02em]">
             was {formatPrevValue(previous as number, unit)} {vsLabel}
           </span>
         </div>
       ) : (
-        <span className="font-mono text-ink3 text-[11px] mt-auto">No prior period</span>
+        <span className="font-mono text-white/30 text-[11px] mt-auto">No prior period</span>
       )}
     </div>
   )
