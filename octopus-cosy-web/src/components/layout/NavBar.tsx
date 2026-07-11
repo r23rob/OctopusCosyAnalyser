@@ -1,11 +1,16 @@
-import { Link } from '@tanstack/react-router'
-import { LayoutDashboard, ScatterChart, Table2, Sparkles, Settings, Columns2 } from 'lucide-react'
-import { useAiDrawer } from './AiDrawerContext'
+import { Link, useMatchRoute, useRouterState } from '@tanstack/react-router'
+import { Home, Clock, GitCompare, MoreHorizontal } from 'lucide-react'
 import { useApiStatus } from '@/hooks/use-api-status'
 import { useDevice } from '@/hooks/use-device'
 import { useLatestSnapshot } from '@/hooks/use-dashboard'
 
-type ConnectionState = { color: 'success' | 'warning' | 'danger' | 'ink3'; label: string; title: string }
+/* ── connection status ──────────────────────────────────────────────── */
+
+type ConnectionState = {
+  color: 'success' | 'warning' | 'danger' | 'ink3'
+  label: string
+  title: string
+}
 
 function connectionState(
   status: ReturnType<typeof useApiStatus>['data'],
@@ -34,107 +39,163 @@ const COLOR_CLASSES: Record<ConnectionState['color'], { text: string; bg: string
   ink3:    { text: 'text-ink3',    bg: 'bg-bg-surface', border: 'border-border-subtle',           dot: 'bg-ink3',    pulse: false },
 }
 
-export function NavBar() {
-  const { toggle } = useAiDrawer()
+function useConnectionStatus() {
   const { data: status, isLoading: statusLoading } = useApiStatus()
   const { device } = useDevice()
   const { latest } = useLatestSnapshot(device?.deviceId)
   const conn = connectionState(status, statusLoading, latest?.minutesAgo)
   const colors = COLOR_CLASSES[conn.color]
+  return { conn, colors }
+}
+
+/* ── nav items ──────────────────────────────────────────────────────── */
+
+interface NavItem {
+  to: '/' | '/history' | '/compare' | '/more'
+  icon: typeof Home
+  label: string
+  exact: boolean
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { to: '/', icon: Home, label: 'Home', exact: true },
+  { to: '/history', icon: Clock, label: 'History', exact: false },
+  { to: '/compare', icon: GitCompare, label: 'Compare', exact: false },
+  { to: '/more', icon: MoreHorizontal, label: 'More', exact: false },
+]
+
+/* ── page title ─────────────────────────────────────────────────────── */
+
+function usePageTitle(): string {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const titles: Record<string, string> = {
+    '/': 'Home',
+    '/history': 'History',
+    '/compare': 'Compare',
+    '/more': 'More',
+  }
+  return titles[pathname] ?? 'Home'
+}
+
+/* ── Top bar (both viewports) ──────────────────────────────────────── */
+
+export function TopBar() {
+  const title = usePageTitle()
+  const { conn, colors } = useConnectionStatus()
+
   return (
-    <>
-      {/* Top nav bar */}
-      <nav className="sticky top-0 z-[200] h-[64px] bg-white/88 backdrop-blur-[18px] border-b border-[rgba(0,0,0,0.07)] flex items-center px-4 sm:px-[26px] gap-3">
-        {/* Brand */}
-        <div className="flex items-center gap-2.5 flex-shrink-0">
-          <div className="w-[28px] h-[28px] rounded-[7px] bg-ink flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 11 11" fill="none">
-              <path d="M5.5.5C4 2 2 3.3 2 6.3C2 8.8 3.7 10.5 5.5 10.5C7.3 10.5 9 8.8 9 6.3C9 3.3 7 2 5.5.5Z" fill="white" opacity=".88"/>
-              <circle cx="5.5" cy="7" r="1.3" fill="white" opacity=".38"/>
-            </svg>
-          </div>
-          <span className="text-[17px] font-semibold tracking-tight whitespace-nowrap hidden sm:inline">Octopus Heat Pump</span>
-          <span className="text-[15px] font-semibold tracking-tight whitespace-nowrap sm:hidden">Octopus</span>
+    <header className="sticky top-0 z-[200] h-12 bg-white/88 backdrop-blur-[18px] border-b border-border-subtle flex items-center px-4 md:px-6">
+      <h1 className="text-[15px] font-semibold tracking-tight">{title}</h1>
+      <div className="ml-auto">
+        <div
+          title={conn.title}
+          className={`flex items-center gap-[7px] font-mono text-[11px] tracking-[.05em] px-2.5 py-[5px] rounded-full border ${colors.text} ${colors.bg} ${colors.border} font-medium`}
+        >
+          <div className={`w-[6px] h-[6px] rounded-full ${colors.dot} ${colors.pulse ? 'pulse' : ''}`} />
+          {conn.label.toUpperCase()}
         </div>
-
-        {/* Center nav pills (desktop) */}
-        <div className="hidden lg:flex items-center gap-[3px] mx-auto bg-bg-surface border border-border-subtle rounded-[11px] p-1">
-          <NavPill to="/heatpump" icon={<LayoutDashboard size={15} />} label="Dashboard" exact />
-          <NavPill to="/heatpump/compare" icon={<Columns2 size={15} />} label="Compare" />
-          <NavPill to="/heatpump/scatter" icon={<ScatterChart size={15} />} label="Scatter" />
-          <NavPill to="/heatpump/data" icon={<Table2 size={15} />} label="Data" />
-        </div>
-
-        {/* Right section */}
-        <div className="flex items-center gap-2.5 flex-shrink-0 ml-auto lg:ml-0">
-          <button
-            onClick={toggle}
-            className="hidden sm:inline-flex items-center gap-[7px] h-[38px] px-[14px] rounded-[8px] border border-border-subtle bg-white cursor-pointer text-[13px] font-medium text-ink hover:border-border-card transition-all duration-150 whitespace-nowrap"
-          >
-            <Sparkles size={14} />
-            <span>AI Analysis</span>
-          </button>
-          <button
-            onClick={toggle}
-            className="sm:hidden w-[38px] h-[38px] rounded-[8px] flex items-center justify-center text-ink2 hover:bg-bg-surface transition-colors"
-            aria-label="AI Analysis"
-          >
-            <Sparkles size={16} />
-          </button>
-          <Link
-            to="/settings"
-            className="w-[38px] h-[38px] rounded-[8px] flex items-center justify-center text-ink3 hover:bg-bg-surface hover:text-ink transition-all duration-150"
-            activeProps={{ className: 'bg-bg-surface text-ink' }}
-          >
-            <Settings size={16} />
-          </Link>
-          <div
-            title={conn.title}
-            className={`hidden sm:flex items-center gap-[7px] font-mono text-[12px] tracking-[.05em] px-3 py-[6px] rounded-full border ${colors.text} ${colors.bg} ${colors.border} font-medium`}
-          >
-            <div className={`w-[7px] h-[7px] rounded-full ${colors.dot} ${colors.pulse ? 'pulse' : ''}`} />
-            {conn.label}
-          </div>
-        </div>
-      </nav>
-
-      {/* Mobile bottom tab bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[200] h-14 bg-white/95 backdrop-blur-[18px] border-t border-[rgba(0,0,0,0.07)] flex items-center justify-around px-2 pb-[env(safe-area-inset-bottom)]">
-        <MobileTab to="/heatpump" icon={<LayoutDashboard size={20} />} label="Dashboard" exact />
-        <MobileTab to="/heatpump/compare" icon={<Columns2 size={20} />} label="Compare" />
-        <MobileTab to="/heatpump/scatter" icon={<ScatterChart size={20} />} label="Scatter" />
-        <MobileTab to="/heatpump/data" icon={<Table2 size={20} />} label="Data" />
       </div>
-    </>
+    </header>
   )
 }
 
-function NavPill({ to, icon, label, exact }: { to: string; icon: React.ReactNode; label: string; exact?: boolean }) {
+/* ── Desktop left rail (md: and above) ─────────────────────────────── */
+
+export function LeftRail() {
+  return (
+    <nav className="hidden md:flex flex-col w-[72px] min-w-[72px] h-screen sticky top-0 bg-white border-r border-border-subtle z-[200]">
+      {/* Brand — aligned with top bar height */}
+      <div className="flex items-center justify-center h-12 border-b border-border-subtle shrink-0">
+        <span className="text-[11px] font-semibold tracking-tight text-ink2">
+          cosydays
+        </span>
+      </div>
+
+      {/* Nav items */}
+      <div className="flex flex-col items-center gap-1 pt-3 flex-1">
+        {NAV_ITEMS.map((item) => (
+          <RailItem key={item.to} {...item} />
+        ))}
+      </div>
+    </nav>
+  )
+}
+
+function RailItem({ to, icon: Icon, label, exact }: NavItem) {
+  const matchRoute = useMatchRoute()
+  const isActive = !!matchRoute({ to, fuzzy: !exact })
+
   return (
     <Link
       to={to}
-      activeOptions={exact ? { exact: true } : undefined}
-      className="h-[38px] px-[14px] rounded-[7px] inline-flex items-center gap-[7px] cursor-pointer text-ink3 hover:text-ink border border-transparent transition-all duration-150 text-[13px] font-medium whitespace-nowrap"
-      activeProps={{
-        className: 'bg-white text-ink border-[rgba(0,0,0,0.07)] shadow-[0_1px_4px_rgba(0,0,0,0.08)] [&>svg]:text-primary',
-      }}
+      className="group relative flex items-center justify-center w-full py-0.5"
     >
-      {icon}
-      {label}
+      <div
+        className={`w-11 h-11 rounded-[10px] flex items-center justify-center transition-colors duration-[var(--dur-base)] ${
+          isActive ? 'bg-purple-bg' : 'hover:bg-bg-surface'
+        }`}
+      >
+        <Icon
+          size={20}
+          className={`transition-colors duration-[var(--dur-base)] ${
+            isActive ? 'text-purple' : 'text-ink3 group-hover:text-ink'
+          }`}
+        />
+      </div>
+      {/* Tooltip on hover */}
+      <span className="absolute left-[calc(100%+4px)] px-2.5 py-1.5 rounded-md bg-ink text-white text-[11px] font-medium whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-[var(--dur-fast)] z-[300] shadow-lg">
+        {label}
+      </span>
     </Link>
   )
 }
 
-function MobileTab({ to, icon, label, exact }: { to: string; icon: React.ReactNode; label: string; exact?: boolean }) {
+/* ── Mobile bottom tabs (below md:) ────────────────────────────────── */
+
+export function BottomTabs() {
+  return (
+    <nav
+      className="md:hidden fixed bottom-0 left-0 right-0 z-[200] bg-white border-t border-border-subtle flex items-center justify-around"
+      style={{
+        height: 'calc(56px + env(safe-area-inset-bottom, 0px))',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      }}
+    >
+      {NAV_ITEMS.map((item) => (
+        <MobileTab key={item.to} {...item} />
+      ))}
+    </nav>
+  )
+}
+
+function MobileTab({ to, icon: Icon, label, exact }: NavItem) {
+  const matchRoute = useMatchRoute()
+  const isActive = !!matchRoute({ to, fuzzy: !exact })
+
   return (
     <Link
       to={to}
-      activeOptions={exact ? { exact: true } : undefined}
-      className="flex flex-col items-center gap-0.5 text-ink3 transition-colors flex-1 min-h-[44px] justify-center"
-      activeProps={{ className: 'text-primary' }}
+      className="flex flex-col items-center justify-center gap-0.5 flex-1 min-h-[44px]"
     >
-      {icon}
-      <span className="font-mono text-[10px] tracking-[.05em] uppercase">{label}</span>
+      <div
+        className={`flex items-center justify-center w-10 h-7 rounded-full transition-colors duration-[var(--dur-base)] ${
+          isActive ? 'bg-purple-bg' : ''
+        }`}
+      >
+        <Icon
+          size={20}
+          className={`transition-colors duration-[var(--dur-base)] ${
+            isActive ? 'text-purple' : 'text-ink3'
+          }`}
+        />
+      </div>
+      <span
+        className={`text-[10px] font-medium tracking-[.03em] transition-colors duration-[var(--dur-base)] ${
+          isActive ? 'text-purple' : 'text-ink3'
+        }`}
+      >
+        {label}
+      </span>
     </Link>
   )
 }

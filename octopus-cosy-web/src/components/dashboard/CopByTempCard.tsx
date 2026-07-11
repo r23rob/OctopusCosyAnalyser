@@ -26,7 +26,7 @@ export function CopByTempCard({ snapshots }: Props) {
   }).filter(r => r.count > 0), [snapshots])
 
   return (
-    <div className="bg-white border border-border-subtle rounded-[10px] p-5 hover:border-border-card transition-colors duration-150">
+    <div className="bg-bg-card border border-border-subtle rounded-[var(--radius-lg)] p-5 hover:border-border-card transition-colors duration-150">
       <div className="font-mono text-[11px] tracking-[.1em] uppercase text-ink3 mb-[5px]">COP by outdoor temp</div>
 
       <table className="w-full border-collapse mt-0.5">
@@ -42,8 +42,8 @@ export function CopByTempCard({ snapshots }: Props) {
             const pct = r.actual ? (r.actual / 5) * 100 : 0
             const inRange = r.actual != null && r.actual >= r.exp[0] && r.actual <= r.exp[1]
             const clr = r.actual == null
-              ? '#A1A1AA'
-              : inRange ? '#16A34A' : r.actual < r.exp[0] ? '#DC2626' : '#06B6D4'
+              ? 'var(--text-muted)'
+              : inRange ? 'var(--cop-good)' : r.actual < r.exp[0] ? 'var(--cop-poor)' : 'var(--cyan-accent)'
 
             return (
               <tr key={r.label}>

@@ -444,3 +444,12 @@ export interface EnergySummaryResponseDto {
   grouping: string
   periods: EnergySummaryDto[]
 }
+
+// ── Feature Availability ─────────────────────────────────────────────
+
+export interface FeatureAvailability {
+  database: boolean
+  history: boolean
+  efficiency: boolean
+  liveData: boolean
+}

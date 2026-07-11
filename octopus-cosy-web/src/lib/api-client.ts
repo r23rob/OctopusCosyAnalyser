@@ -9,6 +9,7 @@ import type {
   DailyAggregateDto,
   EnergyIntervalDto,
   EnergySummaryResponseDto,
+  FeatureAvailability,
   HeatPumpDeviceDto,
   HeatPumpSnapshotDto,
   HeatPumpSummaryDto,
@@ -134,6 +135,18 @@ function parseStoredTimeSeriesJson(json: string): TimeSeriesResult {
 // ── API client ────────────────────────────────────────────────────────
 
 export const api = {
+  // Feature availability
+  features: {
+    getAvailability: async (): Promise<FeatureAvailability> => {
+      const res = await fetch('/api/features', FETCH_INIT)
+      if (!res.ok) {
+        // If the endpoint doesn't exist (old API), assume full features
+        return { database: true, history: true, efficiency: true, liveData: true }
+      }
+      return res.json() as Promise<FeatureAvailability>
+    },
+  },
+
   // Connection / API status
   status: {
     get: () => get<ApiStatusDto>('/api/status'),

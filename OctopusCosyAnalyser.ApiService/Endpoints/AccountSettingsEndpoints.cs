@@ -19,7 +19,7 @@ public static class AccountSettingsEndpoints
                 .ToListAsync(ct);
 
             return Results.Ok(settings.Select(ToDto).ToArray());
-        }).WithName("GetAccountSettings");
+        }).WithName("GetAccountSettings").RequireDatabase();
 
         group.MapGet("/{accountNumber}", async (string accountNumber, CosyDbContext db, CancellationToken ct) =>
         {
@@ -29,7 +29,7 @@ public static class AccountSettingsEndpoints
             return settings is null
                 ? Results.NotFound("Account settings not found")
                 : Results.Ok(ToDto(settings));
-        }).WithName("GetAccountSettingsByAccount");
+        }).WithName("GetAccountSettingsByAccount").RequireDatabase();
 
         group.MapPut("", async (
             AccountSettingsRequest request,
@@ -115,7 +115,7 @@ public static class AccountSettingsEndpoints
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(ToDto(settings));
-        }).WithName("UpsertAccountSettings");
+        }).WithName("UpsertAccountSettings").RequireDatabase();
     }
 
     private static AccountSettingsDto ToDto(OctopusAccountSettings s) => new()

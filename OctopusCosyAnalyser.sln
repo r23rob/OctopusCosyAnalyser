@@ -11,8 +11,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OctopusCosyAnalyser.ApiServ
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OctopusCosyAnalyser.Tests", "OctopusCosyAnalyser.Tests\OctopusCosyAnalyser.Tests.csproj", "{65BCCE1B-3AE8-48C4-9355-75745E9FEA38}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OctopusCosyAnalyser.Web", "OctopusCosyAnalyser.Web\OctopusCosyAnalyser.Web.csproj", "{85AA207C-8261-432D-B7E9-C524BA174611}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OctopusCosyAnalyser.Shared", "OctopusCosyAnalyser.Shared\OctopusCosyAnalyser.Shared.csproj", "{7173CB4C-FF5E-49FD-B0ED-8EEF405EF7C6}"
 EndProject
 Global
@@ -73,18 +71,6 @@ Global
 		{65BCCE1B-3AE8-48C4-9355-75745E9FEA38}.Release|x64.Build.0 = Release|Any CPU
 		{65BCCE1B-3AE8-48C4-9355-75745E9FEA38}.Release|x86.ActiveCfg = Release|Any CPU
 		{65BCCE1B-3AE8-48C4-9355-75745E9FEA38}.Release|x86.Build.0 = Release|Any CPU
-		{85AA207C-8261-432D-B7E9-C524BA174611}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{85AA207C-8261-432D-B7E9-C524BA174611}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{85AA207C-8261-432D-B7E9-C524BA174611}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{85AA207C-8261-432D-B7E9-C524BA174611}.Debug|x64.Build.0 = Debug|Any CPU
-		{85AA207C-8261-432D-B7E9-C524BA174611}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{85AA207C-8261-432D-B7E9-C524BA174611}.Debug|x86.Build.0 = Debug|Any CPU
-		{85AA207C-8261-432D-B7E9-C524BA174611}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{85AA207C-8261-432D-B7E9-C524BA174611}.Release|Any CPU.Build.0 = Release|Any CPU
-		{85AA207C-8261-432D-B7E9-C524BA174611}.Release|x64.ActiveCfg = Release|Any CPU
-		{85AA207C-8261-432D-B7E9-C524BA174611}.Release|x64.Build.0 = Release|Any CPU
-		{85AA207C-8261-432D-B7E9-C524BA174611}.Release|x86.ActiveCfg = Release|Any CPU
-		{85AA207C-8261-432D-B7E9-C524BA174611}.Release|x86.Build.0 = Release|Any CPU
 		{7173CB4C-FF5E-49FD-B0ED-8EEF405EF7C6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{7173CB4C-FF5E-49FD-B0ED-8EEF405EF7C6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7173CB4C-FF5E-49FD-B0ED-8EEF405EF7C6}.Debug|x64.ActiveCfg = Debug|Any CPU

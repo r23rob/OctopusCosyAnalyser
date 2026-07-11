@@ -13,7 +13,7 @@ interface Props {
 export function RoomTempsCard({ rooms }: Props) {
   if (rooms.length === 0) {
     return (
-      <div className="bg-white border border-border-subtle rounded-[10px] p-5 flex-1">
+      <div className="bg-bg-card border border-border-subtle rounded-[var(--radius-lg)] p-5 flex-1 hover:border-border-card transition-colors duration-150">
         <div className="font-mono text-[11px] tracking-[.1em] uppercase text-ink3 mb-2.5">Room temperatures</div>
         <div className="text-[14px] text-ink3">No sensor data</div>
       </div>
@@ -24,7 +24,7 @@ export function RoomTempsCard({ rooms }: Props) {
   const span = 14
 
   return (
-    <div className="bg-white border border-border-subtle rounded-[10px] p-5 flex-1">
+    <div className="bg-bg-card border border-border-subtle rounded-[var(--radius-lg)] p-5 flex-1 hover:border-border-card transition-colors duration-150">
       <div className="font-mono text-[11px] tracking-[.1em] uppercase text-ink3 mb-2.5">Room temperatures</div>
       {rooms.map((r) => {
         const pv = ((r.avg - tMin) / span * 100).toFixed(1)
@@ -32,11 +32,11 @@ export function RoomTempsCard({ rooms }: Props) {
         const pmax = ((r.max - tMin) / span * 100).toFixed(1)
         const pvlo = ((r.avg - r.variance - tMin) / span * 100).toFixed(1)
         const pvhi = ((r.avg + r.variance - tMin) / span * 100).toFixed(1)
-        const clr = r.avg < 18 ? '#60A5FA' : r.avg > 23 ? '#F87171' : '#06B6D4'
+        const clr = r.avg < 18 ? '#60A5FA' : r.avg > 23 ? '#F87171' : 'var(--purple)'
 
         return (
           <div key={r.name} className="flex items-start gap-2 mb-[11px] last:mb-0">
-            <div className="font-mono text-[11px] tracking-[.07em] uppercase text-ink3 w-[54px] pt-[5px]">
+            <div className="font-mono text-[11px] tracking-[.07em] uppercase text-ink2 w-[54px] pt-[5px]">
               {r.name}
             </div>
             <div className="flex-1">
@@ -44,12 +44,12 @@ export function RoomTempsCard({ rooms }: Props) {
                 {/* Full range */}
                 <div
                   className="absolute h-full rounded-[3px]"
-                  style={{ left: `${pmin}%`, width: `${parseFloat(pmax) - parseFloat(pmin)}%`, background: 'rgba(6,182,212,0.07)' }}
+                  style={{ left: `${pmin}%`, width: `${parseFloat(pmax) - parseFloat(pmin)}%`, background: 'rgba(124,58,237,0.07)' }}
                 />
                 {/* Variance range */}
                 <div
                   className="absolute h-full rounded-[3px]"
-                  style={{ left: `${pvlo}%`, width: `${parseFloat(pvhi) - parseFloat(pvlo)}%`, background: 'rgba(6,182,212,0.22)' }}
+                  style={{ left: `${pvlo}%`, width: `${parseFloat(pvhi) - parseFloat(pvlo)}%`, background: 'rgba(124,58,237,0.15)' }}
                 />
                 {/* Current dot */}
                 <div

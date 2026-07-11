@@ -9,16 +9,36 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as MoreRouteImport } from './routes/more'
+import { Route as HistoryRouteImport } from './routes/history'
+import { Route as CompareRouteImport } from './routes/compare'
+import { Route as AiRouteImport } from './routes/ai'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as HeatpumpIndexRouteImport } from './routes/heatpump/index'
-import { Route as HeatpumpScatterRouteImport } from './routes/heatpump/scatter'
-import { Route as HeatpumpDataRouteImport } from './routes/heatpump/data'
-import { Route as HeatpumpCompareRouteImport } from './routes/heatpump/compare'
 
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MoreRoute = MoreRouteImport.update({
+  id: '/more',
+  path: '/more',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompareRoute = CompareRouteImport.update({
+  id: '/compare',
+  path: '/compare',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AiRoute = AiRouteImport.update({
+  id: '/ai',
+  path: '/ai',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -26,95 +46,91 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const HeatpumpIndexRoute = HeatpumpIndexRouteImport.update({
-  id: '/heatpump/',
-  path: '/heatpump/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HeatpumpScatterRoute = HeatpumpScatterRouteImport.update({
-  id: '/heatpump/scatter',
-  path: '/heatpump/scatter',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HeatpumpDataRoute = HeatpumpDataRouteImport.update({
-  id: '/heatpump/data',
-  path: '/heatpump/data',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HeatpumpCompareRoute = HeatpumpCompareRouteImport.update({
-  id: '/heatpump/compare',
-  path: '/heatpump/compare',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/settings': typeof SettingsRoute
-  '/heatpump/compare': typeof HeatpumpCompareRoute
-  '/heatpump/data': typeof HeatpumpDataRoute
-  '/heatpump/scatter': typeof HeatpumpScatterRoute
-  '/heatpump/': typeof HeatpumpIndexRoute
+  '/ai': typeof AiRoute
+  '/compare': typeof CompareRoute
+  '/history': typeof HistoryRoute
+  '/more': typeof MoreRoute
+  '/onboarding': typeof OnboardingRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/settings': typeof SettingsRoute
-  '/heatpump/compare': typeof HeatpumpCompareRoute
-  '/heatpump/data': typeof HeatpumpDataRoute
-  '/heatpump/scatter': typeof HeatpumpScatterRoute
-  '/heatpump': typeof HeatpumpIndexRoute
+  '/ai': typeof AiRoute
+  '/compare': typeof CompareRoute
+  '/history': typeof HistoryRoute
+  '/more': typeof MoreRoute
+  '/onboarding': typeof OnboardingRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/settings': typeof SettingsRoute
-  '/heatpump/compare': typeof HeatpumpCompareRoute
-  '/heatpump/data': typeof HeatpumpDataRoute
-  '/heatpump/scatter': typeof HeatpumpScatterRoute
-  '/heatpump/': typeof HeatpumpIndexRoute
+  '/ai': typeof AiRoute
+  '/compare': typeof CompareRoute
+  '/history': typeof HistoryRoute
+  '/more': typeof MoreRoute
+  '/onboarding': typeof OnboardingRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/settings'
-    | '/heatpump/compare'
-    | '/heatpump/data'
-    | '/heatpump/scatter'
-    | '/heatpump/'
+  fullPaths: '/' | '/ai' | '/compare' | '/history' | '/more' | '/onboarding'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/settings'
-    | '/heatpump/compare'
-    | '/heatpump/data'
-    | '/heatpump/scatter'
-    | '/heatpump'
+  to: '/' | '/ai' | '/compare' | '/history' | '/more' | '/onboarding'
   id:
     | '__root__'
     | '/'
-    | '/settings'
-    | '/heatpump/compare'
-    | '/heatpump/data'
-    | '/heatpump/scatter'
-    | '/heatpump/'
+    | '/ai'
+    | '/compare'
+    | '/history'
+    | '/more'
+    | '/onboarding'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  SettingsRoute: typeof SettingsRoute
-  HeatpumpCompareRoute: typeof HeatpumpCompareRoute
-  HeatpumpDataRoute: typeof HeatpumpDataRoute
-  HeatpumpScatterRoute: typeof HeatpumpScatterRoute
-  HeatpumpIndexRoute: typeof HeatpumpIndexRoute
+  AiRoute: typeof AiRoute
+  CompareRoute: typeof CompareRoute
+  HistoryRoute: typeof HistoryRoute
+  MoreRoute: typeof MoreRoute
+  OnboardingRoute: typeof OnboardingRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/more': {
+      id: '/more'
+      path: '/more'
+      fullPath: '/more'
+      preLoaderRoute: typeof MoreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/compare': {
+      id: '/compare'
+      path: '/compare'
+      fullPath: '/compare'
+      preLoaderRoute: typeof CompareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ai': {
+      id: '/ai'
+      path: '/ai'
+      fullPath: '/ai'
+      preLoaderRoute: typeof AiRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -124,44 +140,16 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/heatpump/': {
-      id: '/heatpump/'
-      path: '/heatpump'
-      fullPath: '/heatpump/'
-      preLoaderRoute: typeof HeatpumpIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/heatpump/scatter': {
-      id: '/heatpump/scatter'
-      path: '/heatpump/scatter'
-      fullPath: '/heatpump/scatter'
-      preLoaderRoute: typeof HeatpumpScatterRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/heatpump/data': {
-      id: '/heatpump/data'
-      path: '/heatpump/data'
-      fullPath: '/heatpump/data'
-      preLoaderRoute: typeof HeatpumpDataRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/heatpump/compare': {
-      id: '/heatpump/compare'
-      path: '/heatpump/compare'
-      fullPath: '/heatpump/compare'
-      preLoaderRoute: typeof HeatpumpCompareRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  SettingsRoute: SettingsRoute,
-  HeatpumpCompareRoute: HeatpumpCompareRoute,
-  HeatpumpDataRoute: HeatpumpDataRoute,
-  HeatpumpScatterRoute: HeatpumpScatterRoute,
-  HeatpumpIndexRoute: HeatpumpIndexRoute,
+  AiRoute: AiRoute,
+  CompareRoute: CompareRoute,
+  HistoryRoute: HistoryRoute,
+  MoreRoute: MoreRoute,
+  OnboardingRoute: OnboardingRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -18,19 +18,19 @@ export function EfficiencySplitCard({ snapshots }: Props) {
   const pLo = Math.round(lo / tot * 100)
 
   return (
-    <div className="bg-white border border-border-subtle rounded-[10px] p-5 hover:border-border-card transition-colors duration-150">
+    <div className="bg-bg-card border border-border-subtle rounded-[var(--radius-lg)] p-5 hover:border-border-card transition-colors duration-150">
       <div className="font-mono text-[11px] tracking-[.1em] uppercase text-ink3 mb-[5px]">Efficiency split</div>
 
       <div className="flex gap-1.5 mb-2">
-        <span className="font-mono text-[11px] px-[8px] py-[4px] rounded bg-success-bg text-success">Good {pHi}%</span>
-        <span className="font-mono text-[11px] px-[8px] py-[4px] rounded bg-warning-bg text-warning">OK {pMid}%</span>
-        <span className="font-mono text-[11px] px-[8px] py-[4px] rounded bg-danger-bg text-danger">Low {pLo}%</span>
+        <span className="font-mono text-[11px] px-[8px] py-[4px] rounded bg-success-bg text-cop-good">Good {pHi}%</span>
+        <span className="font-mono text-[11px] px-[8px] py-[4px] rounded bg-warning-bg text-cop-ok">OK {pMid}%</span>
+        <span className="font-mono text-[11px] px-[8px] py-[4px] rounded bg-danger-bg text-cop-poor">Low {pLo}%</span>
       </div>
 
       <div className="h-2.5 bg-bg-elevated rounded flex overflow-hidden gap-0.5 mb-2">
-        {pHi > 0 && <div className="h-full rounded-l bg-success transition-all duration-400" style={{ width: `${pHi}%` }} />}
-        {pMid > 0 && <div className="h-full bg-warning transition-all duration-400" style={{ width: `${pMid}%` }} />}
-        {pLo > 0 && <div className="h-full rounded-r bg-danger transition-all duration-400" style={{ width: `${pLo}%` }} />}
+        {pHi > 0 && <div className="h-full rounded-l bg-cop-good transition-all duration-400" style={{ width: `${pHi}%` }} />}
+        {pMid > 0 && <div className="h-full bg-cop-ok transition-all duration-400" style={{ width: `${pMid}%` }} />}
+        {pLo > 0 && <div className="h-full rounded-r bg-cop-poor transition-all duration-400" style={{ width: `${pLo}%` }} />}
       </div>
 
       <div className="font-mono text-[11px] text-ink3 leading-[1.6]">
