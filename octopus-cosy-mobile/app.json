@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Cosydays",
+    "slug": "cosydays",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "cosydays",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8F8F9"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cosydays.app",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#09090B"
+      },
+      "package": "com.cosydays.app"
+    },
+    "plugins": ["expo-router", "expo-secure-store"]
+  }
+}
