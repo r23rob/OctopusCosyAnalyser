@@ -79,6 +79,10 @@ yarn-error.log
 *.temp
 ~*
 
+# CDK
+infra/aws/cdk.out/
+infra/aws/cdk-outputs.json
+
 # Claude Code worktrees
 .claude/worktrees/
 

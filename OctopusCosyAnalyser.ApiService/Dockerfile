@@ -9,7 +9,6 @@ RUN dotnet tool restore
 
 # Restore dependencies first for better layer caching
 COPY ["OctopusCosyAnalyser.ApiService/OctopusCosyAnalyser.ApiService.csproj", "OctopusCosyAnalyser.ApiService/"]
-COPY ["OctopusCosyAnalyser.ServiceDefaults/OctopusCosyAnalyser.ServiceDefaults.csproj", "OctopusCosyAnalyser.ServiceDefaults/"]
 COPY ["OctopusCosyAnalyser.Shared/OctopusCosyAnalyser.Shared.csproj", "OctopusCosyAnalyser.Shared/"]
 RUN dotnet restore "OctopusCosyAnalyser.ApiService/OctopusCosyAnalyser.ApiService.csproj" \
     -r "linux-$(echo "$TARGETARCH" | sed 's/amd64/x64/')"

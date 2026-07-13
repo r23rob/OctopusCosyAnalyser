@@ -1,7 +1,10 @@
+using Amazon.Lambda.AspNetCoreServer.Hosting;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Http.Resilience;
+using OctopusCosyAnalyser.ApiService;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Endpoints;
 using OctopusCosyAnalyser.ApiService.Options;
@@ -12,17 +15,25 @@ using OctopusCosyAnalyser.ApiService.Services.GraphQL;
 using OctopusCosyAnalyser.ApiService.Services.SecretProtection;
 using OctopusCosyAnalyser.ApiService.Workers;
 
+// ── Lambda worker mode ──────────────────────────────────────────────────────
+// When LAMBDA_WORKER_MODE is set, this container image serves as the
+// EventBridge-triggered worker instead of the API.
+if (Environment.GetEnvironmentVariable("LAMBDA_WORKER_MODE") == "true")
+{
+    await WorkerLambdaHandler.RunAsync();
+    return 0;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Run-once mode: when invoked with --run-worker-once <name>, the host runs the named worker
-// once and exits. Used by Azure Container Apps Jobs (or any cron runner) so the same image
+// once and exits. Used by container jobs (or any cron runner) so the same image
 // serves both the long-lived API and the scheduled background work.
 var workerJobName = ResolveWorkerJobName(args);
 var isRunOnceMode = workerJobName is not null;
+var isLambda = Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME") is not null;
 
-// Add service defaults & Aspire client integrations.
-builder.AddServiceDefaults();
-
+// ── Database ────────────────────────────────────────────────────────────────
 // Detect whether a real database connection is available.
 // When no connection string is configured the API runs in "lite mode":
 // live data from the Octopus API still works, but history, snapshots,
@@ -39,31 +50,24 @@ var features = new FeatureAvailability
 };
 builder.Services.AddSingleton(features);
 
-// Add PostgreSQL DbContext.
-// Maximum Pool Size=10 keeps each replica well under the connection ceiling of small
-// managed Postgres tiers (Azure Flex B1ms ≈ 50 conns; Cloud SQL smallest ≈ 25).
-// In lite mode (no connection string), a dummy connection string is injected so DI
-// resolution works — all DB access is guarded by FeatureAvailability at the endpoint level.
-builder.AddNpgsqlDbContext<CosyDbContext>("cosydb", configureSettings: settings =>
+// PostgreSQL via standard Npgsql EF Core provider.
+// Maximum Pool Size kept low for Lambda (each instance gets its own pool).
+if (databaseAvailable)
 {
-    if (string.IsNullOrEmpty(settings.ConnectionString))
-    {
-        // Lite mode: provide a parseable connection string so Npgsql registration
-        // succeeds. No connection is ever opened — endpoints return 503 before
-        // any DB call is made.
-        settings.ConnectionString = "Host=localhost;Port=0;Database=lite_mode_unused";
-        settings.DisableHealthChecks = true;
-        settings.DisableTracing = true;
-        settings.DisableMetrics = true;
-    }
-    else if (!settings.ConnectionString.Contains("Maximum Pool Size", StringComparison.OrdinalIgnoreCase))
-    {
-        settings.ConnectionString += ";Maximum Pool Size=10";
-    }
-});
+    var pooledConnectionString = connectionString!.Contains("Maximum Pool Size", StringComparison.OrdinalIgnoreCase)
+        ? connectionString
+        : connectionString + ";Maximum Pool Size=5";
+
+    builder.Services.AddDbContext<CosyDbContext>(options =>
+        options.UseNpgsql(pooledConnectionString));
+}
+else
+{
+    builder.Services.AddDbContext<CosyDbContext>(options =>
+        options.UseNpgsql("Host=localhost;Port=0;Database=lite_mode_unused"));
+}
 
 // Current-user accessor — returns a fixed user for all requests (auth disabled).
-// Workers iterate all tenants' devices via IgnoreQueryFilters().
 if (isRunOnceMode)
 {
     builder.Services.AddSingleton<ICurrentUserAccessor, SystemCurrentUserAccessor>();
@@ -73,9 +77,7 @@ else
     builder.Services.AddSingleton<ICurrentUserAccessor, HttpContextCurrentUserAccessor>();
 }
 
-// Trust X-Forwarded-* from ACA's ingress (TLS is terminated at the edge — the container
-// sees HTTP). Without this, IsHttps is false, redirect URLs are http://, and cookie
-// SecurePolicy decisions are wrong.
+// Trust X-Forwarded-* from CloudFront / reverse proxies.
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -84,8 +86,6 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 // Data Protection — encrypts auth cookies and any IDataProtector-protected payloads.
-// When a database is available, keys are persisted to PostgreSQL so they survive
-// container restarts. In lite mode, the default filesystem persistence is used.
 var dataProtection = builder.Services.AddDataProtection()
     .SetApplicationName("OctopusCosyAnalyser");
 if (databaseAvailable)
@@ -93,7 +93,6 @@ if (databaseAvailable)
     dataProtection.PersistKeysToDbContext<CosyDbContext>();
 }
 
-// Secret protection for Octopus / Anthropic credentials at rest.
 builder.Services.AddSingleton<ISecretProtector, SecretProtector>();
 
 // Bind configuration sections
@@ -106,11 +105,7 @@ builder.Configuration.GetSection(AnthropicOptions.SectionName).Bind(anthropicOpt
 builder.Services.Configure<OctopusApiOptions>(builder.Configuration.GetSection(OctopusApiOptions.SectionName));
 builder.Services.Configure<AnthropicOptions>(builder.Configuration.GetSection(AnthropicOptions.SectionName));
 
-// CORS — when the SPA is hosted from a separate origin (Front Door / Static Web App
-// in production), allow credentialed requests from configured allowed origins.
-//
-// Cors:AllowedOrigins is a comma-separated string (so Bicep can pass a single env var)
-// or an array. Empty/whitespace entries are filtered so an unset value cleanly disables CORS.
+// CORS — when the SPA is hosted from a separate origin, allow credentialed requests.
 var allowedSpaOrigins = (builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
         ?? new[] { builder.Configuration["Cors:AllowedOrigins"] ?? string.Empty })
     .SelectMany(o => (o ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -122,7 +117,6 @@ builder.Services.AddCors(options =>
     {
         if (allowedSpaOrigins.Length == 0)
         {
-            // No origins configured — assume same-origin deployment (nginx proxy / single container).
             policy.SetIsOriginAllowed(_ => false);
         }
         else
@@ -135,8 +129,8 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Add Octopus Energy API client with extended timeouts for large queries
-// Paginated queries (e.g. applicableRates, sync-timeseries) may make many sequential API calls
+// ── HTTP clients ────────────────────────────────────────────────────────────
+
 builder.Services.AddHttpClient<IOctopusEnergyClient, OctopusEnergyClient>()
     .ConfigureHttpClient(client => client.Timeout = octopusOptions.HttpTimeout)
     .AddStandardResilienceHandler(options =>
@@ -146,7 +140,6 @@ builder.Services.AddHttpClient<IOctopusEnergyClient, OctopusEnergyClient>()
         options.CircuitBreaker.SamplingDuration = octopusOptions.CircuitBreakerSamplingDuration;
     });
 
-// Add ZeroQL-based typed GraphQL service for backend API (heat pump queries)
 builder.Services.AddSingleton<IOctopusTokenService, OctopusTokenService>();
 builder.Services.AddTransient<OctopusAuthHandler>();
 builder.Services.AddHttpClient<OctopusGraphQLClient>(client =>
@@ -163,40 +156,28 @@ builder.Services.AddHttpClient<OctopusGraphQLClient>(client =>
     });
 builder.Services.AddScoped<IOctopusGraphQLService, OctopusGraphQLService>();
 
-// Add AI services
-// API key can come from DB (Account Settings) or from config/env var as fallback
+// AI services
 var anthropicKey = anthropicOptions.ApiKey;
-
-// Detailed AI analysis service (raw HTTP client for full CSV-based analysis)
 builder.Services.AddHttpClient<IAiAnalysisService, AiAnalysisService>(client =>
 {
     client.Timeout = anthropicOptions.Timeout;
     if (!string.IsNullOrEmpty(anthropicKey))
     {
-        // Pre-configure for config/env var key (fallback when no DB key is set)
         client.BaseAddress = new Uri(anthropicOptions.BaseUrl);
         client.DefaultRequestHeaders.Add("x-api-key", anthropicKey);
         client.DefaultRequestHeaders.Add("anthropic-version", anthropicOptions.ApiVersion);
     }
 });
 
-// Add HeatPumpAiService
 builder.Services.AddScoped<IHeatPumpAiService, HeatPumpAiService>();
-
-// Add Heat Pump Data Service (daily aggregates, time series enrichment)
 builder.Services.AddSingleton<IHeatPumpDataService, HeatPumpDataService>();
-
-// Add Tariff Sync Service
 builder.Services.AddScoped<ITariffSyncService, TariffSyncService>();
 
-// Worker registration:
-//   - Workers require the database for reading devices and writing snapshots/time-series.
-//     In lite mode they are skipped entirely.
-//   - Long-running mode (the API container): each worker runs as a HostedService on its
-//     internal interval.
-//   - Run-once mode (--run-worker-once <name>, used by ACA Jobs): the worker class is
-//     resolved as a transient service so we can call its run-once entry point and exit.
-if (databaseAvailable)
+// ── Workers ─────────────────────────────────────────────────────────────────
+// In Lambda API mode, workers are handled by a separate Lambda function —
+// do NOT register them as HostedServices (they would start polling loops
+// inside every API cold start).
+if (databaseAvailable && !isLambda)
 {
     if (isRunOnceMode)
     {
@@ -214,16 +195,23 @@ if (databaseAvailable)
     }
 }
 
-// Add services to the container.
 builder.Services.AddProblemDetails();
-
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddHealthChecks();
+
+// In Lambda, replace Kestrel with the Lambda Runtime Interface Client.
+// Outside Lambda (AWS_LAMBDA_RUNTIME_API not set), this is a complete no-op.
+builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
 
 var app = builder.Build();
 
-// Auto-migrate database on startup (skip in lite mode — no real DB to migrate).
-if (databaseAvailable)
+// ── Database migration ──────────────────────────────────────────────────────
+// In production (Lambda), migrations run via CI/CD — skip here.
+var skipMigration = string.Equals(
+    Environment.GetEnvironmentVariable("SKIP_AUTO_MIGRATE"), "true",
+    StringComparison.OrdinalIgnoreCase);
+
+if (databaseAvailable && !skipMigration)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
@@ -239,14 +227,14 @@ if (databaseAvailable)
         throw;
     }
 }
-else
+else if (!databaseAvailable)
 {
     var logger = app.Services.GetRequiredService<ILogger<Program>>();
     logger.LogInformation("Running in lite mode — no database configured. "
         + "Live data from Octopus API is available; history/snapshots/settings require PostgreSQL.");
 }
 
-// ── Run-once worker mode (for ACA Jobs / cron runners) ───────────────────────
+// ── Run-once worker mode ────────────────────────────────────────────────────
 if (isRunOnceMode && !databaseAvailable)
 {
     var logger = app.Services.GetRequiredService<ILogger<Program>>();
@@ -272,8 +260,7 @@ if (isRunOnceMode)
     }
 }
 
-// Configure the HTTP request pipeline.
-// Forwarded headers MUST run before any middleware that inspects scheme/IP (auth, CORS).
+// ── HTTP pipeline ───────────────────────────────────────────────────────────
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
 
@@ -286,15 +273,12 @@ app.UseCors("Spa");
 
 app.MapGet("/", () => "OctopusCosyAnalyser API is running.");
 
-// "Who am I" — returns the hardcoded user (auth disabled).
 app.MapGet("/api/auth/me", () => Results.Ok(new
 {
     id = HttpContextCurrentUserAccessor.FixedUserId,
     email = "Rob@hutchin.co.uk",
 }));
 
-
-// Feature availability — the PWA calls this on load to know what to show/hide.
 app.MapGet("/api/features", (FeatureAvailability f) => Results.Ok(new
 {
     database = f.DatabaseAvailable,
@@ -307,14 +291,16 @@ app.MapHeatPumpEndpoints();
 app.MapAccountSettingsEndpoints();
 app.MapStatusEndpoints();
 
-app.MapDefaultEndpoints();
+app.MapHealthChecks("/health");
+app.MapHealthChecks("/alive", new HealthCheckOptions
+{
+    Predicate = r => r.Tags.Contains("live")
+});
 
 await app.RunAsync();
 return 0;
 
-// ────────────────────────────────────────────────────────────────────────────
-// Helpers (top-level local functions)
-// ────────────────────────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 static string? ResolveWorkerJobName(string[] args)
 {

@@ -11,11 +11,16 @@ A personal heat pump monitoring dashboard for Octopus Energy Cosy heat pump cust
 | Layer | Technology |
 |-------|-----------|
 | Backend API | .NET 10, ASP.NET Core Minimal APIs |
-| Frontend | React 19 + Vite 8, TanStack Router/Query, TypeScript, Tailwind CSS + shadcn/ui |
-| Database | PostgreSQL 17 (EF Core 10, Npgsql) |
+| Hosting (API) | AWS Lambda (container image, ARM64 Graviton, Function URL) |
+| Hosting (PWA) | S3 + CloudFront |
+| Workers | AWS Lambda + EventBridge scheduled rules |
+| Frontend (web) | React 19 + Vite 8, TanStack Router/Query, TypeScript, Tailwind CSS + shadcn/ui |
+| Frontend (mobile) | Expo React Native, Expo Router, TanStack Query |
+| Database | Neon Free PostgreSQL (EF Core 10, Npgsql) |
+| Infrastructure | AWS CDK (TypeScript) |
 | Orchestration (dev) | .NET Aspire |
-| Container | Docker / Docker Compose |
-| CI/CD | GitHub Actions → ghcr.io (multi-platform: amd64 + arm64) |
+| Container | Docker (Lambda container images) |
+| CI/CD | GitHub Actions → CDK deploy + S3 sync |
 
 ## Project Structure
 
@@ -62,6 +67,20 @@ OctopusCosyAnalyser/
 │   │   └── types/                      # TypeScript type definitions (api.ts)
 │   ├── vite.config.ts                  # Vite + React plugin + Tailwind
 │   └── package.json
+├── octopus-cosy-mobile/                # Expo React Native app (iOS + Android)
+│   ├── app/                            # Expo Router file-based routes
+│   │   ├── _layout.tsx                 # Root layout (QueryClientProvider)
+│   │   └── (tabs)/                     # Tab navigator (Home/History/Compare/More)
+│   ├── src/
+│   │   ├── hooks/                      # React hooks (mirrors web hooks)
+│   │   ├── lib/                        # API client (configurable base URL), SecureStore
+│   │   └── types/                      # Shared TypeScript types (copied from web)
+│   ├── app.json                        # Expo config (bundle IDs, icons)
+│   └── eas.json                        # EAS Build config (dev/preview/production)
+├── infra/aws/                          # AWS CDK infrastructure (TypeScript)
+│   ├── bin/cosydays.ts                 # CDK app entry point
+│   ├── lib/cosydays-stack.ts           # Stack: Lambda, S3, CloudFront, EventBridge
+│   └── cdk.json
 └── OctopusCosyAnalyser.Tests/          # NUnit tests (unit + integration)
 ```
 
@@ -257,6 +276,11 @@ cd octopus-cosy-web && npm run build
 cd octopus-cosy-web && npm run dev
 cd octopus-cosy-web && npm run lint
 cd octopus-cosy-web && npx tsc --noEmit
+cd octopus-cosy-mobile && npm install
+cd octopus-cosy-mobile && npx expo start
+cd infra/aws && npm install
+cd infra/aws && npx cdk deploy
+cd infra/aws && npx cdk synth
 ```
 
 ## Build & Run
@@ -276,23 +300,74 @@ dotnet test
 
 The web UI runs at `http://localhost:8080` (configurable via `WEB_PORT`).
 
-### Production Deployment
+### AWS Deployment (Production)
+
+The production stack runs on AWS Lambda behind CloudFront:
+
+- **API Lambda** (`cosydays-api`): 512 MB, 300s timeout, ARM64 Graviton, Function URL
+- **Worker Lambda** (`cosydays-worker`): same image with `LAMBDA_WORKER_MODE=true`, 900s timeout
+- **EventBridge**: 4 scheduled rules trigger the worker Lambda
+- **S3 + CloudFront**: PWA static files, `/*` → S3, `/api/*` → Lambda Function URL
+- **Database**: Neon Free PostgreSQL (0.5 GB free tier)
 
 ```bash
-# Production (Docker Compose)
-cp .env.example .env   # set POSTGRES_PASSWORD and optionally WEB_PORT
-docker compose pull
-docker compose up -d
-# UI at http://<host>:8080
+# First-time infrastructure deploy
+cd infra/aws && npm install
+NEON_CONNECTION_STRING="postgres://..." npx cdk bootstrap
+NEON_CONNECTION_STRING="postgres://..." npx cdk deploy
 ```
 
-Images published to `ghcr.io/r23rob/octopuscosyanalyser/` (apiservice + webfrontend).
-Supports AMD64 and ARM64 (runs on Raspberry Pi).
+CI/CD (`.github/workflows/deploy-aws.yml`) runs on push to main:
+1. Builds React PWA
+2. `cdk deploy` (builds Docker image via `fromImageAsset`, updates Lambda functions)
+3. Runs EF Core migrations against Neon
+4. Syncs PWA to S3 with correct cache headers
+5. Invalidates CloudFront
+
+Required GitHub secrets: `AWS_ROLE_ARN`, `NEON_CONNECTION_STRING`, `OCTOPUS_ACCOUNT_NUMBER`, `OCTOPUS_API_KEY`, `OCTOPUS_EUID`, `ANTHROPIC_API_KEY`
+
+### Lambda Architecture
+
+**Program.cs branching:**
+- `LAMBDA_WORKER_MODE=true` → `WorkerLambdaHandler.RunAsync()` (EventBridge handler)
+- `AWS_LAMBDA_FUNCTION_NAME` set → API mode, workers NOT registered as HostedServices
+- Neither set → local dev mode with Kestrel + BackgroundService workers
+
+**WorkerLambdaHandler** receives EventBridge events `{"worker": "snapshot"}` and calls
+the existing `RunOnceAsync()` method on the resolved worker. DI container built once
+per cold start, reused across invocations.
+
+| Schedule | Worker | Interval |
+|----------|--------|----------|
+| `cosydays-snapshot` | HeatPumpSnapshotWorker | 30 min |
+| `cosydays-timeseries` | HeatPumpTimeSeriesSyncWorker | 30 min |
+| `cosydays-cost` | CostDataSyncWorker | 6 hours |
+| `cosydays-energy-intervals` | EnergyIntervalWorker | 35 min |
+
+**Migrations**: run via CI/CD step (`dotnet ef database update`), not on Lambda cold
+start. Both Lambda functions set `SKIP_AUTO_MIGRATE=true`. Local dev still
+auto-migrates on startup.
+
+### Expo React Native App
+
+```bash
+cd octopus-cosy-mobile
+npm install
+npx expo start          # Expo Go on phone
+eas build --platform ios --profile production
+eas submit --platform ios
+```
+
+The mobile app uses Expo Router (file-based tabs), TanStack Query, and a configurable
+API base URL stored in SecureStore. Set the server URL in the More tab to point at
+your CloudFront domain.
 
 ### First-time Setup
-1. Go to Settings → enter Octopus account number and API key
-2. Use the Setup endpoint to discover and register the heat pump device
-3. The snapshot worker starts collecting data automatically every 30 minutes
+1. Create a Neon free PostgreSQL database
+2. Deploy infrastructure: `cd infra/aws && NEON_CONNECTION_STRING=... npx cdk deploy`
+3. Open the CloudFront URL → go to Settings → enter Octopus account number and API key
+4. Use the Setup endpoint to discover and register the heat pump device
+5. The EventBridge schedules start collecting data automatically
 
 ## Planned Direction
 
@@ -326,6 +401,11 @@ These were in the original design but not yet built:
 - **JSONB for sensor readings**: all sensor data stored as a single JSONB column (`SensorReadingsJson`) on snapshot rows rather than a child table — keeps the schema flat with no joins
 - **Raw GraphQL endpoint gated to Development**: `/api/heatpump/graphql` only registers in `IsDevelopment()` to prevent arbitrary query proxying in production
 - **Per-request HTTP auth headers**: `OctopusEnergyClient` uses `HttpRequestMessage` headers (not `DefaultRequestHeaders`) to avoid thread-safety issues between concurrent JWT (GraphQL) and Basic (REST) auth requests
+- **Azure → AWS Lambda**: migrated from Azure Container Apps to AWS Lambda for lower cost (<$1/mo for single user). API runs as a Lambda container image behind CloudFront Function URL. Workers triggered by EventBridge instead of Container App Jobs. PWA served from S3 + CloudFront instead of Azure Storage Static Website
+- **Neon Free PostgreSQL**: replaced Azure-managed PostgreSQL with Neon free tier (0.5 GB). Connection pooling via Neon's serverless driver keeps Lambda connection counts low (`Maximum Pool Size=5`)
+- **CDK over SAM**: chose CDK (TypeScript) for infrastructure because the stack includes non-Lambda resources (CloudFront distribution, S3 OAC, CloudFront Functions for SPA routing) that would need raw CloudFormation in SAM
+- **Single container image, two Lambda functions**: API and Worker Lambda share one Docker image. `LAMBDA_WORKER_MODE` env var branches at the top of Program.cs — avoids maintaining two Dockerfiles
+- **Expo React Native**: added a native mobile app alongside the PWA. Uses Expo Router (file-based tabs matching web routes), TanStack Query (same data fetching pattern), and a configurable base URL via SecureStore. Types shared by copying `types/api.ts` from the web project
 
 ## React / React Native Patterns & Best Practices
 
