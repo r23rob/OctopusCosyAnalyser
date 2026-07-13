@@ -1,0 +1,40 @@
+name: Web CI
+
+on:
+  push:
+    branches: [main]
+    paths: ['octopus-cosy-web/**']
+  pull_request:
+    branches: [main]
+    paths: ['octopus-cosy-web/**']
+
+jobs:
+  build:
+    name: Type-check + build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: octopus-cosy-web/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: octopus-cosy-web
+
+      - name: Type-check + build
+        run: npm run build
+        working-directory: octopus-cosy-web
+
+      - name: Bundle size
+        run: |
+          echo "## Bundle Size" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          du -sh dist/assets/*.js dist/assets/*.css 2>/dev/null | sort -rh >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "**Total:** $(du -sh dist | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+        working-directory: octopus-cosy-web

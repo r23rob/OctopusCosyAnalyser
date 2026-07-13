@@ -1,0 +1,69 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'OctopusCosyAnalyser.ApiService/**'
+      - 'OctopusCosyAnalyser.Shared/**'
+      - 'OctopusCosyAnalyser.ServiceDefaults/**'
+      - 'OctopusCosyAnalyser.Tests/**'
+      - 'infra/aws/**'
+      - '*.sln'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'OctopusCosyAnalyser.ApiService/**'
+      - 'OctopusCosyAnalyser.Shared/**'
+      - 'OctopusCosyAnalyser.ServiceDefaults/**'
+      - 'OctopusCosyAnalyser.Tests/**'
+      - 'infra/aws/**'
+      - '*.sln'
+
+jobs:
+  build-and-test:
+    name: Build + test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Test
+        run: dotnet test --no-build -c Release --logger "trx;LogFileName=results.trx"
+
+  validate-cdk:
+    name: Validate CDK
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: infra/aws/package-lock.json
+
+      - name: Install CDK deps
+        run: npm ci
+        working-directory: infra/aws
+
+      - name: Type-check
+        run: npx tsc --noEmit
+        working-directory: infra/aws
+
+      - name: Synth (validate template)
+        run: npx cdk synth --no-lookups > /dev/null
+        working-directory: infra/aws
+        env:
+          NEON_CONNECTION_STRING: 'placeholder-for-validation'
