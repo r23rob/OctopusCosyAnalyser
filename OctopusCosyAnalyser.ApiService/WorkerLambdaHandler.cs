@@ -23,13 +23,6 @@ public static class WorkerLambdaHandler
         ConfigureWorkerServices(builder);
         var host = builder.Build();
 
-        if (host.Services.GetRequiredService<FeatureAvailability>().DatabaseAvailable)
-        {
-            using var scope = host.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
-            db.Database.Migrate();
-        }
-
         using var bootstrap = LambdaBootstrapBuilder
             .Create<JsonElement>(
                 async (evt, context) => await HandleEventAsync(host.Services, evt, context),

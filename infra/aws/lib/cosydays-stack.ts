@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as cdk from 'aws-cdk-lib';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
@@ -45,6 +46,11 @@ export class CosydaysStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(300),
       environment: sharedEnv,
     });
+
+    const originSecret = 'x-origin-verify';
+    const originSecretValue = cdk.Names.uniqueResourceName(this, { maxLength: 40 });
+
+    apiFunction.addEnvironment('CLOUDFRONT_ORIGIN_SECRET', originSecretValue);
 
     const apiUrl = apiFunction.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.NONE,
@@ -122,7 +128,9 @@ export class CosydaysStack extends cdk.Stack {
       },
       additionalBehaviors: {
         '/api/*': {
-          origin: new origins.FunctionUrlOrigin(apiUrl),
+          origin: new origins.FunctionUrlOrigin(apiUrl, {
+            customHeaders: { [originSecret]: originSecretValue },
+          }),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
@@ -130,6 +138,21 @@ export class CosydaysStack extends cdk.Stack {
         },
       },
       defaultRootObject: 'index.html',
+    });
+
+    // ── CloudWatch alarms ──────────────────────────────────────────────────
+    apiFunction.metricErrors({ period: cdk.Duration.minutes(5) }).createAlarm(this, 'ApiErrorAlarm', {
+      alarmName: 'cosydays-api-errors',
+      evaluationPeriods: 1,
+      threshold: 3,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+    });
+
+    workerFunction.metricErrors({ period: cdk.Duration.minutes(5) }).createAlarm(this, 'WorkerErrorAlarm', {
+      alarmName: 'cosydays-worker-errors',
+      evaluationPeriods: 1,
+      threshold: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
     });
 
     // ── Outputs ────────────────────────────────────────────────────────────

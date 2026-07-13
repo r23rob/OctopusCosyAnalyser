@@ -271,6 +271,28 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("Spa");
 
+var originSecret = app.Configuration["CLOUDFRONT_ORIGIN_SECRET"];
+if (!string.IsNullOrEmpty(originSecret))
+{
+    app.Use(async (context, next) =>
+    {
+        if (context.Request.Path.StartsWithSegments("/health") ||
+            context.Request.Path.StartsWithSegments("/alive"))
+        {
+            await next();
+            return;
+        }
+
+        if (context.Request.Headers["x-origin-verify"] != originSecret)
+        {
+            context.Response.StatusCode = 403;
+            return;
+        }
+
+        await next();
+    });
+}
+
 app.MapGet("/", () => "OctopusCosyAnalyser API is running.");
 
 app.MapGet("/api/auth/me", () => Results.Ok(new

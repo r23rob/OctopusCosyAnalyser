@@ -1,0 +1,35 @@
+name: Mobile CI
+
+on:
+  push:
+    branches: [main]
+    paths: ['octopus-cosy-mobile/**']
+  pull_request:
+    branches: [main]
+    paths: ['octopus-cosy-mobile/**']
+
+jobs:
+  validate:
+    name: Type-check + validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: octopus-cosy-mobile/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: octopus-cosy-mobile
+
+      - name: Type-check
+        run: npx tsc --noEmit
+        working-directory: octopus-cosy-mobile
+
+      - name: Validate Expo config
+        run: npx expo config --json > /dev/null
+        working-directory: octopus-cosy-mobile
