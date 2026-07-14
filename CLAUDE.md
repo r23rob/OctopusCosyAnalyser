@@ -324,7 +324,7 @@ CI/CD (`.github/workflows/deploy-aws.yml`) runs on push to main:
 4. Syncs PWA to S3 with correct cache headers
 5. Invalidates CloudFront
 
-Required GitHub secrets: `AWS_ROLE_ARN`, `NEON_CONNECTION_STRING`, `OCTOPUS_ACCOUNT_NUMBER`, `OCTOPUS_API_KEY`, `OCTOPUS_EUID`, `ANTHROPIC_API_KEY`
+Required GitHub secrets: `AWS_ROLE_ARN`, `NEON_CONNECTION_STRING`, `ANTHROPIC_API_KEY`
 
 ### Lambda Architecture
 
