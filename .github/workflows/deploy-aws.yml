@@ -1,0 +1,113 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-west-2
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── .NET (migrations) ──────────────────────────────────────────────────
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore .NET tools
+        run: dotnet tool restore
+
+      # ── Node.js (PWA build + CDK) ──────────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            octopus-cosy-web/package-lock.json
+            infra/aws/package-lock.json
+
+      - name: Build React PWA
+        run: |
+          npm ci
+          npm run build
+        working-directory: octopus-cosy-web
+
+      - name: Install CDK dependencies
+        run: npm ci
+        working-directory: infra/aws
+
+      # ── Docker (QEMU for ARM64 Lambda image) ────────────────────────────────
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── AWS auth ───────────────────────────────────────────────────────────
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ── CDK deploy (builds Docker image, updates Lambda functions) ─────────
+      - name: CDK deploy
+        run: npx cdk deploy --require-approval never --outputs-file cdk-outputs.json
+        working-directory: infra/aws
+        env:
+          NEON_CONNECTION_STRING: ${{ secrets.NEON_CONNECTION_STRING }}
+          OCTOPUS_ACCOUNT_NUMBER: ${{ secrets.OCTOPUS_ACCOUNT_NUMBER }}
+          OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
+          OCTOPUS_EUID: ${{ secrets.OCTOPUS_EUID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      # ── EF Core migrations ────────────────────────────────────────────────
+      - name: Run database migrations
+        run: dotnet ef database update --project OctopusCosyAnalyser.ApiService
+        env:
+          ConnectionStrings__cosydb: ${{ secrets.NEON_CONNECTION_STRING }}
+
+      # ── Sync PWA to S3 ────────────────────────────────────────────────────
+      - name: Extract CDK outputs
+        id: outputs
+        run: |
+          BUCKET=$(jq -r '.CosydaysStack.WebBucketName' infra/aws/cdk-outputs.json)
+          DIST_ID=$(jq -r '.CosydaysStack.DistributionId' infra/aws/cdk-outputs.json)
+          echo "bucket=$BUCKET" >> "$GITHUB_OUTPUT"
+          echo "distribution_id=$DIST_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Sync PWA to S3
+        run: |
+          aws s3 sync octopus-cosy-web/dist "s3://${{ steps.outputs.outputs.bucket }}" \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "index.html" \
+            --exclude "sw.js" \
+            --exclude "registerSW.js" \
+            --exclude "manifest.webmanifest"
+          aws s3 cp octopus-cosy-web/dist/index.html "s3://${{ steps.outputs.outputs.bucket }}/index.html" \
+            --cache-control "no-cache"
+          aws s3 cp octopus-cosy-web/dist/sw.js "s3://${{ steps.outputs.outputs.bucket }}/sw.js" \
+            --cache-control "no-cache" 2>/dev/null || true
+          aws s3 cp octopus-cosy-web/dist/registerSW.js "s3://${{ steps.outputs.outputs.bucket }}/registerSW.js" \
+            --cache-control "no-cache" 2>/dev/null || true
+          aws s3 cp octopus-cosy-web/dist/manifest.webmanifest "s3://${{ steps.outputs.outputs.bucket }}/manifest.webmanifest" \
+            --cache-control "no-cache" 2>/dev/null || true
+
+      # ── Invalidate CloudFront ──────────────────────────────────────────────
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ steps.outputs.outputs.distribution_id }}" \
+            --paths "/*"
