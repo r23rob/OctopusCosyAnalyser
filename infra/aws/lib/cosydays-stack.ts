@@ -12,9 +12,6 @@ import { Construct } from 'constructs';
 
 export interface CosydaysStackProps extends cdk.StackProps {
   dbConnectionString: string;
-  octopusAccountNumber?: string;
-  octopusApiKey?: string;
-  octopusEuid?: string;
   anthropicApiKey?: string;
 }
 
@@ -29,9 +26,6 @@ export class CosydaysStack extends cdk.Stack {
       ConnectionStrings__cosydb: props.dbConnectionString,
       SKIP_AUTO_MIGRATE: 'true',
     };
-    if (props.octopusAccountNumber) sharedEnv.OCTOPUS_ACCOUNT_NUMBER = props.octopusAccountNumber;
-    if (props.octopusApiKey) sharedEnv.OCTOPUS_API_KEY = props.octopusApiKey;
-    if (props.octopusEuid) sharedEnv.OCTOPUS_EUID = props.octopusEuid;
     if (props.anthropicApiKey) sharedEnv['Anthropic__ApiKey'] = props.anthropicApiKey;
 
     // ── API Lambda ─────────────────────────────────────────────────────────

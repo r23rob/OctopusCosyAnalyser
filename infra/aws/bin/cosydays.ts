@@ -18,8 +18,5 @@ new CosydaysStack(app, 'CosydaysStack', {
     account: process.env.CDK_DEFAULT_ACCOUNT,
   },
   dbConnectionString,
-  octopusAccountNumber: process.env.OCTOPUS_ACCOUNT_NUMBER,
-  octopusApiKey: process.env.OCTOPUS_API_KEY,
-  octopusEuid: process.env.OCTOPUS_EUID,
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
 });
