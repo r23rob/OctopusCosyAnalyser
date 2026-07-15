@@ -4,7 +4,8 @@ namespace OctopusCosyAnalyser.Tests;
 
 public class WebTests
 {
-    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
+    // Generous for CI: cold runners need time for the Vite dev server to come up.
+    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(120);
 
     [Test]
     public async Task GetWebResourceRootReturnsOkStatusCode()
