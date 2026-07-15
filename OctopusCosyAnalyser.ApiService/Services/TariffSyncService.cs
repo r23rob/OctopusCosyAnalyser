@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Models;
 
@@ -7,8 +6,8 @@ namespace OctopusCosyAnalyser.ApiService.Services;
 
 public interface ITariffSyncService
 {
-    Task SyncRatesAsync(CosyDbContext db, OctopusAccountSettings settings, HeatPumpDevice device, DateTime from, DateTime to, CancellationToken cancellationToken = default);
-    Task<decimal?> GetUnitRateAtAsync(CosyDbContext db, string deviceId, DateTime timestamp, CancellationToken cancellationToken = default);
+    Task SyncRatesAsync(ICosyDataStore store, OctopusAccountSettings settings, HeatPumpDevice device, DateTime from, DateTime to, CancellationToken cancellationToken = default);
+    Task<decimal?> GetUnitRateAtAsync(ICosyDataStore store, string deviceId, DateTime timestamp, CancellationToken cancellationToken = default);
 }
 
 public class TariffSyncService : ITariffSyncService
@@ -23,7 +22,7 @@ public class TariffSyncService : ITariffSyncService
     }
 
     public async Task SyncRatesAsync(
-        CosyDbContext db,
+        ICosyDataStore store,
         OctopusAccountSettings settings,
         HeatPumpDevice device,
         DateTime from,
@@ -85,11 +84,10 @@ public class TariffSyncService : ITariffSyncService
         }
 
         // Upsert: update existing rates, insert new ones (workers run with no user context).
-        var existingRates = await db.TariffRates
-            .IgnoreQueryFilters()
-            .Where(r => r.DeviceId == device.DeviceId && r.ValidFrom >= from && r.ValidFrom <= to)
-            .ToDictionaryAsync(r => r.ValidFrom, cancellationToken);
+        var existingRates = (await store.GetTariffRatesAsync(device.DeviceId, from, to, cancellationToken))
+            .ToDictionary(r => r.ValidFrom);
 
+        var toUpsert = new List<TariffRate>();
         var newCount = 0;
         var updatedCount = 0;
 
@@ -110,35 +108,39 @@ public class TariffSyncService : ITariffSyncService
                     existing.OwnerId = device.OwnerId;
                     changed = true;
                 }
-                if (changed) updatedCount++;
+                if (changed)
+                {
+                    toUpsert.Add(existing);
+                    updatedCount++;
+                }
             }
             else
             {
-                db.TariffRates.Add(rate);
+                toUpsert.Add(rate);
                 newCount++;
             }
         }
 
-        if (newCount > 0 || updatedCount > 0)
+        if (toUpsert.Count > 0)
         {
-            await db.SaveChangesAsync(cancellationToken);
+            await store.UpsertTariffRateBatchAsync(toUpsert, cancellationToken);
             _logger.LogInformation("Tariff rates sync for device {DeviceId}: {New} new, {Updated} updated",
                 device.DeviceId, newCount, updatedCount);
         }
     }
 
     public async Task<decimal?> GetUnitRateAtAsync(
-        CosyDbContext db,
+        ICosyDataStore store,
         string deviceId,
         DateTime timestamp,
         CancellationToken cancellationToken = default)
     {
-        return await db.TariffRates
-            .Where(r => r.DeviceId == deviceId
-                && r.ValidFrom <= timestamp
-                && (r.ValidTo == null || r.ValidTo > timestamp))
+        var rates = await store.GetTariffRatesAsync(deviceId, timestamp.AddDays(-365), timestamp, cancellationToken);
+
+        return rates
+            .Where(r => r.ValidFrom <= timestamp && (r.ValidTo == null || r.ValidTo > timestamp))
             .OrderByDescending(r => r.ValidFrom)
             .Select(r => (decimal?)r.UnitRatePence)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefault();
     }
 }

@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.Shared.Models;
@@ -13,7 +12,7 @@ public class AiAnalysisService : IAiAnalysisService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<AiAnalysisService> _logger;
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ICosyDataStore _store;
     private readonly IHeatPumpDataService _dataService;
     private readonly bool _isConfigured;
 
@@ -94,11 +93,11 @@ public class AiAnalysisService : IAiAnalysisService
         Use markdown formatting with headers, bullet points, and bold for key figures. Be direct and specific — the user is technically competent.
         """;
 
-    public AiAnalysisService(HttpClient httpClient, ILogger<AiAnalysisService> logger, IServiceScopeFactory scopeFactory, IHeatPumpDataService dataService)
+    public AiAnalysisService(HttpClient httpClient, ILogger<AiAnalysisService> logger, ICosyDataStore store, IHeatPumpDataService dataService)
     {
         _httpClient = httpClient;
         _logger = logger;
-        _scopeFactory = scopeFactory;
+        _store = store;
         _dataService = dataService;
         _isConfigured = _httpClient.BaseAddress is not null;
     }
@@ -212,15 +211,10 @@ public class AiAnalysisService : IAiAnalysisService
 
         try
         {
-            using var scope = _scopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
-
             var now = DateTime.UtcNow;
-            var snapshots = await db.HeatPumpSnapshots
-                .AsNoTracking()
-                .Where(s => s.DeviceId == deviceId && s.SnapshotTakenAt >= now.AddDays(-365))
+            var snapshots = (await _store.GetSnapshotListAsync(deviceId, now.AddDays(-365), now))
                 .OrderBy(s => s.SnapshotTakenAt)
-                .ToListAsync();
+                .ToList();
 
             if (snapshots.Count == 0)
             {
@@ -240,10 +234,7 @@ public class AiAnalysisService : IAiAnalysisService
             var yearAggs = _dataService.ComputeDailyAggregates(snapshots);
 
             // Merge stored cost data into aggregates
-            var costRecords = await db.DailyCostRecords
-                .AsNoTracking()
-                .Where(r => r.DeviceId == deviceId && r.Date >= DateOnly.FromDateTime(now.AddDays(-365)))
-                .ToDictionaryAsync(r => r.Date);
+            var costRecords = await _store.GetDailyCostMapAsync(deviceId, DateOnly.FromDateTime(now.AddDays(-365)));
 
             if (costRecords.Count > 0)
             {

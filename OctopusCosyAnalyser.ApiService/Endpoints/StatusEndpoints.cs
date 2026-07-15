@@ -1,8 +1,8 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Options;
 using OctopusCosyAnalyser.ApiService.Services;
+using OctopusCosyAnalyser.ApiService.Services.CurrentUser;
 using OctopusCosyAnalyser.Shared.Models;
 
 namespace OctopusCosyAnalyser.ApiService.Endpoints;
@@ -12,48 +12,16 @@ public static class StatusEndpoints
     public static void MapStatusEndpoints(this WebApplication app)
     {
         app.MapGet("/api/status", async (
-            CosyDbContext db,
-            FeatureAvailability features,
+            ICosyDataStore store,
             IOctopusEnergyClient octopusClient,
             IOptions<AnthropicOptions> anthropicOptions,
             CancellationToken ct) =>
         {
             var dto = new ApiStatusDto { CheckedAt = DateTime.UtcNow };
+            var userId = HttpContextCurrentUserAccessor.FixedUserId;
 
-            // In lite mode, report status based on environment variable credentials.
-            if (!features.DatabaseAvailable)
-            {
-                dto.HasSettings = features.HasFallbackCredentials;
-                dto.AccountNumber = features.FallbackAccountNumber;
-                dto.AuthMode = "apikey";
-
-                dto.OctopusCredentialsConfigured = features.HasFallbackCredentials;
-                if (features.HasFallbackCredentials)
-                {
-                    var fallbackSettings = features.CreateFallbackSettings();
-                    var (ok, error) = await octopusClient.ValidateCredentialsAsync(fallbackSettings, ct);
-                    dto.OctopusAuthOk = ok;
-                    dto.OctopusAuthError = error;
-                }
-                else
-                {
-                    dto.OctopusAuthOk = false;
-                    dto.OctopusAuthError = "Running in lite mode without database. "
-                        + "Set OCTOPUS_ACCOUNT_NUMBER and OCTOPUS_API_KEY environment variables for live data.";
-                }
-
-                dto.AnthropicConfigured = !string.IsNullOrWhiteSpace(anthropicOptions.Value.ApiKey);
-                dto.AnthropicKeySource = dto.AnthropicConfigured ? "config" : null;
-                dto.HasDevice = !string.IsNullOrWhiteSpace(features.FallbackEuid);
-
-                return Results.Ok(dto);
-            }
-
-            // Full mode: query the database for account state.
-            // The global query filter scopes to the current user automatically.
-            var settings = await db.OctopusAccountSettings
-                .OrderBy(s => s.Id)
-                .FirstOrDefaultAsync(ct);
+            var settingsList = await store.ListSettingsAsync(userId, ct);
+            var settings = settingsList.FirstOrDefault();
 
             if (settings is null)
             {
@@ -108,7 +76,8 @@ public static class StatusEndpoints
                 dto.AnthropicKeySource = null;
             }
 
-            dto.HasDevice = await db.HeatPumpDevices.AnyAsync(d => d.AccountNumber == settings.AccountNumber, ct);
+            var devices = await store.ListDevicesAsync(userId, activeOnly: false, ct);
+            dto.HasDevice = devices.Any(d => d.AccountNumber == settings.AccountNumber);
 
             return Results.Ok(dto);
         }).WithName("GetApiStatus");

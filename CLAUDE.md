@@ -16,7 +16,7 @@ A personal heat pump monitoring dashboard for Octopus Energy Cosy heat pump cust
 | Workers | AWS Lambda + EventBridge scheduled rules |
 | Frontend (web) | React 19 + Vite 8, TanStack Router/Query, TypeScript, Tailwind CSS + shadcn/ui |
 | Frontend (mobile) | Expo React Native, Expo Router, TanStack Query |
-| Database | Neon Free PostgreSQL (EF Core 10, Npgsql) |
+| Database | DynamoDB (single-table, pay-per-request) |
 | Infrastructure | AWS CDK (TypeScript) |
 | Orchestration (dev) | .NET Aspire |
 | Container | Docker (Lambda container images) |
@@ -107,29 +107,24 @@ Follow this 4-layer pattern:
     -   Data fetching via TanStack Query hooks in `octopus-cosy-web/src/hooks/`
     -   Add nav entry in `octopus-cosy-web/src/components/layout/NavBar.tsx`
 
-## Database Tables (EF Core)
+## Database (DynamoDB Single-Table)
 
-- PostgreSQL via EF Core with Npgsql
-- Auto-migrates on startup (`db.Database.Migrate()`)
-- Single migration: `20260220232518_InitialCreate`
-- Add new migrations with: `dotnet ef migrations add <Name> --project OctopusCosyAnalyser.ApiService`
+DynamoDB single-table design with `PK` (partition key) and `SK` (sort key):
 
-| Table | Purpose |
-|-------|---------|
-| `HeatPumpDevices` | Registered heat pump devices (DeviceId, AccountNumber, MPAN, Euid) |
-| `HeatPumpSnapshots` | 30-min telemetry snapshots (COP, temps, power, heating/hot water zone state, controller state, weather compensation, all sensor readings as JSONB, flow temp allowable range) |
-| `ConsumptionReadings` | Smart meter readings (kWh, demand) |
-| `OctopusAccountSettings` | Octopus API credentials (AccountNumber, ApiKey) |
-| `HeatPumpEfficiencyRecords` | Manual daily records for efficiency tracking |
+| Partition Pattern | Sort Key Pattern | Purpose |
+|-------------------|-----------------|---------|
+| `OWNER#<accountNumber>` | `SETTINGS` | Octopus API credentials (AccountNumber, ApiKey) |
+| `OWNER#<accountNumber>` | `DEVICE#<deviceId>` | Registered heat pump devices (DeviceId, MPAN, Euid) |
+| `DEVICE#<deviceId>` | `SNAPSHOT#<timestamp>` | 30-min telemetry snapshots (COP, temps, power, zones, sensors) |
+| `DEVICE#<deviceId>` | `CONSUMPTION#<timestamp>` | Smart meter readings (kWh, demand) |
+| `DEVICE#<deviceId>` | `EFFICIENCY#<date>` | Manual daily records for efficiency tracking |
+| `ACTIVE_DEVICES` | `DEVICE#<deviceId>` | Worker device discovery (denormalised for scan-free lookups) |
 
-Unique constraints prevent duplicate snapshots `(DeviceId, SnapshotTakenAt)` and consumption readings `(DeviceId, ReadAt)`.
+Table is provisioned via CDK with pay-per-request billing and point-in-time recovery enabled.
 
-### Optional Database (Lite Mode)
+### Environment Variable Fallback
 
-PostgreSQL is optional — the API runs in "lite mode" without a database connection:
-- **With DB**: full functionality — snapshot history, efficiency records, device registration, background worker
-- **Without DB**: live Octopus API queries work (summary, time-series, time-ranged), but no snapshot history, no efficiency records, no device persistence
-- **Environment variable fallback** for credentials (no DB needed): `OCTOPUS_ACCOUNT_NUMBER`, `OCTOPUS_API_KEY`, `OCTOPUS_EUID`
+- **Environment variable fallback** for credentials: `OCTOPUS_ACCOUNT_NUMBER`, `OCTOPUS_API_KEY`, `OCTOPUS_EUID`
 - `GET /api/features` endpoint reports which capabilities are available (database, snapshots, efficiency, etc.)
 - Frontend uses the `useFeatures()` hook (`hooks/use-features.ts`) and `FeatureGate` component (`components/shared/FeatureGate.tsx`) for conditional rendering based on available features
 
@@ -252,7 +247,6 @@ The following commands are safe to run without confirmation:
 dotnet build
 dotnet test
 dotnet run --project OctopusCosyAnalyser.AppHost
-dotnet ef migrations add <Name> --project OctopusCosyAnalyser.ApiService
 export PATH="$HOME/.dotnet:$PATH:/usr/local/share/dotnet"
 git status
 git diff
@@ -308,23 +302,22 @@ The production stack runs on AWS Lambda behind CloudFront:
 - **Worker Lambda** (`cosydays-worker`): same image with `LAMBDA_WORKER_MODE=true`, 900s timeout
 - **EventBridge**: 4 scheduled rules trigger the worker Lambda
 - **S3 + CloudFront**: PWA static files, `/*` → S3, `/api/*` → Lambda Function URL
-- **Database**: Neon Free PostgreSQL (0.5 GB free tier)
+- **Database**: DynamoDB single-table (pay-per-request, provisioned via CDK)
 
 ```bash
 # First-time infrastructure deploy
 cd infra/aws && npm install
-NEON_CONNECTION_STRING="postgres://..." npx cdk bootstrap
-NEON_CONNECTION_STRING="postgres://..." npx cdk deploy
+npx cdk bootstrap
+npx cdk deploy
 ```
 
 CI/CD (`.github/workflows/deploy-aws.yml`) runs on push to main:
 1. Builds React PWA
-2. `cdk deploy` (builds Docker image via `fromImageAsset`, updates Lambda functions)
-3. Runs EF Core migrations against Neon
-4. Syncs PWA to S3 with correct cache headers
-5. Invalidates CloudFront
+2. `cdk deploy` (builds Docker image via `fromImageAsset`, updates Lambda functions, provisions DynamoDB table)
+3. Syncs PWA to S3 with correct cache headers
+4. Invalidates CloudFront
 
-Required GitHub secrets: `AWS_ROLE_ARN`, `NEON_CONNECTION_STRING`, `ANTHROPIC_API_KEY`
+Required GitHub secrets: `AWS_ROLE_ARN`, `ANTHROPIC_API_KEY`
 
 ### Lambda Architecture
 
@@ -344,9 +337,7 @@ per cold start, reused across invocations.
 | `cosydays-cost` | CostDataSyncWorker | 6 hours |
 | `cosydays-energy-intervals` | EnergyIntervalWorker | 35 min |
 
-**Migrations**: run via CI/CD step (`dotnet ef database update`), not on Lambda cold
-start. Both Lambda functions set `SKIP_AUTO_MIGRATE=true`. Local dev still
-auto-migrates on startup.
+**Database**: DynamoDB table is provisioned via CDK. No migrations needed.
 
 ### Expo React Native App
 
@@ -363,11 +354,10 @@ API base URL stored in SecureStore. Set the server URL in the More tab to point 
 your CloudFront domain.
 
 ### First-time Setup
-1. Create a Neon free PostgreSQL database
-2. Deploy infrastructure: `cd infra/aws && NEON_CONNECTION_STRING=... npx cdk deploy`
-3. Open the CloudFront URL → go to Settings → enter Octopus account number and API key
-4. Use the Setup endpoint to discover and register the heat pump device
-5. The EventBridge schedules start collecting data automatically
+1. Deploy infrastructure: `cd infra/aws && npx cdk deploy` (provisions DynamoDB table, Lambda functions, CloudFront)
+2. Open the CloudFront URL → go to Settings → enter Octopus account number and API key
+3. Use the Setup endpoint to discover and register the heat pump device
+4. The EventBridge schedules start collecting data automatically
 
 ## Planned Direction
 
@@ -402,7 +392,7 @@ These were in the original design but not yet built:
 - **Raw GraphQL endpoint gated to Development**: `/api/heatpump/graphql` only registers in `IsDevelopment()` to prevent arbitrary query proxying in production
 - **Per-request HTTP auth headers**: `OctopusEnergyClient` uses `HttpRequestMessage` headers (not `DefaultRequestHeaders`) to avoid thread-safety issues between concurrent JWT (GraphQL) and Basic (REST) auth requests
 - **Azure → AWS Lambda**: migrated from Azure Container Apps to AWS Lambda for lower cost (<$1/mo for single user). API runs as a Lambda container image behind CloudFront Function URL. Workers triggered by EventBridge instead of Container App Jobs. PWA served from S3 + CloudFront instead of Azure Storage Static Website
-- **Neon Free PostgreSQL**: replaced Azure-managed PostgreSQL with Neon free tier (0.5 GB). Connection pooling via Neon's serverless driver keeps Lambda connection counts low (`Maximum Pool Size=5`)
+- **PostgreSQL → DynamoDB**: migrated from Neon PostgreSQL to DynamoDB single-table design for zero baseline cost and fully AWS-native stack. Single table with PK/SK design: `OWNER#` partitions for config, `DEVICE#` partitions for time-series data, `ACTIVE_DEVICES` partition for worker device discovery
 - **CDK over SAM**: chose CDK (TypeScript) for infrastructure because the stack includes non-Lambda resources (CloudFront distribution, S3 OAC, CloudFront Functions for SPA routing) that would need raw CloudFormation in SAM
 - **Single container image, two Lambda functions**: API and Worker Lambda share one Docker image. `LAMBDA_WORKER_MODE` env var branches at the top of Program.cs — avoids maintaining two Dockerfiles
 - **Expo React Native**: added a native mobile app alongside the PWA. Uses Expo Router (file-based tabs matching web routes), TanStack Query (same data fetching pattern), and a configurable base URL via SecureStore. Types shared by copying `types/api.ts` from the web project
@@ -469,7 +459,7 @@ These were in the original design but not yet built:
 ## Heat Pump Dashboard
 - Do not change fonts (JetBrains Mono + Instrument Sans),
   colours (cyan #06B6D4 accent, near-black ink), or layout structure
-- Data source: PostgreSQL via existing OctopusCosyAnalyser connection (optional — see "Optional Database" below)
+- Data source: DynamoDB single-table via AWS SDK
 - AI analysis card calls Anthropic API — keep that wiring intact
 
 ## UI Standards (apply to all React routes)

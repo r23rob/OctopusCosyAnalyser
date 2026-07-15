@@ -20,14 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ── .NET (migrations) ──────────────────────────────────────────────────
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Restore .NET tools
-        run: dotnet tool restore
-
       # ── Node.js (PWA build + CDK) ──────────────────────────────────────────
       - uses: actions/setup-node@v4
         with:
@@ -66,14 +58,7 @@ jobs:
         run: npx cdk deploy --require-approval never --outputs-file cdk-outputs.json
         working-directory: infra/aws
         env:
-          NEON_CONNECTION_STRING: ${{ secrets.NEON_CONNECTION_STRING }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-
-      # ── EF Core migrations ────────────────────────────────────────────────
-      - name: Run database migrations
-        run: dotnet ef database update --project OctopusCosyAnalyser.ApiService
-        env:
-          ConnectionStrings__cosydb: ${{ secrets.NEON_CONNECTION_STRING }}
 
       # ── Sync PWA to S3 ────────────────────────────────────────────────────
       - name: Extract CDK outputs

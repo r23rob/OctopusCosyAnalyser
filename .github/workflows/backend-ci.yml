@@ -68,5 +68,3 @@ jobs:
       - name: Synth (validate template)
         run: npx cdk synth --no-lookups > /dev/null
         working-directory: infra/aws
-        env:
-          NEON_CONNECTION_STRING: 'placeholder-for-validation'
