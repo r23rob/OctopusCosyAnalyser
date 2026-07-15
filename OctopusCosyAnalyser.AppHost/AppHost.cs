@@ -1,20 +1,11 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
-// Add PostgreSQL database with persistent volume
-var postgres = builder.AddPostgres("postgres")
-    .WithPgAdmin()
-    .WithDataVolume("postgres-data");  // Persist database files to a Docker volume
-
-var cosydb = postgres.AddDatabase("cosydb");
-
 // launchProfileName: "https" picks the https launch profile from the API's
 // launchSettings.json — the API listens on https://localhost:7558 and the
 // dev cert (trusted via `dotnet dev-certs https --trust`) terminates TLS.
 var apiService = builder.AddProject<Projects.OctopusCosyAnalyser_ApiService>(
         "apiservice",
         launchProfileName: "https")
-    .WithReference(cosydb)
-    .WaitFor(cosydb)
     .WithHttpHealthCheck("/health", endpointName: "https");
 
 // React + Vite frontend (replaces the Blazor Web project)
