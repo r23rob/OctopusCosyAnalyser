@@ -77,7 +77,7 @@ public static class WorkerLambdaHandler
         };
         builder.Services.AddSingleton(features);
 
-        builder.Services.AddSingleton<IAmazonDynamoDB>(sp => new AmazonDynamoDBClient());
+        builder.Services.AddSingleton<IAmazonDynamoDB>(sp => DynamoDbClientFactory.Create());
         builder.Services.AddSingleton<ICosyDataStore, DynamoDataStore>();
 
         builder.Services.AddSingleton<ICurrentUserAccessor, SystemCurrentUserAccessor>();

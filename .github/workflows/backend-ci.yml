@@ -32,6 +32,19 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: octopus-cosy-web/package-lock.json
+
+      # The Aspire integration test launches the Vite frontend; installing its
+      # dependencies up front keeps the in-test `npm install` within the
+      # resource-startup timeout.
+      - name: Pre-install web dependencies
+        run: npm ci
+        working-directory: octopus-cosy-web
+
       - name: Restore
         run: dotnet restore
 
@@ -43,6 +56,9 @@ jobs:
 
       - name: Test
         run: dotnet test --no-build -c Release --logger "trx;LogFileName=results.trx"
+        env:
+          # CI runners don't trust the ASP.NET dev cert — run the AppHost over http.
+          APPHOST_API_LAUNCH_PROFILE: http
 
   validate-cdk:
     name: Validate CDK
