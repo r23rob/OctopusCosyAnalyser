@@ -49,7 +49,7 @@ builder.Services.AddSingleton(features);
 // Single shared table (name from DYNAMODB_TABLE_NAME, default "cosydays").
 // The client picks up credentials/region from the Lambda execution role via
 // the default AWS credential provider chain.
-builder.Services.AddSingleton<IAmazonDynamoDB>(sp => new AmazonDynamoDBClient());
+builder.Services.AddSingleton<IAmazonDynamoDB>(sp => DynamoDbClientFactory.Create());
 builder.Services.AddSingleton<ICosyDataStore, DynamoDataStore>();
 
 // Current-user accessor — returns a fixed user for all requests (auth disabled).
