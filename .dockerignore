@@ -1,6 +1,7 @@
 ## Build output
 **/bin/
 **/obj/
+**/cdk.out/
 
 ## IDE files
 .vs/

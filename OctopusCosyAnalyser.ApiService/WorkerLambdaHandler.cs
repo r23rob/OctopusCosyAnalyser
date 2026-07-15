@@ -1,8 +1,9 @@
 using System.Text.Json;
+using Amazon.DynamoDBv2;
 using Amazon.Lambda.Core;
 using Amazon.Lambda.RuntimeSupport;
 using Amazon.Lambda.Serialization.SystemTextJson;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Http.Resilience;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.GraphQL;
@@ -67,30 +68,27 @@ public static class WorkerLambdaHandler
 
     private static void ConfigureWorkerServices(IHostApplicationBuilder builder)
     {
-        var connectionString = builder.Configuration.GetConnectionString("cosydb");
-        var databaseAvailable = !string.IsNullOrWhiteSpace(connectionString);
-
         var features = new FeatureAvailability
         {
-            DatabaseAvailable = databaseAvailable,
+            DatabaseAvailable = true,
             FallbackAccountNumber = builder.Configuration["OCTOPUS_ACCOUNT_NUMBER"],
             FallbackApiKey = builder.Configuration["OCTOPUS_API_KEY"],
             FallbackEuid = builder.Configuration["OCTOPUS_EUID"],
         };
         builder.Services.AddSingleton(features);
 
-        if (databaseAvailable)
-        {
-            var pooledConnectionString = connectionString!.Contains("Maximum Pool Size", StringComparison.OrdinalIgnoreCase)
-                ? connectionString
-                : connectionString + ";Maximum Pool Size=5";
-
-            builder.Services.AddDbContext<CosyDbContext>(options =>
-                options.UseNpgsql(pooledConnectionString));
-        }
+        builder.Services.AddSingleton<IAmazonDynamoDB>(sp => new AmazonDynamoDBClient());
+        builder.Services.AddSingleton<ICosyDataStore, DynamoDataStore>();
 
         builder.Services.AddSingleton<ICurrentUserAccessor, SystemCurrentUserAccessor>();
         builder.Services.AddSingleton<ISecretProtector, SecretProtector>();
+
+        // Data Protection — keys are persisted to DynamoDB so they survive Lambda cold
+        // starts and are shared with the API Lambda (SecretProtector relies on the same
+        // key ring to decrypt settings encrypted by the API).
+        builder.Services.AddDataProtection()
+            .SetApplicationName("OctopusCosyAnalyser")
+            .PersistKeysToDynamoDb();
 
         var octopusOptions = new OctopusApiOptions();
         builder.Configuration.GetSection(OctopusApiOptions.SectionName).Bind(octopusOptions);

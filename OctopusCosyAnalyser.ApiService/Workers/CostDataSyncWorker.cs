@@ -2,20 +2,23 @@ using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Helpers;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.ApiService.Services;
-using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
 namespace OctopusCosyAnalyser.ApiService.Workers;
 
 public class CostDataSyncWorker : BackgroundService
 {
-    private readonly IServiceProvider _serviceProvider;
+    private readonly ICosyDataStore _store;
+    private readonly IOctopusEnergyClient _client;
     private readonly ILogger<CostDataSyncWorker> _logger;
     private readonly TimeSpan _pollingInterval = TimeSpan.FromHours(6);
 
-    public CostDataSyncWorker(IServiceProvider serviceProvider, ILogger<CostDataSyncWorker> logger)
+    // ICosyDataStore is a singleton. IOctopusEnergyClient is a typed HttpClient registered via
+    // AddHttpClient (Transient), so it's also safe to inject directly — no scope needed.
+    public CostDataSyncWorker(ICosyDataStore store, IOctopusEnergyClient client, ILogger<CostDataSyncWorker> logger)
     {
-        _serviceProvider = serviceProvider;
+        _store = store;
+        _client = client;
         _logger = logger;
     }
 
@@ -50,31 +53,21 @@ public class CostDataSyncWorker : BackgroundService
 
     private async Task SyncAllDevicesAsync(CancellationToken stoppingToken)
     {
-        using var scope = _serviceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
-        var client = scope.ServiceProvider.GetRequiredService<IOctopusEnergyClient>();
-
-        // Workers run with no user context — bypass the multi-tenant query filter.
-        var devices = await db.HeatPumpDevices
-            .IgnoreQueryFilters()
-            .Where(d => d.IsActive)
-            .ToListAsync(stoppingToken);
+        // Workers run with no user context — list across all owners.
+        var devices = await _store.ListAllActiveDevicesAsync(stoppingToken);
 
         _logger.LogInformation("Cost data sync for {Count} active devices", devices.Count);
 
         foreach (var device in devices)
         {
             stoppingToken.ThrowIfCancellationRequested();
-            await SyncDeviceAsync(db, client, device, stoppingToken);
+            await SyncDeviceAsync(device, stoppingToken);
         }
     }
 
-    private async Task SyncDeviceAsync(CosyDbContext db, IOctopusEnergyClient client, HeatPumpDevice device, CancellationToken stoppingToken)
+    private async Task SyncDeviceAsync(HeatPumpDevice device, CancellationToken stoppingToken)
     {
-        var settings = await db.OctopusAccountSettings
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(s => s.OwnerId == device.OwnerId
-                && s.AccountNumber == device.AccountNumber, stoppingToken);
+        var settings = await _store.GetSettingsAsync(device.OwnerId!, device.AccountNumber, stoppingToken);
 
         if (settings is null)
         {
@@ -86,9 +79,7 @@ public class CostDataSyncWorker : BackgroundService
         try
         {
             // Check if this device has any existing cost records to determine backfill range
-            var hasExisting = await db.DailyCostRecords
-                .IgnoreQueryFilters()
-                .AnyAsync(r => r.DeviceId == device.DeviceId, stoppingToken);
+            var hasExisting = await _store.HasAnyCostDataAsync(device.DeviceId, stoppingToken);
 
             // First run: backfill 90 days. Subsequent runs: sync last 7 days to catch late data.
             var daysToSync = hasExisting ? 7 : 90;
@@ -98,7 +89,7 @@ public class CostDataSyncWorker : BackgroundService
             _logger.LogInformation("Syncing cost data for device {DeviceId}: {Days} days (backfill={IsBackfill})",
                 device.DeviceId, daysToSync, !hasExisting);
 
-            var costData = await client.GetCostOfUsageAsync(
+            var costData = await _client.GetCostOfUsageAsync(
                 settings, device.AccountNumber, from, to,
                 propertyId: device.PropertyId, mpxn: device.Mpan);
 
@@ -153,49 +144,24 @@ public class CostDataSyncWorker : BackgroundService
                 }
             }
 
-            // Upsert into database
-            var existingRecords = await db.DailyCostRecords
-                .IgnoreQueryFilters()
-                .Where(r => r.DeviceId == device.DeviceId && r.Date >= DateOnly.FromDateTime(from))
-                .ToDictionaryAsync(r => r.Date, stoppingToken);
-
-            var upserted = 0;
-            foreach (var (date, data) in costByDate)
+            // DynamoDB PutItem is an upsert by nature — no need to distinguish insert vs update.
+            var records = costByDate.Select(kv => new DailyCostRecord
             {
-                if (existingRecords.TryGetValue(date, out var record))
-                {
-                    record.TotalCostPence = data.cost;
-                    record.TotalUsageKwh = data.usage;
-                    record.AvgUnitRatePence = data.unitRate;
-                    record.StandingChargePence = data.standingCharge;
-                    record.UpdatedAt = DateTime.UtcNow;
-                    // Rescue any pre-tenancy rows whose OwnerId is null, so they
-                    // become visible to the user via the global query filter.
-                    if (string.IsNullOrEmpty(record.OwnerId))
-                        record.OwnerId = device.OwnerId;
-                }
-                else
-                {
-                    db.DailyCostRecords.Add(new DailyCostRecord
-                    {
-                        OwnerId = device.OwnerId,
-                        DeviceId = device.DeviceId,
-                        Date = date,
-                        TotalCostPence = data.cost,
-                        TotalUsageKwh = data.usage,
-                        AvgUnitRatePence = data.unitRate,
-                        StandingChargePence = data.standingCharge,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    });
-                }
-                upserted++;
-            }
+                OwnerId = device.OwnerId,
+                DeviceId = device.DeviceId,
+                Date = kv.Key,
+                TotalCostPence = kv.Value.cost,
+                TotalUsageKwh = kv.Value.usage,
+                AvgUnitRatePence = kv.Value.unitRate,
+                StandingChargePence = kv.Value.standingCharge,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            }).ToList();
 
-            if (upserted > 0)
-                await db.SaveChangesAsync(stoppingToken);
+            if (records.Count > 0)
+                await _store.UpsertDailyCostBatchAsync(records, stoppingToken);
 
-            _logger.LogInformation("Cost data sync for device {DeviceId}: {Count} days upserted", device.DeviceId, upserted);
+            _logger.LogInformation("Cost data sync for device {DeviceId}: {Count} days upserted", device.DeviceId, records.Count);
         }
         catch (Exception ex)
         {

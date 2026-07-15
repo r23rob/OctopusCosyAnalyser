@@ -2,18 +2,22 @@ using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.ApiService.Services.GraphQL;
 using OctopusCosyAnalyser.ApiService.Services.GraphQL.Responses;
-using Microsoft.EntityFrameworkCore;
 
 namespace OctopusCosyAnalyser.ApiService.Workers;
 
 public class HeatPumpTimeSeriesSyncWorker : BackgroundService
 {
+    private readonly ICosyDataStore _store;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<HeatPumpTimeSeriesSyncWorker> _logger;
     private readonly TimeSpan _pollingInterval = TimeSpan.FromMinutes(Constants.SnapshotIntervalMinutes);
 
-    public HeatPumpTimeSeriesSyncWorker(IServiceProvider serviceProvider, ILogger<HeatPumpTimeSeriesSyncWorker> logger)
+    // ICosyDataStore is a singleton and safe to inject directly. IOctopusGraphQLService is
+    // Scoped, so we still need a scope factory to resolve it safely from a Singleton-lifetime
+    // BackgroundService (registered via AddHostedService in local continuous mode).
+    public HeatPumpTimeSeriesSyncWorker(ICosyDataStore store, IServiceProvider serviceProvider, ILogger<HeatPumpTimeSeriesSyncWorker> logger)
     {
+        _store = store;
         _serviceProvider = serviceProvider;
         _logger = logger;
     }
@@ -50,31 +54,26 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
     private async Task SyncAllDevicesAsync(CancellationToken stoppingToken)
     {
         using var scope = _serviceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
         var graphqlService = scope.ServiceProvider.GetRequiredService<IOctopusGraphQLService>();
 
-        // Workers run with no user context — bypass the multi-tenant query filter.
-        var devices = await db.HeatPumpDevices
-            .IgnoreQueryFilters()
-            .Where(d => d.IsActive && d.Euid != null && d.Euid != "")
-            .ToListAsync(stoppingToken);
+        // Workers run with no user context — list across all owners.
+        var devices = (await _store.ListAllActiveDevicesAsync(stoppingToken))
+            .Where(d => !string.IsNullOrEmpty(d.Euid))
+            .ToList();
 
         _logger.LogInformation("Time series sync for {Count} active devices", devices.Count);
 
         foreach (var device in devices)
         {
-            await SyncDeviceAsync(db, graphqlService, device, stoppingToken);
+            await SyncDeviceAsync(graphqlService, device, stoppingToken);
         }
     }
 
     private async Task SyncDeviceAsync(
-        CosyDbContext db, IOctopusGraphQLService graphqlService,
+        IOctopusGraphQLService graphqlService,
         HeatPumpDevice device, CancellationToken stoppingToken)
     {
-        var settings = await db.OctopusAccountSettings
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(s => s.OwnerId == device.OwnerId
-                && s.AccountNumber == device.AccountNumber, stoppingToken);
+        var settings = await _store.GetSettingsAsync(device.OwnerId!, device.AccountNumber, stoppingToken);
 
         if (settings is null)
         {
@@ -89,22 +88,17 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
             var from = DateTime.UtcNow.AddDays(-2);
             var to = DateTime.UtcNow;
 
-            var existing = await db.HeatPumpTimeSeriesRecords
-                .IgnoreQueryFilters()
-                .Where(r => r.DeviceId == device.DeviceId && r.StartAt >= from)
-                .Select(r => r.StartAt)
-                .ToListAsync(stoppingToken);
-            var existingSet = new HashSet<DateTime>(existing);
+            var existingSet = await _store.GetTimeSeriesTimestampsAsync(device.DeviceId, from, stoppingToken);
 
             var entries = await graphqlService.GetHeatPumpTimeSeriesPerformanceAsync(
                 settings, device.AccountNumber, device.Euid!, from, to, "DAY", stoppingToken);
 
-            var synced = MapAndPersistTimeSeriesEntries(entries, device.DeviceId, existingSet, db, device.OwnerId);
+            var newRecords = MapTimeSeriesEntries(entries, device.DeviceId, existingSet, device.OwnerId);
 
-            if (synced > 0)
-                await db.SaveChangesAsync(stoppingToken);
+            if (newRecords.Count > 0)
+                await _store.PutTimeSeriesBatchAsync(newRecords, stoppingToken);
 
-            _logger.LogInformation("Time series sync for device {DeviceId}: {Synced} new records", device.DeviceId, synced);
+            _logger.LogInformation("Time series sync for device {DeviceId}: {Synced} new records", device.DeviceId, newRecords.Count);
         }
         catch (Exception ex)
         {
@@ -113,23 +107,25 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
     }
 
     /// <summary>
-    /// Maps typed TimeSeriesEntry responses to HeatPumpTimeSeriesRecord entities and adds to the DbContext.
-    /// Shared utility for time-series sync operations.
+    /// Maps typed TimeSeriesEntry responses to HeatPumpTimeSeriesRecord entities, skipping any
+    /// timestamps already present in <paramref name="existingSet"/>. Shared utility for
+    /// time-series sync operations.
     ///
     /// <para>
     /// Workers (no HttpContext) MUST pass ownerId — there is no current user for the
-    /// DbContext to stamp from. Endpoint callers (with HttpContext) may pass null and
-    /// rely on CosyDbContext.SaveChanges to stamp OwnerId from the authenticated user.
+    /// data store to stamp from. Endpoint callers (with HttpContext) may pass null and
+    /// stamp OwnerId from the authenticated user themselves.
     /// </para>
     /// </summary>
-    internal static int MapAndPersistTimeSeriesEntries(
+    internal static List<HeatPumpTimeSeriesRecord> MapTimeSeriesEntries(
         TimeSeriesEntry?[]? entries, string deviceId,
-        HashSet<DateTime> existingSet, CosyDbContext db, string? ownerId = null)
+        HashSet<DateTime> existingSet, string? ownerId = null)
     {
-        if (entries is null)
-            return 0;
+        var records = new List<HeatPumpTimeSeriesRecord>();
 
-        var synced = 0;
+        if (entries is null)
+            return records;
+
         foreach (var entry in entries)
         {
             if (entry is null) continue;
@@ -150,11 +146,10 @@ public class HeatPumpTimeSeriesSyncWorker : BackgroundService
                 CreatedAt = DateTime.UtcNow
             };
 
-            db.HeatPumpTimeSeriesRecords.Add(record);
+            records.Add(record);
             existingSet.Add(startAt);
-            synced++;
         }
 
-        return synced;
+        return records;
     }
 }

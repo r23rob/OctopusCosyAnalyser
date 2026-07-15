@@ -3,14 +3,14 @@ using OctopusCosyAnalyser.ApiService.Models;
 namespace OctopusCosyAnalyser.ApiService.Services;
 
 /// <summary>
-/// Indicates which features are available based on infrastructure configuration.
-/// When no database connection string is provided, the API runs in "lite mode" —
-/// live data from the Octopus API works, but history, snapshots, and settings require
-/// the full deployment with PostgreSQL.
+/// Indicates which features are available. With DynamoDB, all features are always
+/// available (no "lite mode"). Fallback credentials are kept for the /summary
+/// endpoint which can work without stored settings.
 /// </summary>
 public sealed class FeatureAvailability
 {
-    public bool DatabaseAvailable { get; init; }
+    /// <summary>Always true — DynamoDB is always available.</summary>
+    public bool DatabaseAvailable { get; init; } = true;
 
     /// <summary>Environment variable fallback: OCTOPUS_ACCOUNT_NUMBER.</summary>
     public string? FallbackAccountNumber { get; init; }
@@ -25,14 +25,14 @@ public sealed class FeatureAvailability
         !string.IsNullOrWhiteSpace(FallbackAccountNumber)
         && !string.IsNullOrWhiteSpace(FallbackApiKey);
 
-    public bool History => DatabaseAvailable;
-    public bool Efficiency => DatabaseAvailable;
-    public bool Settings => DatabaseAvailable;
+    public bool History => true;
+    public bool Efficiency => true;
+    public bool Settings => true;
     public bool LiveData => true;
 
     /// <summary>
     /// Creates a synthetic <see cref="OctopusAccountSettings"/> from environment variable
-    /// fallback credentials, for use in lite mode when no database is available.
+    /// fallback credentials, for use when no stored settings exist.
     /// </summary>
     public OctopusAccountSettings CreateFallbackSettings() => new()
     {

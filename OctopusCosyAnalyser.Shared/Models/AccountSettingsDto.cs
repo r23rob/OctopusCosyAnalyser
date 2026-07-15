@@ -5,7 +5,6 @@ namespace OctopusCosyAnalyser.Shared.Models;
 /// </summary>
 public sealed class AccountSettingsDto
 {
-    public int Id { get; set; }
     public string AccountNumber { get; set; } = string.Empty;
     public bool HasApiKey { get; set; }
     public string? Email { get; set; }

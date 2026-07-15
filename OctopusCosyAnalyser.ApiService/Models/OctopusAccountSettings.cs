@@ -1,8 +1,7 @@
 namespace OctopusCosyAnalyser.ApiService.Models;
 
-public class OctopusAccountSettings : IOwnedEntity
+public class OctopusAccountSettings
 {
-    public int Id { get; set; }
     public string? OwnerId { get; set; }
     public string AccountNumber { get; set; } = string.Empty;
     public string ApiKey { get; set; } = string.Empty;

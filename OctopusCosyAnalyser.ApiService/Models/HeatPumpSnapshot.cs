@@ -1,8 +1,7 @@
 namespace OctopusCosyAnalyser.ApiService.Models;
 
-public class HeatPumpSnapshot : IOwnedEntity
+public class HeatPumpSnapshot
 {
-    public int Id { get; set; }
     public string? OwnerId { get; set; }
     public string DeviceId { get; set; } = string.Empty;
     public string AccountNumber { get; set; } = string.Empty;
@@ -36,9 +35,6 @@ public class HeatPumpSnapshot : IOwnedEntity
     public string? RoomSensorCode { get; set; }
 
     // Weather Compensation & Flow Temperature
-    // "WeatherCompensation" = WC curve active (WC min/max populated, fixed flow null)
-    // "FixedFlow" = fixed setpoint active (HeatingFlowTemperatureCelsius populated, WC min/max null)
-    // null = mode data not available for this snapshot
     public string? FlowTempMode { get; set; }
     public decimal? WeatherCompensationMinCelsius { get; set; }
     public decimal? WeatherCompensationMaxCelsius { get; set; }
@@ -61,4 +57,3 @@ public class HeatPumpSnapshot : IOwnedEntity
     public DateTime SnapshotTakenAt { get; set; } = DateTime.UtcNow;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
-

@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Models;
 using OctopusCosyAnalyser.ApiService.Services.CurrentUser;
@@ -12,28 +11,28 @@ public static class AccountSettingsEndpoints
     {
         var group = app.MapGroup("/api/settings");
 
-        group.MapGet("", async (CosyDbContext db, CancellationToken ct) =>
+        group.MapGet("", async (ICosyDataStore store, ICurrentUserAccessor currentUser, CancellationToken ct) =>
         {
-            var settings = await db.OctopusAccountSettings
+            var settings = await store.ListSettingsAsync(currentUser.UserId!, ct);
+
+            return Results.Ok(settings
                 .OrderBy(s => s.AccountNumber)
-                .ToListAsync(ct);
+                .Select(ToDto)
+                .ToArray());
+        }).WithName("GetAccountSettings");
 
-            return Results.Ok(settings.Select(ToDto).ToArray());
-        }).WithName("GetAccountSettings").RequireDatabase();
-
-        group.MapGet("/{accountNumber}", async (string accountNumber, CosyDbContext db, CancellationToken ct) =>
+        group.MapGet("/{accountNumber}", async (string accountNumber, ICosyDataStore store, ICurrentUserAccessor currentUser, CancellationToken ct) =>
         {
-            var settings = await db.OctopusAccountSettings
-                .FirstOrDefaultAsync(s => s.AccountNumber == accountNumber, ct);
+            var settings = await store.GetSettingsAsync(currentUser.UserId!, accountNumber, ct);
 
             return settings is null
                 ? Results.NotFound("Account settings not found")
                 : Results.Ok(ToDto(settings));
-        }).WithName("GetAccountSettingsByAccount").RequireDatabase();
+        }).WithName("GetAccountSettingsByAccount");
 
         group.MapPut("", async (
             AccountSettingsRequest request,
-            CosyDbContext db,
+            ICosyDataStore store,
             ICurrentUserAccessor currentUser,
             CancellationToken ct) =>
         {
@@ -46,15 +45,7 @@ public static class AccountSettingsEndpoints
 
             var userId = currentUser.UserId!;
 
-            // Match either the user's owned row or a legacy unowned (OwnerId == null) row with
-            // the same account number. Bypass the per-tenant query filter so we can adopt
-            // pre-multi-tenancy rows instead of inserting a duplicate.
-            var settings = await db.OctopusAccountSettings
-                .IgnoreQueryFilters()
-                .Where(s => s.AccountNumber == request.AccountNumber
-                            && (s.OwnerId == userId || s.OwnerId == null))
-                .OrderByDescending(s => s.OwnerId == userId)
-                .FirstOrDefaultAsync(ct);
+            var settings = await store.GetSettingsAsync(userId, request.AccountNumber, ct);
 
             // Validate required fields for new settings or when switching auth modes
             var isNewSettings = settings is null;
@@ -91,15 +82,9 @@ public static class AccountSettingsEndpoints
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
-
-                db.OctopusAccountSettings.Add(settings);
             }
             else
             {
-                // Claim a legacy unowned row for the current user.
-                if (settings.OwnerId is null)
-                    settings.OwnerId = userId;
-
                 // Only overwrite secrets when the caller provides a new value
                 if (!string.IsNullOrWhiteSpace(request.ApiKey))
                     settings.ApiKey = request.ApiKey.Trim();
@@ -112,15 +97,14 @@ public static class AccountSettingsEndpoints
                 settings.UpdatedAt = DateTime.UtcNow;
             }
 
-            await db.SaveChangesAsync(ct);
+            await store.UpsertSettingsAsync(settings, ct);
 
             return Results.Ok(ToDto(settings));
-        }).WithName("UpsertAccountSettings").RequireDatabase();
+        }).WithName("UpsertAccountSettings");
     }
 
     private static AccountSettingsDto ToDto(OctopusAccountSettings s) => new()
     {
-        Id = s.Id,
         AccountNumber = s.AccountNumber,
         HasApiKey = !string.IsNullOrWhiteSpace(s.ApiKey),
         Email = s.Email,

@@ -246,8 +246,7 @@ export interface SnapshotsResponseDto {
   from: string
   to: string
   totalCount: number
-  count: number
-  hasMore: boolean
+  cursor?: string | null
   snapshots: HeatPumpSnapshotDto[]
 }
 
@@ -331,8 +330,7 @@ export interface ConsumptionResponseDto {
   from: string
   to: string
   totalCount: number
-  count: number
-  hasMore: boolean
+  cursor?: string | null
   readings: ConsumptionReadingDto[]
 }
 

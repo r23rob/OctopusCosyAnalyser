@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Text;
 using Anthropic;
 using Anthropic.Models.Messages;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OctopusCosyAnalyser.ApiService.Data;
 using OctopusCosyAnalyser.ApiService.Models;
@@ -13,15 +12,16 @@ namespace OctopusCosyAnalyser.ApiService.Services;
 
 public class HeatPumpAiService : IHeatPumpAiService
 {
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ICosyDataStore _store;
     private readonly ILogger<HeatPumpAiService> _logger;
     private readonly AnthropicOptions _anthropicOptions;
     private readonly ConcurrentDictionary<string, (AiSummaryDto Summary, DateTime CachedAt)> _cache = new();
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
 
-    public HeatPumpAiService(IServiceScopeFactory scopeFactory, ILogger<HeatPumpAiService> logger, IOptions<AnthropicOptions> anthropicOptions)
+    // ICosyDataStore is a singleton and safe to inject directly — no scope needed.
+    public HeatPumpAiService(ICosyDataStore store, ILogger<HeatPumpAiService> logger, IOptions<AnthropicOptions> anthropicOptions)
     {
-        _scopeFactory = scopeFactory;
+        _store = store;
         _logger = logger;
         _anthropicOptions = anthropicOptions.Value;
     }
@@ -90,17 +90,14 @@ public class HeatPumpAiService : IHeatPumpAiService
 
     private async Task<string> BuildPromptAsync(string deviceId)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
-
         var now = DateTime.UtcNow;
         var weekAgo = now.AddDays(-7);
         var monthAgo = now.AddDays(-30);
         var yearAgo = now.AddDays(-365);
 
-        var weekStats = await GetPeriodStatsAsync(db, deviceId, weekAgo, now);
-        var monthStats = await GetPeriodStatsAsync(db, deviceId, monthAgo, now);
-        var yearStats = await GetPeriodStatsAsync(db, deviceId, yearAgo, now);
+        var weekStats = await GetPeriodStatsAsync(_store, deviceId, weekAgo, now);
+        var monthStats = await GetPeriodStatsAsync(_store, deviceId, monthAgo, now);
+        var yearStats = await GetPeriodStatsAsync(_store, deviceId, yearAgo, now);
 
         var sb = new StringBuilder();
         sb.AppendLine("You are an expert heat pump analyst. Analyse the following heat pump performance data and provide a concise, helpful summary.");
@@ -135,12 +132,9 @@ public class HeatPumpAiService : IHeatPumpAiService
         return sb.ToString();
     }
 
-    private static async Task<PeriodStats> GetPeriodStatsAsync(CosyDbContext db, string deviceId, DateTime from, DateTime to)
+    private static async Task<PeriodStats> GetPeriodStatsAsync(ICosyDataStore store, string deviceId, DateTime from, DateTime to)
     {
-        var snapshots = await db.HeatPumpSnapshots
-            .AsNoTracking()
-            .Where(s => s.DeviceId == deviceId && s.SnapshotTakenAt >= from && s.SnapshotTakenAt <= to)
-            .ToListAsync();
+        var snapshots = await store.GetSnapshotListAsync(deviceId, from, to);
 
         if (snapshots.Count == 0)
             return new PeriodStats { SnapshotCount = 0 };

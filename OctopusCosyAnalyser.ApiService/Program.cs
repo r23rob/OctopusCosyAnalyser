@@ -1,8 +1,8 @@
+using Amazon.DynamoDBv2;
 using Amazon.Lambda.AspNetCoreServer.Hosting;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Http.Resilience;
 using OctopusCosyAnalyser.ApiService;
 using OctopusCosyAnalyser.ApiService.Data;
@@ -33,39 +33,24 @@ var workerJobName = ResolveWorkerJobName(args);
 var isRunOnceMode = workerJobName is not null;
 var isLambda = Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME") is not null;
 
-// ── Database ────────────────────────────────────────────────────────────────
-// Detect whether a real database connection is available.
-// When no connection string is configured the API runs in "lite mode":
-// live data from the Octopus API still works, but history, snapshots,
-// settings persistence, and background workers are disabled.
-var connectionString = builder.Configuration.GetConnectionString("cosydb");
-var databaseAvailable = !string.IsNullOrWhiteSpace(connectionString);
-
+// ── Feature availability ────────────────────────────────────────────────────
+// DynamoDB is always available (no more "lite mode" — there is no optional
+// database anymore), so every capability gated on it is unconditionally on.
 var features = new FeatureAvailability
 {
-    DatabaseAvailable = databaseAvailable,
+    DatabaseAvailable = true,
     FallbackAccountNumber = builder.Configuration["OCTOPUS_ACCOUNT_NUMBER"],
     FallbackApiKey = builder.Configuration["OCTOPUS_API_KEY"],
     FallbackEuid = builder.Configuration["OCTOPUS_EUID"],
 };
 builder.Services.AddSingleton(features);
 
-// PostgreSQL via standard Npgsql EF Core provider.
-// Maximum Pool Size kept low for Lambda (each instance gets its own pool).
-if (databaseAvailable)
-{
-    var pooledConnectionString = connectionString!.Contains("Maximum Pool Size", StringComparison.OrdinalIgnoreCase)
-        ? connectionString
-        : connectionString + ";Maximum Pool Size=5";
-
-    builder.Services.AddDbContext<CosyDbContext>(options =>
-        options.UseNpgsql(pooledConnectionString));
-}
-else
-{
-    builder.Services.AddDbContext<CosyDbContext>(options =>
-        options.UseNpgsql("Host=localhost;Port=0;Database=lite_mode_unused"));
-}
+// ── DynamoDB ────────────────────────────────────────────────────────────────
+// Single shared table (name from DYNAMODB_TABLE_NAME, default "cosydays").
+// The client picks up credentials/region from the Lambda execution role via
+// the default AWS credential provider chain.
+builder.Services.AddSingleton<IAmazonDynamoDB>(sp => new AmazonDynamoDBClient());
+builder.Services.AddSingleton<ICosyDataStore, DynamoDataStore>();
 
 // Current-user accessor — returns a fixed user for all requests (auth disabled).
 if (isRunOnceMode)
@@ -86,12 +71,11 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 // Data Protection — encrypts auth cookies and any IDataProtector-protected payloads.
-var dataProtection = builder.Services.AddDataProtection()
-    .SetApplicationName("OctopusCosyAnalyser");
-if (databaseAvailable)
-{
-    dataProtection.PersistKeysToDbContext<CosyDbContext>();
-}
+// Keys are persisted to DynamoDB so they survive Lambda cold starts and are shared
+// between the API and worker Lambda functions.
+builder.Services.AddDataProtection()
+    .SetApplicationName("OctopusCosyAnalyser")
+    .PersistKeysToDynamoDb();
 
 builder.Services.AddSingleton<ISecretProtector, SecretProtector>();
 
@@ -177,7 +161,7 @@ builder.Services.AddScoped<ITariffSyncService, TariffSyncService>();
 // In Lambda API mode, workers are handled by a separate Lambda function —
 // do NOT register them as HostedServices (they would start polling loops
 // inside every API cold start).
-if (databaseAvailable && !isLambda)
+if (!isLambda)
 {
     if (isRunOnceMode)
     {
@@ -205,42 +189,7 @@ builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
 
 var app = builder.Build();
 
-// ── Database migration ──────────────────────────────────────────────────────
-// In production (Lambda), migrations run via CI/CD — skip here.
-var skipMigration = string.Equals(
-    Environment.GetEnvironmentVariable("SKIP_AUTO_MIGRATE"), "true",
-    StringComparison.OrdinalIgnoreCase);
-
-if (databaseAvailable && !skipMigration)
-{
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<CosyDbContext>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    try
-    {
-        db.Database.Migrate();
-        logger.LogInformation("Database migration completed successfully");
-    }
-    catch (Exception ex)
-    {
-        logger.LogCritical(ex, "Database migration failed");
-        throw;
-    }
-}
-else if (!databaseAvailable)
-{
-    var logger = app.Services.GetRequiredService<ILogger<Program>>();
-    logger.LogInformation("Running in lite mode — no database configured. "
-        + "Live data from Octopus API is available; history/snapshots/settings require PostgreSQL.");
-}
-
 // ── Run-once worker mode ────────────────────────────────────────────────────
-if (isRunOnceMode && !databaseAvailable)
-{
-    var logger = app.Services.GetRequiredService<ILogger<Program>>();
-    logger.LogCritical("--run-worker-once requires a database connection. Set ConnectionStrings__cosydb.");
-    return 1;
-}
 if (isRunOnceMode)
 {
     using var scope = app.Services.CreateScope();

@@ -171,10 +171,12 @@ export const api = {
 
     getLatestSnapshot: (deviceId: string) => get<LatestSnapshotDto>(`/api/heatpump/snapshots/${deviceId}/latest`),
 
-    getSnapshots: (deviceId: string, from?: Date, to?: Date): Promise<SnapshotsResponseDto> => {
+    getSnapshots: (deviceId: string, from?: Date, to?: Date, cursor?: string): Promise<SnapshotsResponseDto> => {
       const fromStr = encodeURIComponent(toIso(from ?? defaultFrom(7)))
       const toStr = encodeURIComponent(toIso(to ?? new Date()))
-      return get<SnapshotsResponseDto>(`/api/heatpump/snapshots/${deviceId}?from=${fromStr}&to=${toStr}`)
+      let url = `/api/heatpump/snapshots/${deviceId}?from=${fromStr}&to=${toStr}`
+      if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`
+      return get<SnapshotsResponseDto>(url)
     },
 
     getPeriodSummary: (deviceId: string, from?: Date, to?: Date): Promise<PeriodSummaryDto> => {
@@ -213,10 +215,12 @@ export const api = {
       }
     },
 
-    getConsumption: (deviceId: string, from?: Date, to?: Date): Promise<ConsumptionResponseDto> => {
+    getConsumption: (deviceId: string, from?: Date, to?: Date, cursor?: string): Promise<ConsumptionResponseDto> => {
       const fromStr = encodeURIComponent(toIso(from ?? defaultFrom(7)))
       const toStr = encodeURIComponent(toIso(to ?? new Date()))
-      return get<ConsumptionResponseDto>(`/api/heatpump/consumption/${deviceId}?from=${fromStr}&to=${toStr}`)
+      let url = `/api/heatpump/consumption/${deviceId}?from=${fromStr}&to=${toStr}`
+      if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`
+      return get<ConsumptionResponseDto>(url)
     },
 
     syncConsumption: (deviceId: string, from?: Date, to?: Date): Promise<void> => {
@@ -251,8 +255,14 @@ export const api = {
     },
 
     getSnapshotsList: async (deviceId: string, from?: Date, to?: Date): Promise<HeatPumpSnapshotDto[]> => {
-      const resp = await api.heatpump.getSnapshots(deviceId, from, to)
-      return resp.snapshots
+      const all: HeatPumpSnapshotDto[] = []
+      let cursor: string | undefined
+      do {
+        const resp = await api.heatpump.getSnapshots(deviceId, from, to, cursor)
+        all.push(...resp.snapshots)
+        cursor = resp.cursor ?? undefined
+      } while (cursor)
+      return all
     },
 
     getEnergyIntervals: (deviceId: string, from?: Date, to?: Date) => {

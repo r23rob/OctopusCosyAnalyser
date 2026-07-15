@@ -3,6 +3,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
@@ -11,10 +12,6 @@ import { Platform } from 'aws-cdk-lib/aws-ecr-assets';
 import { Construct } from 'constructs';
 
 export interface CosydaysStackProps extends cdk.StackProps {
-  dbConnectionString: string;
-  octopusAccountNumber?: string;
-  octopusApiKey?: string;
-  octopusEuid?: string;
   anthropicApiKey?: string;
 }
 
@@ -24,14 +21,20 @@ export class CosydaysStack extends cdk.Stack {
 
     const repoRoot = path.join(__dirname, '..', '..', '..');
 
+    // ── DynamoDB table ──────────────────────────────────────────────────────
+    const table = new dynamodb.Table(this, 'CosydaysTable', {
+      tableName: 'cosydays',
+      partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      pointInTimeRecovery: true,
+    });
+
     // ── Shared Lambda environment ──────────────────────────────────────────
     const sharedEnv: Record<string, string> = {
-      ConnectionStrings__cosydb: props.dbConnectionString,
-      SKIP_AUTO_MIGRATE: 'true',
+      DYNAMODB_TABLE_NAME: table.tableName,
     };
-    if (props.octopusAccountNumber) sharedEnv.OCTOPUS_ACCOUNT_NUMBER = props.octopusAccountNumber;
-    if (props.octopusApiKey) sharedEnv.OCTOPUS_API_KEY = props.octopusApiKey;
-    if (props.octopusEuid) sharedEnv.OCTOPUS_EUID = props.octopusEuid;
     if (props.anthropicApiKey) sharedEnv['Anthropic__ApiKey'] = props.anthropicApiKey;
 
     // ── API Lambda ─────────────────────────────────────────────────────────
@@ -71,6 +74,10 @@ export class CosydaysStack extends cdk.Stack {
         LAMBDA_WORKER_MODE: 'true',
       },
     });
+
+    // ── DynamoDB permissions ─────────────────────────────────────────────
+    table.grantReadWriteData(apiFunction);
+    table.grantReadWriteData(workerFunction);
 
     // ── EventBridge schedules ──────────────────────────────────────────────
     const workers = [
@@ -164,5 +171,6 @@ export class CosydaysStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'DistributionId', { value: distribution.distributionId });
     new cdk.CfnOutput(this, 'ApiFunctionName', { value: apiFunction.functionName });
     new cdk.CfnOutput(this, 'WorkerFunctionName', { value: workerFunction.functionName });
+    new cdk.CfnOutput(this, 'TableName', { value: table.tableName });
   }
 }

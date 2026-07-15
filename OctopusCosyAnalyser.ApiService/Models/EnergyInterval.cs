@@ -1,8 +1,7 @@
 namespace OctopusCosyAnalyser.ApiService.Models;
 
-public class EnergyInterval : IOwnedEntity
+public class EnergyInterval
 {
-    public int Id { get; set; }
     public string? OwnerId { get; set; }
     public string DeviceId { get; set; } = string.Empty;
     public DateTime IntervalStart { get; set; }
@@ -12,7 +11,7 @@ public class EnergyInterval : IOwnedEntity
     public decimal? ConsumptionKwh { get; set; }
     public decimal? DemandW { get; set; }
 
-    // Heat pump (averaged from ≤2 HeatPumpSnapshot rows in window)
+    // Heat pump (averaged from snapshots in window)
     public decimal? HeatOutputKwh { get; set; }
     public decimal? AvgCop { get; set; }
     public decimal? AvgPowerInputKw { get; set; }
